@@ -1,0 +1,8 @@
+{
+  "name": "Manabí Social",
+  "description": "Una red social turística interactiva enfocada en las maravillas de Manabí, Ecuador, destacando Los Frailes y el Parque Nacional Machalilla.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
