@@ -1,12 +1,12 @@
 export interface User {
   id: string;
   name: string;
-  email: string; // Added for auth
-  password?: string; // Added for auth (stored locally for simulation)
+  email: string;
+  password?: string;
   avatar: string;
   bio?: string;
-  followers: string[]; // Array of user IDs
-  following: string[]; // Array of user IDs
+  followers: string[];
+  following: string[];
 }
 
 export interface Comment {
@@ -39,23 +39,32 @@ export interface Story {
   imageUrl: string;
   timestamp: number;
   isViewed: boolean;
-  caption?: string; // Added
-  location?: string; // Added
-  likes?: number; // Added
-  isLiked?: boolean; // Added
+  caption?: string;
+  location?: string;
+  likes?: number;
+  isLiked?: boolean;
 }
+
+export type EcuadorRegion = 'Costa' | 'Sierra' | 'Amazonía' | 'Insular';
 
 export interface Destination {
   id: string;
   name: string;
   location: string;
+  region: EcuadorRegion; // Nuevo campo
+  province: string;      // Nuevo campo
   description: string;
-  fullDescription: string; // Detailed text for the guide
+  fullDescription: string;
   imageUrl: string;
-  gallery: string[]; // Array of additional image URLs
-  highlights: string[]; // Bullet points of what to see
-  travelTips: string[]; // Practical advice (bring water, cost, etc)
-  category: 'Playa' | 'Naturaleza' | 'Cultura' | 'Aventura' | 'Gastronomía';
-  rating: number;
-  priceLevel?: string; // e.g. "Gratis", "$5 Entrada", "$$$ Tour"
+  gallery: string[];
+  highlights: string[];
+  travelTips: string[];
+  category: 'Playa' | 'Naturaleza' | 'Cultura' | 'Aventura' | 'Gastronomía' | 'Montaña' | 'Selva';
+  rating: number; 
+  priceLevel?: string;
+  
+  isUserGenerated?: boolean;
+  createdBy?: string; 
+  ratings?: Record<string, number>; 
+  reviewsCount?: number;
 }
