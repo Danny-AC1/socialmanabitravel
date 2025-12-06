@@ -296,16 +296,17 @@ function App() {
 
   if (!user) return <AuthScreen onLoginSuccess={setUser} />;
   
-  // Basic Search Logic
-  const query = searchQuery.toLowerCase();
+  // Basic Search Logic (SAFE MODE)
+  const query = (searchQuery || '').toLowerCase();
+  
   const filteredPosts = posts.filter(post => 
-    post.location.toLowerCase().includes(query) ||
-    post.caption.toLowerCase().includes(query) ||
-    post.userName.toLowerCase().includes(query)
+    (post.location || '').toLowerCase().includes(query) ||
+    (post.caption || '').toLowerCase().includes(query) ||
+    (post.userName || '').toLowerCase().includes(query)
   );
   const searchDestinations = destinations.filter(dest => 
-    dest.name.toLowerCase().includes(query) ||
-    dest.location.toLowerCase().includes(query)
+    (dest.name || '').toLowerCase().includes(query) ||
+    (dest.location || '').toLowerCase().includes(query)
   );
 
   const renderExplore = () => (

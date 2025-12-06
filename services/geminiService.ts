@@ -9,17 +9,17 @@ const cleanKey = (key: string | undefined): string => {
 };
 
 const getApiKey = (): string => {
-  // 1. Intentar obtener la clave del estándar moderno de Vite (import.meta.env)
+  // 1. PRIMERA PRIORIDAD: VITE_API_KEY (Estándar en Vercel + Vite)
   // @ts-ignore
   if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_KEY) {
     // @ts-ignore
     return cleanKey(import.meta.env.VITE_API_KEY);
   }
   
-  // 2. Intentar obtener la clave inyectada por vite.config.ts (process.env)
+  // 2. SEGUNDA PRIORIDAD: API_KEY (Si lo definiste así en Vercel y Vite lo mapea)
   if (typeof process !== 'undefined' && process.env) {
-    if (process.env.API_KEY) return cleanKey(process.env.API_KEY);
     if (process.env.VITE_API_KEY) return cleanKey(process.env.VITE_API_KEY);
+    if (process.env.API_KEY) return cleanKey(process.env.API_KEY);
   }
   
   return "";
@@ -30,13 +30,6 @@ const getAiInstance = (): GoogleGenAI | null => {
 
   const key = getApiKey();
   
-  // Debug seguro: Muestra en consola (F12) los primeros 4 caracteres para verificar que se leyó
-  if (key) {
-    console.log(`Gemini Service: API Key encontrada (Empieza con: ${key.substring(0, 4)}...) Longitud: ${key.length}`);
-  } else {
-    console.warn("Gemini Service: No se encontró ninguna API Key.");
-  }
-
   if (key && key.length > 10 && !key.includes("PEGA_AQUI")) {
     try {
       ai = new GoogleGenAI({ apiKey: key });
@@ -60,9 +53,7 @@ export const getTravelAdvice = async (query: string): Promise<string> => {
   const aiInstance = getAiInstance();
 
   if (!aiInstance) {
-    const key = getApiKey();
-    if (!key) return "⚠️ El Guía Virtual no está activo. (Error: API Key no encontrada en Vercel/Environment).";
-    return "⚠️ El Guía Virtual tiene una configuración de clave inválida.";
+    return "⚠️ El Guía Virtual no está activo. (Error: No se encontró la API Key en la configuración de Vercel).";
   }
 
   try {
@@ -79,10 +70,10 @@ export const getTravelAdvice = async (query: string): Promise<string> => {
     console.error("Error en getTravelAdvice:", error);
     
     if (error.message?.includes('403') || error.message?.includes('API key')) {
-      return "🔑 Error de configuración: La API Key no es válida o no tiene permisos. Revisa en aistudio.google.com.";
+      return "🔑 Error: La API Key configurada no es válida. Revisa que no tenga espacios extra en Vercel.";
     }
-    if (error.message?.includes('429')) {
-      return "⏳ El guía está atendiendo a muchas personas. Intenta en 1 minuto.";
+    if (error.message?.includes('400')) {
+      return "⚠️ Error de solicitud. Intenta preguntar de otra forma.";
     }
     
     return "Tuve un problema de conexión momentáneo. Por favor intenta de nuevo.";
