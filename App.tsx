@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Map, Binoculars, UserCircle, Camera, Search, MapPin, Grid, LogOut, Trash2, ArrowRight, UserPlus, UserCheck, ChevronLeft, Upload, Users, Info, X } from 'lucide-react';
+import { Map, Compass, UserCircle, Camera, Search, MapPin, Grid, LogOut, Trash2, ArrowRight, UserPlus, UserCheck, ChevronLeft, Upload, Users, Info, X } from 'lucide-react';
 import { HeroSection } from './components/HeroSection';
 import { PostCard } from './components/PostCard';
 import { CreatePostModal } from './components/CreatePostModal';
@@ -22,41 +22,26 @@ function App() {
   const [user, setUser] = useState<User | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [stories, setStories] = useState<Story[]>([]);
-  const [allUsers, setAllUsers] = useState<User[]>([]); // State for user search
+  const [allUsers, setAllUsers] = useState<User[]>([]);
   const [activeTab, setActiveTab] = useState<Tab>('home');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   
-  // Edit State
   const [editingPost, setEditingPost] = useState<Post | null>(null);
-
-  // View Post State
   const [viewingPost, setViewingPost] = useState<Post | null>(null);
-
-  // Search State
   const [searchQuery, setSearchQuery] = useState('');
-  
-  // Story Viewing State
   const [viewingStoryIndex, setViewingStoryIndex] = useState<number | null>(null);
   const [viewingStoryList, setViewingStoryList] = useState<Story[]>([]);
-
-  // Guide State
   const [selectedDestination, setSelectedDestination] = useState<Destination | null>(null);
-
-  // Profile Viewing State (for viewing other users)
   const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
 
-  // Ref for profile image upload
   const profileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load initial data and session
   useEffect(() => {
-    // Check for active session
     const session = AuthService.getSession();
     if (session) {
       setUser(session);
     } else {
-      // If no session (first visit potentially), check if we've shown welcome modal
       const hasSeenWelcome = localStorage.getItem('manabi_welcome_seen');
       if (!hasSeenWelcome) {
         setShowWelcomeModal(true);
@@ -65,10 +50,9 @@ function App() {
     
     setPosts(StorageService.getPosts());
     setStories(StorageService.getStories());
-    setAllUsers(AuthService.getUsers()); // Load all users for search
+    setAllUsers(AuthService.getUsers());
   }, []);
 
-  // Save data on changes
   useEffect(() => {
     if (posts.length > 0) StorageService.savePosts(posts);
   }, [posts]);
@@ -87,7 +71,6 @@ function App() {
     localStorage.setItem('manabi_welcome_seen', 'true');
   };
 
-  // Actions
   const handleLike = (id: string) => {
     setPosts(prevPosts => {
         const updatedPosts = prevPosts.map(post => {
@@ -101,7 +84,6 @@ function App() {
             return post;
         });
         
-        // Also update if we are viewing this specific post
         if (viewingPost && viewingPost.id === id) {
             const current = updatedPosts.find(p => p.id === id);
             if (current) setViewingPost(current);
@@ -147,7 +129,6 @@ function App() {
           return post;
         });
         
-        // Update view if active
         if (viewingPost && viewingPost.id === id) {
             const current = updatedPosts.find(p => p.id === id);
             if (current) setViewingPost(current);
@@ -165,7 +146,6 @@ function App() {
           content = `¡Mira esta foto de ${text.userName} en ${text.location || 'Manabí'}! 🌴`;
       }
       
-      // Simulate share
       alert(`Compartiendo: "${content}"\n\n(Enlace copiado al portapapeles)`);
   };
 
@@ -208,7 +188,6 @@ function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Editing and Deleting Posts
   const handleEditPost = (post: Post) => {
     setEditingPost(post);
   };
@@ -268,7 +247,6 @@ function App() {
     try {
       const { currentUser: updatedUser } = AuthService.toggleFollow(user.id, targetUserId);
       setUser(updatedUser);
-      // Update the allUsers list to reflect follower count changes immediately in search
       setAllUsers(AuthService.getUsers());
     } catch (error) {
       console.error(error);
@@ -281,35 +259,30 @@ function App() {
     const file = e.target.files[0];
     
     try {
-      // Resize before saving to localStorage
-      const newAvatar = await resizeImage(file, 500); // 500px is enough for avatar
+      const newAvatar = await resizeImage(file, 500); 
       
       const updatedUser = AuthService.updateUserAvatar(user.id, newAvatar);
       setUser(updatedUser);
       
-      // Also update posts by this user in local state so changes reflect immediately
       setPosts(posts.map(p => p.userId === user.id ? { ...p, userAvatar: newAvatar } : p));
       setStories(stories.map(s => s.userId === user.id ? { ...s, userAvatar: newAvatar } : s));
-      setAllUsers(AuthService.getUsers()); // Update list
+      setAllUsers(AuthService.getUsers());
     } catch (err) {
       console.error("Error updating avatar", err);
-      alert("Hubo un problema procesando la imagen. Intenta con una más pequeña.");
+      alert("Hubo un problema procesando la imagen.");
     }
   };
 
-  // Story Viewing Logic
   const openStories = (idx: number, storyList: Story[]) => {
     setViewingStoryList(storyList);
     setViewingStoryIndex(idx);
   };
 
-  // Filter Active Stories (24h rule)
   const activeStories = stories.filter(story => {
     const ONE_DAY_MS = 24 * 60 * 60 * 1000;
     return (Date.now() - story.timestamp) < ONE_DAY_MS;
   });
 
-  // Welcome Modal
   if (showWelcomeModal) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-cyan-900/90 backdrop-blur-md p-6">
@@ -338,12 +311,10 @@ function App() {
     );
   }
 
-  // If not logged in, show Auth Screen
   if (!user) {
     return <AuthScreen onLoginSuccess={setUser} />;
   }
 
-  // SEARCH LOGIC
   const query = searchQuery.toLowerCase();
 
   const filteredPosts = posts.filter(post => 
@@ -364,7 +335,6 @@ function App() {
     (u.bio && u.bio.toLowerCase().includes(query))
   );
 
-  // Views
   const renderHome = () => (
     <>
       <div className="bg-white p-5 rounded-2xl border border-stone-100 shadow-sm overflow-x-auto no-scrollbar mb-6">
@@ -408,7 +378,6 @@ function App() {
       <div className="space-y-6">
         {searchQuery && (filteredDestinations.length > 0 || filteredUsers.length > 0) && (
           <div className="mb-4 space-y-4">
-             {/* Quick Search Results in Home */}
              {filteredUsers.length > 0 && (
                 <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar">
                    {filteredUsers.slice(0, 5).map(u => (
@@ -475,7 +444,7 @@ function App() {
     <div className="space-y-6">
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-xl font-bold text-stone-800 flex items-center gap-2">
-            <Binoculars size={24} className="text-cyan-600" />
+            <Compass size={24} className="text-cyan-600" />
             Guía de Destinos
         </h2>
         <span className="text-xs font-bold text-cyan-600 bg-cyan-50 px-2 py-1 rounded-lg">
@@ -500,7 +469,7 @@ function App() {
             ))
         ) : (
             <div className="text-center py-20 bg-white rounded-3xl border border-stone-100">
-                <Binoculars size={48} className="mx-auto text-stone-300 mb-4" />
+                <Compass size={48} className="mx-auto text-stone-300 mb-4" />
                 <h3 className="text-lg font-bold text-stone-600">Sin resultados</h3>
                 <p className="text-stone-400">No encontramos destinos con ese nombre.</p>
                 <button onClick={() => setSearchQuery('')} className="mt-4 text-cyan-600 font-bold text-sm hover:underline">
@@ -513,15 +482,11 @@ function App() {
   );
 
   const renderProfile = () => {
-    // If viewingProfileId is set, fetch that user, otherwise fetch current user
     const targetId = viewingProfileId || user.id;
     const isMe = targetId === user.id;
 
-    // In a real app we'd fetch from API. Here we assume we might need to look up in storage or just use existing data for 'me'
-    // For simplicity, let's grab user from Auth service logic
     let targetUser = isMe ? user : AuthService.getUserById(targetId);
     
-    // Fallback if not found (shouldn't happen with valid IDs)
     if (!targetUser) targetUser = user;
 
     const userPosts = posts.filter(p => p.userId === targetUser.id);
@@ -643,7 +608,6 @@ function App() {
 
   return (
     <div className="min-h-screen bg-stone-50 pb-20 md:pb-10 font-sans">
-      {/* Top Navbar */}
       <nav className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-stone-200 px-4 py-3 shadow-sm">
         <div className="max-w-4xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => {setActiveTab('home'); setViewingProfileId(null); window.scrollTo(0,0)}}>
@@ -651,7 +615,6 @@ function App() {
             <span className="text-2xl font-light text-stone-600">TRAVEL</span>
           </div>
           
-          {/* Mobile Profile Icon (Top Right) */}
           <div className="md:hidden">
             <button 
               onClick={() => { setActiveTab('profile'); setViewingProfileId(null); window.scrollTo(0,0); }} 
@@ -661,7 +624,6 @@ function App() {
             </button>
           </div>
 
-          {/* Desktop Search Bar */}
           <div className="hidden md:flex flex-1 max-w-md mx-8 relative">
             <input 
               type="text" 
@@ -678,13 +640,12 @@ function App() {
             )}
           </div>
 
-          {/* Desktop Nav Actions */}
           <div className="hidden md:flex space-x-6 text-stone-500 font-medium items-center">
              <button onClick={() => setActiveTab('home')} className={`hover:text-cyan-700 transition-colors ${activeTab === 'home' ? 'text-cyan-700' : ''}`}>
                 <Map size={24} />
              </button>
              <button onClick={() => setActiveTab('explore')} className={`hover:text-cyan-700 transition-colors ${activeTab === 'explore' ? 'text-cyan-700' : ''}`}>
-                <Binoculars size={24} />
+                <Compass size={24} />
              </button>
              <button 
                onClick={() => setIsCreateModalOpen(true)}
@@ -703,10 +664,8 @@ function App() {
         </div>
       </nav>
 
-      {/* Main Layout */}
       <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8 pt-6 px-4 md:px-0">
         
-        {/* Main Content Column */}
         <div className="md:col-span-2">
           {activeTab === 'home' && renderHome()}
           {activeTab === 'search' && (
@@ -725,7 +684,6 @@ function App() {
                 
                 {searchQuery && (
                   <>
-                     {/* Users Search Results */}
                      <div className="flex items-center justify-between mt-2">
                         <h3 className="font-bold text-stone-500 text-sm uppercase flex items-center gap-2">
                           <Users size={14} /> Comunidad
@@ -800,13 +758,11 @@ function App() {
           {activeTab === 'profile' && renderProfile()}
         </div>
 
-        {/* Right Sidebar - Desktop Only */}
         <div className="hidden md:block col-span-1 space-y-6">
           <div className="sticky top-24">
-            {/* Suggested Places Widget */}
             <div className="bg-white rounded-2xl shadow-sm border border-stone-100 p-5 mb-6">
               <h3 className="font-bold text-stone-800 mb-4 text-sm uppercase tracking-wider flex items-center gap-2">
-                <Binoculars size={16} className="text-cyan-600" />
+                <Compass size={16} className="text-cyan-600" />
                 Joyas Ocultas
               </h3>
               <div className="space-y-4">
@@ -835,7 +791,6 @@ function App() {
         </div>
       </div>
 
-      {/* Mobile Bottom Navigation */}
       <div className="fixed bottom-0 w-full bg-white/95 backdrop-blur-md border-t border-stone-200 flex justify-around p-3 md:hidden z-30 pb-6 shadow-[0_-5px_15px_rgba(0,0,0,0.05)]">
         <button 
           onClick={() => setActiveTab('home')}
@@ -862,7 +817,7 @@ function App() {
           onClick={() => setActiveTab('explore')}
           className={`flex flex-col items-center gap-1 ${activeTab === 'explore' ? 'text-cyan-700' : 'text-stone-400'}`}
         >
-          <Binoculars size={24} strokeWidth={activeTab === 'explore' ? 2.5 : 2} />
+          <Compass size={24} strokeWidth={activeTab === 'explore' ? 2.5 : 2} />
         </button>
 
         <button 
@@ -873,7 +828,6 @@ function App() {
         </button>
       </div>
 
-      {/* Overlays */}
       <CreatePostModal 
         isOpen={isCreateModalOpen} 
         onClose={() => setIsCreateModalOpen(false)} 

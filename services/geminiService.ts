@@ -1,7 +1,16 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 
-// Initialize Gemini
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Usamos import.meta.env que es el estándar de Vite, o un string vacío para evitar errores
+const apiKey = import.meta.env.VITE_API_KEY || '';
+let ai: GoogleGenAI | null = null;
+
+if (apiKey) {
+  try {
+    ai = new GoogleGenAI({ apiKey });
+  } catch (error) {
+    console.error("Error inicializando Gemini:", error);
+  }
+}
 
 const MANABI_SYSTEM_INSTRUCTION = `Eres un experto guía turístico de la provincia de Manabí, Ecuador. 
 Tu objetivo es promover el turismo de manera entusiasta, especialmente en el Parque Nacional Machalilla, 
@@ -9,6 +18,11 @@ Playa Los Frailes y Puerto López. Eres amable, usas emojis y das consejos prác
 Responde siempre en español.`;
 
 export const getTravelAdvice = async (query: string): Promise<string> => {
+  if (!ai || !apiKey) {
+    console.warn("API Key no encontrada");
+    return "⚠️ Modo Demo: El asistente de IA no está activo en este entorno local. Cuando configures la VITE_API_KEY en Vercel, funcionaré correctamente. 🌴";
+  }
+
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
@@ -25,6 +39,8 @@ export const getTravelAdvice = async (query: string): Promise<string> => {
 };
 
 export const generateCaptionForImage = async (location: string, details: string): Promise<string> => {
+  if (!ai || !apiKey) return "Descripción no disponible (Falta API Key)";
+
   try {
     const prompt = `Escribe un pie de foto (caption) corto, inspirador y atractivo para Instagram sobre una foto tomada en ${location}. Detalles extra: ${details}. Incluye hashtags relevantes de turismo en Ecuador.`;
     
@@ -38,29 +54,3 @@ export const generateCaptionForImage = async (location: string, details: string)
     return "";
   }
 };
-
-// Function to analyze an image (simulated upload) and tell us where it might be or describe it
-export const analyzeTravelPhoto = async (base64Image: string): Promise<string> => {
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image', // Using appropriate model for image analysis
-      contents: {
-        parts: [
-          {
-            inlineData: {
-              mimeType: 'image/jpeg', // Assuming jpeg for simplicity in this demo
-              data: base64Image
-            }
-          },
-          {
-            text: "Describe este lugar turístico de Manabí y dame un dato curioso."
-          }
-        ]
-      }
-    });
-    return response.text || "Bonita foto.";
-  } catch (error) {
-    console.error("Error analyzing image:", error);
-    return "No pude analizar la imagen.";
-  }
-}
