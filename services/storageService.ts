@@ -1,6 +1,7 @@
+
 import { ref, set, remove, update, get } from "firebase/database";
 import { db } from "./firebase";
-import { Post, Story, Destination } from '../types';
+import { Post, Story, Destination, Suggestion, User } from '../types';
 
 // NOTA: La lectura (GET) ahora se hace en App.tsx con listeners en tiempo real.
 // Este servicio se encarga principalmente de las escrituras (WRITE).
@@ -38,6 +39,11 @@ export const StorageService = {
     await set(ref(db, 'stories/' + story.id), story);
   },
 
+  // Nueva función para editar historias
+  updateStory: async (storyId: string, updates: Partial<Story>) => {
+    await update(ref(db, `stories/${storyId}`), updates);
+  },
+
   deleteStory: async (storyId: string) => {
     await remove(ref(db, `stories/${storyId}`));
   },
@@ -49,8 +55,26 @@ export const StorageService = {
     });
   },
 
-  markStoryViewed: async (storyId: string) => {
-    // Placeholder para lógica futura de vistas
+  markStoryViewed: async (storyId: string, user: User) => {
+    // Registramos que este usuario vio la historia
+    const viewerData = {
+      userId: user.id,
+      userName: user.name,
+      userAvatar: user.avatar,
+      timestamp: Date.now()
+    };
+    // Usamos el ID del usuario como clave para evitar duplicados
+    await update(ref(db, `stories/${storyId}/viewers/${user.id}`), viewerData);
+  },
+
+  // --- SUGGESTIONS ---
+
+  sendSuggestion: async (suggestion: Suggestion) => {
+    await set(ref(db, `suggestions/${suggestion.id}`), suggestion);
+  },
+
+  deleteSuggestion: async (id: string) => {
+    await remove(ref(db, `suggestions/${id}`));
   },
 
   // --- DESTINATIONS ---

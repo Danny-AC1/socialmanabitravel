@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { X, MapPin, Star, Info, Camera, Compass, Wallet, MessageSquare, Plus, Upload, Trash2, Edit2 } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { X, MapPin, Star, Info, Camera, Compass, Wallet, MessageSquare, Plus, Upload, Trash2, Edit2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Destination } from '../types';
 import { resizeImage } from '../utils';
 
@@ -26,6 +26,10 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
 }) => {
   const [userRating, setUserRating] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
+  const [viewingImage, setViewingImage] = useState<string | null>(null);
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchEnd, setTouchEnd] = useState<number | null>(null);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
 
@@ -57,6 +61,58 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
     }
   };
 
+  // --- GALLERY NAVIGATION LOGIC ---
+  
+  const gallery = destination.gallery || [];
+  const currentImageIndex = viewingImage ? gallery.indexOf(viewingImage) : -1;
+  const hasMultipleImages = gallery.length > 1;
+
+  const handleNextImage = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (currentImageIndex === -1) return;
+    const nextIndex = (currentImageIndex + 1) % gallery.length;
+    setViewingImage(gallery[nextIndex]);
+  };
+
+  const handlePrevImage = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (currentImageIndex === -1) return;
+    const prevIndex = (currentImageIndex - 1 + gallery.length) % gallery.length;
+    setViewingImage(gallery[prevIndex]);
+  };
+
+  // Touch handlers for Swipe
+  const onTouchStart = (e: React.TouchEvent) => {
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
+
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    const distance = touchStart - touchEnd;
+    const isLeftSwipe = distance > 50;
+    const isRightSwipe = distance < -50;
+
+    if (isLeftSwipe) handleNextImage();
+    if (isRightSwipe) handlePrevImage();
+  };
+
+  // Keyboard navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!viewingImage) return;
+      if (e.key === 'ArrowRight') handleNextImage();
+      if (e.key === 'ArrowLeft') handlePrevImage();
+      if (e.key === 'Escape') setViewingImage(null);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [viewingImage, currentImageIndex]);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/60 backdrop-blur-sm p-0 md:p-4 animate-in fade-in duration-200">
       <div className="bg-white w-full h-full md:h-[90vh] md:max-w-4xl md:rounded-3xl overflow-hidden shadow-2xl flex flex-col">
@@ -65,9 +121,10 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
           <img 
             src={destination.imageUrl} 
             alt={destination.name} 
-            className="w-full h-full object-cover transition-transform duration-700"
+            className="w-full h-full object-cover transition-transform duration-700 cursor-pointer"
+            onClick={() => setViewingImage(destination.imageUrl)}
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30 pointer-events-none" />
           
           <button 
             onClick={onClose}
@@ -167,11 +224,15 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
                 
                 <div className="grid grid-cols-2 gap-2 md:gap-4">
                   {destination.gallery && destination.gallery.map((img, idx) => (
-                    <div key={idx} className={`rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-pointer relative group/img ${idx === 0 ? 'col-span-2 h-48 md:h-64' : 'h-32 md:h-40'}`}>
+                    <div 
+                        key={idx} 
+                        onClick={() => setViewingImage(img)}
+                        className={`rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-pointer relative group/img ${idx === 0 ? 'col-span-2 h-48 md:h-64' : 'h-32 md:h-40'}`}
+                    >
                       <img src={img} alt={`Gallery ${idx}`} className="w-full h-full object-cover hover:scale-105 transition-transform duration-700" />
                       {isAdminUser && (
                          <button 
-                           onClick={() => onDeletePhoto && onDeletePhoto(img)}
+                           onClick={(e) => { e.stopPropagation(); onDeletePhoto && onDeletePhoto(img); }}
                            className="absolute top-2 right-2 bg-red-600 text-white p-1.5 rounded-full opacity-0 group-hover/img:opacity-100 transition-opacity"
                          >
                             <Trash2 size={14} />
@@ -227,7 +288,6 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
                 <button 
                   onClick={() => {
                     onClose();
-                    // Immediate trigger logic handled by parent
                     onAskAI(`Cuéntame más sobre ${destination.name} en ${destination.location}. ¿Cómo llego y qué recomiendas comer?`);
                   }}
                   className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors active:scale-95"
@@ -241,6 +301,56 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Image Lightbox with Navigation */}
+      {viewingImage && (
+        <div 
+          className="fixed inset-0 z-[60] bg-black/95 flex items-center justify-center animate-in fade-in duration-200 select-none"
+          onClick={() => setViewingImage(null)}
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={onTouchEnd}
+        >
+           <button 
+             onClick={() => setViewingImage(null)}
+             className="absolute top-4 right-4 text-white/70 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors z-50"
+           >
+             <X size={32} />
+           </button>
+
+           {/* Desktop Arrows */}
+           {hasMultipleImages && (
+             <>
+               <button 
+                  onClick={handlePrevImage}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-white/50 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors hidden md:block z-40"
+               >
+                 <ChevronLeft size={48} />
+               </button>
+               <button 
+                  onClick={handleNextImage}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-white/50 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors hidden md:block z-40"
+               >
+                 <ChevronRight size={48} />
+               </button>
+             </>
+           )}
+
+           <img 
+             src={viewingImage} 
+             alt="Full size gallery" 
+             className="max-w-full max-h-full object-contain shadow-2xl transition-transform duration-300"
+             onClick={(e) => e.stopPropagation()}
+           />
+           
+           {/* Mobile Swipe Hint */}
+           {hasMultipleImages && (
+             <div className="absolute bottom-6 text-white/40 text-xs md:hidden animate-pulse pointer-events-none">
+               Desliza para ver más
+             </div>
+           )}
+        </div>
+      )}
     </div>
   );
 };

@@ -1,6 +1,7 @@
+
 import React, { useEffect, useState, useRef } from 'react';
-import { X, Clover, Share2, Trash2, MapPin } from 'lucide-react';
-import { Story } from '../types';
+import { X, Clover, Share2, Trash2, MapPin, Edit2, Eye } from 'lucide-react';
+import { Story, StoryViewer as ViewerType } from '../types';
 
 interface StoryViewerProps {
   stories: Story[];
@@ -9,6 +10,7 @@ interface StoryViewerProps {
   onClose: () => void;
   onMarkViewed: (id: string) => void;
   onDelete: (id: string) => void;
+  onEdit?: (story: Story) => void;
   onLike: (id: string) => void;
   onShare?: (text: string) => void;
 }
@@ -20,6 +22,7 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
   onClose, 
   onMarkViewed,
   onDelete,
+  onEdit,
   onLike,
   onShare
 }) => {
@@ -29,6 +32,9 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
   const [likesCountLocally, setLikesCountLocally] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   
+  // State for Viewers List
+  const [showViewers, setShowViewers] = useState(false);
+  
   const videoRef = useRef<HTMLVideoElement>(null);
 
   if (stories.length === 0) {
@@ -37,6 +43,9 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
   }
 
   const currentStory = stories[currentIndex];
+  
+  // Extract viewers list from the dictionary object in currentStory
+  const viewersList: ViewerType[] = currentStory.viewers ? Object.values(currentStory.viewers) : [];
 
   useEffect(() => {
     if (currentStory) {
@@ -45,11 +54,12 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
       setLikesCountLocally(currentStory.likes || 0);
       onMarkViewed(currentStory.id);
       setIsPaused(false);
+      setShowViewers(false); // Reset when changing story
     }
   }, [currentStory]); 
 
   useEffect(() => {
-    if (isPaused) return;
+    if (isPaused || showViewers) return; // Pause progress if viewing viewer list
 
     const interval = setInterval(() => {
       setProgress((prev) => {
@@ -58,15 +68,13 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
           handleNext();
           return 100;
         }
-        // Si es video, el progreso depende de la duración del video (no simulado)
-        // Pero para esta versión simple, usamos el timer estándar para imágenes y un poco más lento para videos
         const increment = currentStory.mediaType === 'video' ? 0.5 : 2; 
         return prev + increment; 
       });
     }, 100); 
 
     return () => clearInterval(interval);
-  }, [currentIndex, isPaused, currentStory?.mediaType]);
+  }, [currentIndex, isPaused, showViewers, currentStory?.mediaType]);
 
   const handleNext = () => {
     if (currentIndex < stories.length - 1) {
@@ -92,13 +100,19 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
        setIsPaused(false);
     }
   };
+  
+  const handleEditClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsPaused(true);
+    if (onEdit) onEdit(currentStory);
+  };
 
   const handleShareClick = () => {
       setIsPaused(true);
       if (onShare) {
           onShare(`Mira esta historia de ${currentStory.userName} en Ecuador Travel!`);
       }
-      setTimeout(() => setIsPaused(false), 1000); // Resume shortly
+      setTimeout(() => setIsPaused(false), 1000); 
   };
 
   const handleLikeClick = (e: React.MouseEvent) => {
@@ -109,6 +123,12 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
     onLike(currentStory.id);
   };
 
+  const toggleViewersList = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      setShowViewers(!showViewers);
+      setIsPaused(!showViewers); // Pause when list is open
+  };
+
   if (!currentStory) return null;
 
   const isOwner = currentStory.userId === currentUserId;
@@ -116,7 +136,6 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
   return (
     <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
       
-      {/* Background blur */}
       {currentStory.mediaType !== 'video' && (
         <div 
             className="absolute inset-0 bg-cover bg-center blur-xl opacity-30 scale-110"
@@ -126,10 +145,10 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
 
       <div 
         className="relative w-full md:w-[400px] h-full md:h-[90vh] bg-black md:rounded-2xl overflow-hidden shadow-2xl flex flex-col select-none"
-        onMouseDown={() => setIsPaused(true)}
-        onMouseUp={() => setIsPaused(false)}
-        onTouchStart={() => setIsPaused(true)}
-        onTouchEnd={() => setIsPaused(false)}
+        onMouseDown={() => !showViewers && setIsPaused(true)}
+        onMouseUp={() => !showViewers && setIsPaused(false)}
+        onTouchStart={() => !showViewers && setIsPaused(true)}
+        onTouchEnd={() => !showViewers && setIsPaused(false)}
       >
         <div className="absolute inset-0 z-0 flex items-center justify-center bg-black">
           {currentStory.mediaType === 'video' ? (
@@ -139,7 +158,7 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
                 className="w-full h-full object-contain"
                 autoPlay
                 playsInline
-                loop // Simple loop, progress bar handles transition
+                loop
              />
           ) : (
              <img 
@@ -152,18 +171,20 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
         </div>
 
         {/* Progress Bars */}
-        <div className="absolute top-4 left-4 right-4 flex space-x-1 z-20">
-          {stories.map((story, idx) => (
-            <div key={story.id} className="h-1 bg-white/30 flex-1 rounded-full overflow-hidden">
-              <div 
-                className={`h-full bg-white transition-all duration-100 ease-linear ${
-                  idx < currentIndex ? 'w-full' : idx === currentIndex ? '' : 'w-0'
-                }`}
-                style={{ width: idx === currentIndex ? `${progress}%` : undefined }}
-              />
+        {!showViewers && (
+            <div className="absolute top-4 left-4 right-4 flex space-x-1 z-20">
+            {stories.map((story, idx) => (
+                <div key={story.id} className="h-1 bg-white/30 flex-1 rounded-full overflow-hidden">
+                <div 
+                    className={`h-full bg-white transition-all duration-100 ease-linear ${
+                    idx < currentIndex ? 'w-full' : idx === currentIndex ? '' : 'w-0'
+                    }`}
+                    style={{ width: idx === currentIndex ? `${progress}%` : undefined }}
+                />
+                </div>
+            ))}
             </div>
-          ))}
-        </div>
+        )}
 
         {/* Header */}
         <div className="absolute top-8 left-4 right-4 flex items-center justify-between z-20 text-white">
@@ -181,9 +202,14 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
           </div>
           <div className="flex gap-2">
             {isOwner && (
-               <button onClick={(e) => { e.stopPropagation(); handleDelete(); }} className="p-2 hover:bg-white/20 hover:text-red-400 rounded-full transition-colors z-50">
-                  <Trash2 size={24} />
-               </button>
+               <>
+                 <button onClick={handleEditClick} className="p-2 hover:bg-white/20 hover:text-cyan-400 rounded-full transition-colors z-50">
+                    <Edit2 size={24} />
+                 </button>
+                 <button onClick={(e) => { e.stopPropagation(); handleDelete(); }} className="p-2 hover:bg-white/20 hover:text-red-400 rounded-full transition-colors z-50">
+                    <Trash2 size={24} />
+                 </button>
+               </>
             )}
             <button onClick={(e) => { e.stopPropagation(); onClose(); }} className="p-2 hover:bg-white/20 rounded-full transition-colors z-50">
               <X size={24} />
@@ -191,29 +217,76 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
           </div>
         </div>
 
-        {/* Touch Areas for Navigation */}
-        <div className="absolute inset-0 z-10 flex">
-          <div className="w-1/3 h-full" onClick={handlePrev} />
-          <div className="w-2/3 h-full" onClick={handleNext} />
-        </div>
+        {/* Touch Areas for Navigation (Hidden if Viewers List open) */}
+        {!showViewers && (
+            <div className="absolute inset-0 z-10 flex">
+            <div className="w-1/3 h-full" onClick={handlePrev} />
+            <div className="w-2/3 h-full" onClick={handleNext} />
+            </div>
+        )}
+
+        {/* Viewers List Overlay (Only for Owner) */}
+        {showViewers && isOwner && (
+            <div 
+              className="absolute inset-0 z-30 bg-black/90 backdrop-blur-md p-6 overflow-y-auto animate-in slide-in-from-bottom-10"
+              onMouseDown={(e) => e.stopPropagation()} // Stop propagation to avoid pausing/unpausing
+            >
+                <div className="flex justify-between items-center mb-6 border-b border-white/20 pb-4">
+                    <h3 className="text-white font-bold text-lg flex items-center gap-2">
+                        <Eye size={20} /> Visto por {viewersList.length}
+                    </h3>
+                    <button onClick={toggleViewersList} className="text-white/70 hover:text-white">
+                        <X size={24} />
+                    </button>
+                </div>
+                
+                <div className="space-y-4">
+                    {viewersList.length === 0 ? (
+                        <div className="text-center text-white/50 py-10">
+                            Nadie ha visto esto aún.
+                        </div>
+                    ) : (
+                        viewersList.map((viewer) => (
+                            <div key={viewer.userId} className="flex items-center gap-3">
+                                <img src={viewer.userAvatar} className="w-10 h-10 rounded-full border border-white/30" alt={viewer.userName} />
+                                <div className="flex-1">
+                                    <p className="text-white font-bold text-sm">{viewer.userName}</p>
+                                    <p className="text-white/40 text-xs">
+                                        {new Date(viewer.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </p>
+                                </div>
+                            </div>
+                        ))
+                    )}
+                </div>
+            </div>
+        )}
 
         {/* Footer Controls */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 pb-8 z-20 flex flex-col space-y-4">
+        <div className="absolute bottom-0 left-0 right-0 p-4 pb-8 z-20 flex flex-col space-y-4 pointer-events-none">
           
-          {currentStory.caption && (
-            <div className="bg-black/30 backdrop-blur-sm p-3 rounded-xl text-white border border-white/10 self-start max-w-[90%] animate-in slide-in-from-bottom-2 fade-in">
+          {currentStory.caption && !showViewers && (
+            <div className="bg-black/30 backdrop-blur-sm p-3 rounded-xl text-white border border-white/10 self-start max-w-[90%]">
               <p className="text-sm">{currentStory.caption}</p>
             </div>
           )}
 
-          <div className="flex items-center space-x-4">
-            <input 
-              type="text" 
-              placeholder="Responder historia..." 
-              className="flex-1 bg-transparent border border-white/40 rounded-full px-4 py-3 text-white placeholder-white/70 focus:border-white outline-none backdrop-blur-sm transition-colors text-sm"
-              onClick={(e) => e.stopPropagation()} // Prevent nav click
-            />
-            <div className="flex items-center gap-2">
+          <div className="flex items-end justify-between pointer-events-auto">
+             {/* Left Action: Viewers (Owner) or Nothing */}
+             {isOwner ? (
+                <button 
+                  onClick={toggleViewersList}
+                  className="flex items-center gap-1 text-white text-xs font-bold bg-white/10 hover:bg-white/20 px-3 py-2 rounded-full backdrop-blur-md transition-colors"
+                >
+                    <Eye size={16} />
+                    <span>{viewersList.length}</span>
+                </button>
+             ) : (
+                <div /> // Spacer
+             )}
+
+            {/* Right Actions: Like & Share */}
+            <div className="flex items-center gap-3">
                 <button 
                   onClick={handleLikeClick}
                   className={`p-3 rounded-full transition-all active:scale-90 relative group ${isLikedLocally ? 'bg-white/20' : 'hover:bg-white/10'}`}
@@ -224,7 +297,7 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
                     fill={isLikedLocally ? "currentColor" : "none"} 
                   />
                   {likesCountLocally > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-green-500 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full font-bold border-2 border-black/20 shadow-sm animate-in zoom-in">
+                    <span className="absolute -top-1 -right-1 bg-green-500 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full font-bold border-2 border-black/20 shadow-sm">
                       {likesCountLocally}
                     </span>
                   )}

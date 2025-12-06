@@ -1,3 +1,4 @@
+
 export interface User {
   id: string;
   name: string;
@@ -32,6 +33,13 @@ export interface Post {
   timestamp: number;
 }
 
+export interface StoryViewer {
+  userId: string;
+  userName: string;
+  userAvatar: string;
+  timestamp: number;
+}
+
 export interface Story {
   id: string;
   userId: string;
@@ -45,6 +53,17 @@ export interface Story {
   location?: string;
   likes?: number;
   isLiked?: boolean;
+  viewers?: Record<string, StoryViewer>; // Map of userId -> ViewerData
+}
+
+export interface Suggestion {
+  id: string;
+  userId: string;
+  userName: string;
+  userAvatar: string;
+  text: string;
+  timestamp: number;
+  isRead: boolean;
 }
 
 export type EcuadorRegion = 'Costa' | 'Sierra' | 'Amazonía' | 'Insular';
