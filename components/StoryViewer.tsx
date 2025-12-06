@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { X, Clover, Share2, Trash2, MapPin } from 'lucide-react';
 import { Story } from '../types';
 
@@ -27,6 +27,9 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
   const [progress, setProgress] = useState(0);
   const [isLikedLocally, setIsLikedLocally] = useState(false);
   const [likesCountLocally, setLikesCountLocally] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
+  
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   if (stories.length === 0) {
     onClose();
@@ -41,10 +44,13 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
       setIsLikedLocally(!!currentStory.isLiked);
       setLikesCountLocally(currentStory.likes || 0);
       onMarkViewed(currentStory.id);
+      setIsPaused(false);
     }
-  }, [currentStory]); // Dependencia simplificada para evitar reinicios innecesarios
+  }, [currentStory]); 
 
   useEffect(() => {
+    if (isPaused) return;
+
     const interval = setInterval(() => {
       setProgress((prev) => {
         if (prev >= 100) {
@@ -52,12 +58,15 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
           handleNext();
           return 100;
         }
-        return prev + 2; 
+        // Si es video, el progreso depende de la duración del video (no simulado)
+        // Pero para esta versión simple, usamos el timer estándar para imágenes y un poco más lento para videos
+        const increment = currentStory.mediaType === 'video' ? 0.5 : 2; 
+        return prev + increment; 
       });
     }, 100); 
 
     return () => clearInterval(interval);
-  }, [currentIndex]);
+  }, [currentIndex, isPaused, currentStory?.mediaType]);
 
   const handleNext = () => {
     if (currentIndex < stories.length - 1) {
@@ -74,28 +83,29 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
   };
 
   const handleDelete = () => {
+    setIsPaused(true);
     if (confirm("¿Eliminar esta historia?")) {
       onDelete(currentStory.id);
       if (stories.length <= 1) onClose();
       else if (currentIndex >= stories.length - 1) setCurrentIndex(currentIndex - 1);
+    } else {
+       setIsPaused(false);
     }
   };
 
   const handleShareClick = () => {
+      setIsPaused(true);
       if (onShare) {
           onShare(`Mira esta historia de ${currentStory.userName} en Ecuador Travel!`);
       }
+      setTimeout(() => setIsPaused(false), 1000); // Resume shortly
   };
 
   const handleLikeClick = (e: React.MouseEvent) => {
-    e.stopPropagation(); // Evitar cambiar de historia al dar like
-    
-    // Actualización optimista (UI instantánea)
+    e.stopPropagation(); 
     const newIsLiked = !isLikedLocally;
     setIsLikedLocally(newIsLiked);
     setLikesCountLocally(prev => newIsLiked ? prev + 1 : prev - 1);
-    
-    // Llamada real al servidor
     onLike(currentStory.id);
   };
 
@@ -105,18 +115,39 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
-      <div 
-        className="absolute inset-0 bg-cover bg-center blur-xl opacity-30 scale-110"
-        style={{ backgroundImage: `url(${currentStory.imageUrl})` }}
-      />
+      
+      {/* Background blur */}
+      {currentStory.mediaType !== 'video' && (
+        <div 
+            className="absolute inset-0 bg-cover bg-center blur-xl opacity-30 scale-110"
+            style={{ backgroundImage: `url(${currentStory.imageUrl})` }}
+        />
+      )}
 
-      <div className="relative w-full md:w-[400px] h-full md:h-[90vh] bg-black md:rounded-2xl overflow-hidden shadow-2xl flex flex-col">
-        <div className="absolute inset-0 z-0">
-          <img 
-            src={currentStory.imageUrl} 
-            alt="Story" 
-            className="w-full h-full object-cover"
-          />
+      <div 
+        className="relative w-full md:w-[400px] h-full md:h-[90vh] bg-black md:rounded-2xl overflow-hidden shadow-2xl flex flex-col select-none"
+        onMouseDown={() => setIsPaused(true)}
+        onMouseUp={() => setIsPaused(false)}
+        onTouchStart={() => setIsPaused(true)}
+        onTouchEnd={() => setIsPaused(false)}
+      >
+        <div className="absolute inset-0 z-0 flex items-center justify-center bg-black">
+          {currentStory.mediaType === 'video' ? (
+             <video 
+                ref={videoRef}
+                src={currentStory.imageUrl}
+                className="w-full h-full object-contain"
+                autoPlay
+                playsInline
+                loop // Simple loop, progress bar handles transition
+             />
+          ) : (
+             <img 
+                src={currentStory.imageUrl} 
+                alt="Story" 
+                className="w-full h-full object-cover"
+             />
+          )}
           <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black/60 pointer-events-none" />
         </div>
 

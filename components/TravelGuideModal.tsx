@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { X, MapPin, Star, Info, Camera, Compass, Wallet, MessageSquare, Plus, Upload } from 'lucide-react';
+import { X, MapPin, Star, Info, Camera, Compass, Wallet, MessageSquare, Plus, Upload, Trash2, Edit2 } from 'lucide-react';
 import { Destination } from '../types';
 import { resizeImage } from '../utils';
 
@@ -9,12 +9,25 @@ interface TravelGuideModalProps {
   onAskAI: (query: string) => void;
   onRate: (rating: number) => void;
   onAddPhoto: (image: string) => void;
+  isAdminUser: boolean; 
+  onChangeCover?: (image: string) => void;
+  onDeletePhoto?: (photoUrl: string) => void;
 }
 
-export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({ destination, onClose, onAskAI, onRate, onAddPhoto }) => {
+export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({ 
+  destination, 
+  onClose, 
+  onAskAI, 
+  onRate, 
+  onAddPhoto, 
+  isAdminUser,
+  onChangeCover,
+  onDeletePhoto
+}) => {
   const [userRating, setUserRating] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const coverInputRef = useRef<HTMLInputElement>(null);
 
   if (!destination) return null;
 
@@ -23,14 +36,19 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({ destination,
     onRate(stars);
   };
 
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>, isCover = false) => {
     const file = e.target.files?.[0];
     if (file) {
       setIsUploading(true);
       try {
         const resized = await resizeImage(file, 1024);
-        onAddPhoto(resized);
-        alert("¡Foto agregada a la galería exitosamente!");
+        if (isCover && onChangeCover) {
+            onChangeCover(resized);
+            alert("Portada actualizada.");
+        } else {
+            onAddPhoto(resized);
+            alert("¡Foto agregada a la galería exitosamente!");
+        }
       } catch (err) {
         console.error("Error", err);
         alert("Error al subir imagen");
@@ -40,14 +58,14 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({ destination,
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/60 backdrop-blur-sm p-0 md:p-4">
-      <div className="bg-white w-full h-full md:h-[90vh] md:max-w-4xl md:rounded-3xl overflow-hidden shadow-2xl flex flex-col animate-in fade-in zoom-in duration-300">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/60 backdrop-blur-sm p-0 md:p-4 animate-in fade-in duration-200">
+      <div className="bg-white w-full h-full md:h-[90vh] md:max-w-4xl md:rounded-3xl overflow-hidden shadow-2xl flex flex-col">
         
-        <div className="relative h-64 md:h-80 shrink-0">
+        <div className="relative h-64 md:h-80 shrink-0 group">
           <img 
             src={destination.imageUrl} 
             alt={destination.name} 
-            className="w-full h-full object-cover"
+            className="w-full h-full object-cover transition-transform duration-700"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30" />
           
@@ -57,6 +75,18 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({ destination,
           >
             <X size={24} />
           </button>
+
+          {isAdminUser && (
+             <div className="absolute top-4 left-4 z-10">
+                <button 
+                  onClick={() => coverInputRef.current?.click()}
+                  className="bg-white/20 hover:bg-white text-white hover:text-cyan-900 px-3 py-1.5 rounded-full backdrop-blur-md transition-all text-xs font-bold flex items-center gap-1"
+                >
+                   <Edit2 size={12} /> Cambiar Portada
+                </button>
+                <input type="file" ref={coverInputRef} hidden accept="image/*" onChange={(e) => handlePhotoUpload(e, true)} />
+             </div>
+          )}
 
           <div className="absolute bottom-0 left-0 p-6 md:p-8 text-white w-full">
             <div className="flex items-center gap-2 mb-2">
@@ -69,8 +99,8 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({ destination,
                 </span>
               )}
             </div>
-            <h2 className="text-3xl md:text-5xl font-black mb-1 leading-tight">{destination.name}</h2>
-            <div className="flex items-center text-cyan-300 font-medium">
+            <h2 className="text-3xl md:text-5xl font-black mb-1 leading-tight text-shadow-sm">{destination.name}</h2>
+            <div className="flex items-center text-cyan-300 font-medium text-shadow-sm">
               <MapPin size={16} className="mr-1" />
               {destination.location}
               <span className="mx-2 text-white/40">|</span>
@@ -122,22 +152,38 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({ destination,
                     <Camera className="text-cyan-600" size={20} />
                     Galería de la Comunidad
                     </h3>
-                    <button 
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={isUploading}
-                        className="text-xs bg-stone-100 hover:bg-stone-200 text-stone-600 px-3 py-1.5 rounded-full font-bold flex items-center gap-1 transition-colors"
-                    >
-                        {isUploading ? "Subiendo..." : <><Plus size={14}/> Agregar Foto</>}
-                    </button>
-                    <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={handlePhotoUpload} />
+                    
+                    {isAdminUser && (
+                        <button 
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={isUploading}
+                            className="text-xs bg-cyan-100 hover:bg-cyan-200 text-cyan-800 px-3 py-1.5 rounded-full font-bold flex items-center gap-1 transition-colors"
+                        >
+                            {isUploading ? "Subiendo..." : <><Plus size={14}/> Gestionar Fotos</>}
+                        </button>
+                    )}
+                    <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={(e) => handlePhotoUpload(e)} />
                 </div>
                 
                 <div className="grid grid-cols-2 gap-2 md:gap-4">
                   {destination.gallery && destination.gallery.map((img, idx) => (
-                    <div key={idx} className={`rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-pointer ${idx === 0 ? 'col-span-2 h-48 md:h-64' : 'h-32 md:h-40'}`}>
+                    <div key={idx} className={`rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-pointer relative group/img ${idx === 0 ? 'col-span-2 h-48 md:h-64' : 'h-32 md:h-40'}`}>
                       <img src={img} alt={`Gallery ${idx}`} className="w-full h-full object-cover hover:scale-105 transition-transform duration-700" />
+                      {isAdminUser && (
+                         <button 
+                           onClick={() => onDeletePhoto && onDeletePhoto(img)}
+                           className="absolute top-2 right-2 bg-red-600 text-white p-1.5 rounded-full opacity-0 group-hover/img:opacity-100 transition-opacity"
+                         >
+                            <Trash2 size={14} />
+                         </button>
+                      )}
                     </div>
                   ))}
+                  {(!destination.gallery || destination.gallery.length === 0) && (
+                     <div className="col-span-2 py-8 text-center text-stone-400 bg-stone-100 rounded-xl border border-dashed border-stone-200">
+                        No hay fotos en la galería aún.
+                     </div>
+                  )}
                 </div>
               </section>
             </div>
@@ -181,9 +227,10 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({ destination,
                 <button 
                   onClick={() => {
                     onClose();
+                    // Immediate trigger logic handled by parent
                     onAskAI(`Cuéntame más sobre ${destination.name} en ${destination.location}. ¿Cómo llego y qué recomiendas comer?`);
                   }}
-                  className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors"
+                  className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors active:scale-95"
                 >
                   <MessageSquare size={18} />
                   Preguntar al Guía IA

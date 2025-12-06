@@ -23,7 +23,8 @@ export interface Post {
   userName: string;
   userAvatar: string;
   location: string;
-  imageUrl: string;
+  imageUrl: string; // Used for both image and video URL (base64)
+  mediaType?: 'image' | 'video'; // New field
   caption: string;
   likes: number;
   comments: Comment[];
@@ -36,7 +37,8 @@ export interface Story {
   userId: string;
   userName: string;
   userAvatar: string;
-  imageUrl: string;
+  imageUrl: string; // Used for both image and video URL
+  mediaType?: 'image' | 'video'; // New field
   timestamp: number;
   isViewed: boolean;
   caption?: string;
@@ -51,8 +53,8 @@ export interface Destination {
   id: string;
   name: string;
   location: string;
-  region: EcuadorRegion; // Nuevo campo
-  province: string;      // Nuevo campo
+  region: EcuadorRegion;
+  province: string;
   description: string;
   fullDescription: string;
   imageUrl: string;

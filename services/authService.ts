@@ -47,7 +47,7 @@ export const AuthService = {
       name,
       email,
       password, 
-      bio: bio || 'Explorando Manabí 🌴',
+      bio: bio || 'Explorando Ecuador 🇪🇨',
       avatar: customAvatar || `https://api.dicebear.com/7.x/adventurer/svg?seed=${name.replace(/\s/g, '')}&backgroundColor=b6e3f4`,
       followers: [],
       following: []
@@ -73,6 +73,21 @@ export const AuthService = {
     return user;
   },
 
+  // Simulación de reseteo de contraseña
+  resetPassword: async (email: string): Promise<void> => {
+    const users = await AuthService.getUsers();
+    const user = users.find(u => u.email === email);
+    
+    if (!user) {
+      throw new Error('No encontramos una cuenta con este correo.');
+    }
+
+    // En un sistema real aquí se enviaría un email. 
+    // Como es Firebase RTDB sin Auth real, simulamos el éxito.
+    // Opcional: Podríamos cambiar la contraseña a una temporal, pero es arriesgado sin validar email real.
+    return new Promise(resolve => setTimeout(resolve, 1000));
+  },
+
   updateUserAvatar: async (userId: string, newAvatar: string): Promise<User> => {
     const updates: any = {};
     updates[`/users/${userId}/avatar`] = newAvatar;
@@ -87,8 +102,23 @@ export const AuthService = {
       return session;
     }
     
-    // Si no hay sesión, devolver el usuario actualizado parcialmente (solo para cumplir el tipo)
+    // Si no hay sesión, devolver el usuario actualizado parcialmente
     return { ...session!, avatar: newAvatar };
+  },
+
+  updateUserName: async (userId: string, newName: string): Promise<User> => {
+    const updates: any = {};
+    updates[`/users/${userId}/name`] = newName;
+    
+    await update(ref(db), updates);
+
+    const session = AuthService.getSession();
+    if (session && session.id === userId) {
+      session.name = newName;
+      AuthService.setSession(session);
+      return session;
+    }
+    return { ...session!, name: newName };
   },
 
   toggleFollow: async (currentUserId: string, targetUserId: string) => {

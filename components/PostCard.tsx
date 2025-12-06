@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Clover, MessageSquareText, Share2, MapPin, MoreVertical, Edit2, Trash2 } from 'lucide-react';
+import { Clover, MessageSquareText, Share2, MapPin, MoreVertical, Edit2, Trash2, Play } from 'lucide-react';
 import { Post } from '../types';
 
 interface PostCardProps {
@@ -29,6 +29,7 @@ export const PostCard: React.FC<PostCardProps> = ({
   const [showComments, setShowComments] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   const isOwner = post.userId === currentUserId;
 
@@ -41,7 +42,6 @@ export const PostCard: React.FC<PostCardProps> = ({
     }
   };
 
-  // Close menu on click outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -54,7 +54,6 @@ export const PostCard: React.FC<PostCardProps> = ({
 
   return (
     <div className="bg-white border rounded-xl shadow-sm mb-6 overflow-hidden">
-      {/* Header */}
       <div className="flex items-center justify-between p-4 relative">
         <div 
           className="flex items-center space-x-3 cursor-pointer group"
@@ -101,25 +100,45 @@ export const PostCard: React.FC<PostCardProps> = ({
         )}
       </div>
 
-      {/* Image */}
       <div 
-        className="relative aspect-square md:aspect-[4/3] bg-gray-100 cursor-pointer overflow-hidden group"
+        className="relative aspect-square md:aspect-[4/3] bg-black cursor-pointer overflow-hidden group"
         onClick={() => onImageClick && onImageClick(post)}
+        onMouseEnter={() => { if(post.mediaType === 'video') videoRef.current?.play(); }}
+        onMouseLeave={() => { if(post.mediaType === 'video') { videoRef.current?.pause(); videoRef.current!.currentTime = 0; } }}
       >
-        <img 
-          src={post.imageUrl} 
-          alt="Post content" 
-          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" 
-          loading="lazy" 
-        />
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+        {post.mediaType === 'video' ? (
+           <>
+              <video 
+                ref={videoRef}
+                src={post.imageUrl} 
+                className="w-full h-full object-contain" 
+                muted 
+                loop 
+                playsInline
+              />
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black/40 rounded-full p-4 group-hover:opacity-0 transition-opacity">
+                 <Play size={32} className="text-white fill-white ml-1" />
+              </div>
+              <div className="absolute bottom-3 right-3 bg-black/60 text-white text-xs px-2 py-1 rounded flex items-center gap-1">
+                 <Play size={10} fill="currentColor" /> Video
+              </div>
+           </>
+        ) : (
+           <img 
+            src={post.imageUrl} 
+            alt="Post content" 
+            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" 
+            loading="lazy" 
+          />
+        )}
+        
+        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center pointer-events-none">
             <span className="opacity-0 group-hover:opacity-100 text-white font-bold bg-black/40 px-4 py-2 rounded-full backdrop-blur-sm transition-opacity">
                 Ver detalle
             </span>
         </div>
       </div>
 
-      {/* Actions */}
       <div className="p-4 pb-2">
         <div className="flex items-center space-x-6 mb-3">
           <button 
@@ -170,11 +189,10 @@ export const PostCard: React.FC<PostCardProps> = ({
         )}
 
         <div className="text-gray-400 text-[10px] uppercase tracking-wide mt-2">
-          Hace 2 horas
+          Hace un momento
         </div>
       </div>
 
-      {/* Add Comment */}
       <form onSubmit={handleCommentSubmit} className="border-t p-3 flex items-center bg-gray-50">
         <input 
           type="text" 

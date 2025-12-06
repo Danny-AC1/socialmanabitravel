@@ -20,9 +20,7 @@ export const StorageService = {
   },
 
   toggleLikePost: async (post: Post, userId: string) => {
-    // Esta lógica es simplificada. En una app real usaríamos una subcolección de likes.
-    // Aquí confiamos en el contador del cliente por ahora, pero lo ideal es transaccional.
-    const isLiked = post.isLiked; // Nota: isLiked es local al usuario en esta implementación simple
+    const isLiked = post.isLiked;
     const newLikes = isLiked ? (post.likes - 1) : (post.likes + 1);
     
     await update(ref(db, `posts/${post.id}`), {
@@ -46,15 +44,13 @@ export const StorageService = {
 
   toggleLikeStory: async (story: Story) => {
     const currentLikes = story.likes || 0;
-    // Simplificación para demo
     await update(ref(db, `stories/${story.id}`), {
       likes: currentLikes + 1
     });
   },
 
   markStoryViewed: async (storyId: string) => {
-    // En una app real, esto se guardaría en una tabla 'user_views'. 
-    // Para esta demo, no modificamos la DB global al ver, solo localmente en App.tsx.
+    // Placeholder para lógica futura de vistas
   },
 
   // --- DESTINATIONS ---
@@ -64,12 +60,8 @@ export const StorageService = {
   },
 
   rateDestination: async (destinationId: string, userId: string, rating: number, currentRating: number, reviewCount: number = 0) => {
-    // Save the individual user rating
     await set(ref(db, `destinations/${destinationId}/ratings/${userId}`), rating);
     
-    // Calculate simple new average (approximated for no-backend solution)
-    // Formula: NewAvg = ((OldAvg * Count) + NewRating) / (Count + 1)
-    // NOTE: This assumes this is a new vote. In a real app, cloud functions calculate this.
     const newCount = (reviewCount || 0) + 1;
     const newAvg = ((currentRating * (reviewCount || 0)) + rating) / newCount;
 
@@ -85,9 +77,24 @@ export const StorageService = {
       gallery: updatedGallery
     });
   },
+
+  // --- ADMIN FUNCTIONS ---
+  // Estas son las funciones que faltaban y causaban el error en App.tsx
+
+  updateDestinationCover: async (destinationId: string, newImageUrl: string) => {
+    await update(ref(db, `destinations/${destinationId}`), {
+      imageUrl: newImageUrl
+    });
+  },
+
+  removeDestinationPhoto: async (destinationId: string, currentGallery: string[], photoUrlToRemove: string) => {
+    const updatedGallery = currentGallery.filter(url => url !== photoUrlToRemove);
+    await update(ref(db, `destinations/${destinationId}`), {
+      gallery: updatedGallery
+    });
+  },
   
   clearAll: async () => {
-    // Peligroso: Borra toda la DB. Solo para desarrollo.
     await set(ref(db), null);
     localStorage.clear();
     window.location.reload();

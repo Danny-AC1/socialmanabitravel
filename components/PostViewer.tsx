@@ -36,7 +36,6 @@ export const PostViewer: React.FC<PostViewerProps> = ({
     }
   };
 
-  // Close menu on click outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -58,19 +57,25 @@ export const PostViewer: React.FC<PostViewerProps> = ({
 
       <div className="flex flex-col md:flex-row w-full h-full md:max-w-6xl md:max-h-[90vh] md:rounded-xl overflow-hidden bg-black md:bg-white">
         
-        {/* Image Section */}
         <div className="flex-1 bg-black flex items-center justify-center relative">
-          <img 
-            src={post.imageUrl} 
-            alt="Full size" 
-            className="max-w-full max-h-full object-contain" 
-          />
+          {post.mediaType === 'video' ? (
+             <video 
+               src={post.imageUrl} 
+               className="max-w-full max-h-full object-contain" 
+               controls
+               autoPlay
+             />
+          ) : (
+             <img 
+               src={post.imageUrl} 
+               alt="Full size" 
+               className="max-w-full max-h-full object-contain" 
+             />
+          )}
         </div>
 
-        {/* Sidebar Section (Details & Interactions) */}
         <div className="w-full md:w-[400px] bg-white flex flex-col h-[40vh] md:h-full border-l border-gray-100">
           
-          {/* Header */}
           <div className="p-4 border-b flex items-center justify-between shrink-0">
             <div className="flex items-center space-x-3">
               <img src={post.userAvatar} alt={post.userName} className="w-10 h-10 rounded-full object-cover border border-gray-100" />
@@ -113,21 +118,18 @@ export const PostViewer: React.FC<PostViewerProps> = ({
             )}
           </div>
 
-          {/* Comments / Caption Scroll Area */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {/* Main Caption */}
             <div className="flex gap-3">
                <img src={post.userAvatar} alt="User" className="w-8 h-8 rounded-full object-cover mt-1" />
                <div className="text-sm">
                   <span className="font-bold text-gray-800 mr-2">{post.userName}</span>
                   <span className="text-gray-600 leading-relaxed">{post.caption}</span>
-                  <div className="text-xs text-gray-400 mt-1">Hace 2 horas</div>
+                  <div className="text-xs text-gray-400 mt-1">Hace un momento</div>
                </div>
             </div>
 
             <div className="h-px bg-gray-100 my-2" />
 
-            {/* Comments List */}
             {post.comments.length === 0 ? (
                <div className="text-center py-10 text-gray-400 text-sm">
                   Sé el primero en opinar.
@@ -147,7 +149,6 @@ export const PostViewer: React.FC<PostViewerProps> = ({
             )}
           </div>
 
-          {/* Action Bar */}
           <div className="border-t bg-gray-50 p-4 space-y-3 shrink-0">
             <div className="flex items-center justify-between">
                <div className="flex items-center space-x-4">

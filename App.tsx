@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Map as MapIcon, Compass, UserCircle, Camera, Search, Grid, LogOut, ArrowRight, UserPlus, UserCheck, ChevronLeft, PlusCircle, Globe, Filter } from 'lucide-react';
+import { Map as MapIcon, Compass, UserCircle, Camera, Search, Grid, LogOut, ArrowRight, UserPlus, UserCheck, ChevronLeft, PlusCircle, Globe, Filter, Edit3, X } from 'lucide-react';
 import { HeroSection } from './components/HeroSection';
 import { PostCard } from './components/PostCard';
 import { CreatePostModal } from './components/CreatePostModal';
@@ -15,7 +15,7 @@ import { ALL_DESTINATIONS as STATIC_DESTINATIONS } from './constants';
 import { Post, Story, Destination, User, EcuadorRegion } from './types';
 import { StorageService } from './services/storageService';
 import { AuthService } from './services/authService';
-import { resizeImage } from './utils';
+import { resizeImage, isAdmin } from './utils';
 import { db } from './services/firebase';
 import { ref, onValue } from 'firebase/database';
 
@@ -31,7 +31,6 @@ function App() {
   const [activeTab, setActiveTab] = useState<Tab>('home');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isAddDestinationModalOpen, setIsAddDestinationModalOpen] = useState(false);
-  const [isLoadingData, setIsLoadingData] = useState(true);
   
   const [editingPost, setEditingPost] = useState<Post | null>(null);
   const [viewingPost, setViewingPost] = useState<Post | null>(null);
@@ -40,10 +39,19 @@ function App() {
   const [viewingStoryList, setViewingStoryList] = useState<Story[]>([]);
   const [selectedDestination, setSelectedDestination] = useState<Destination | null>(null);
   const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
+  
+  // Profile specific states
+  const [viewingProfileImage, setViewingProfileImage] = useState<string | null>(null);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [newName, setNewName] = useState('');
 
   // Filtros de Exploración
   const [selectedRegion, setSelectedRegion] = useState<EcuadorRegion | 'Todas'>('Todas');
   const [selectedProvince, setSelectedProvince] = useState<string>('Todas');
+
+  // ChatBot State Lifting
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatQuery, setChatQuery] = useState('');
 
   const profileInputRef = useRef<HTMLInputElement>(null);
 
@@ -62,7 +70,6 @@ function App() {
       const data = snapshot.val();
       const loadedPosts: Post[] = data ? Object.values(data) : [];
       setPosts(loadedPosts.sort((a, b) => b.timestamp - a.timestamp));
-      setIsLoadingData(false);
     });
 
     const storiesRef = ref(db, 'stories');
@@ -85,6 +92,7 @@ function App() {
       const loadedDestinations: Destination[] = data ? Object.values(data) : [];
       
       const mergedDestinations = [...STATIC_DESTINATIONS];
+      // FIX: Usamos "new Map()" (JavaScript nativo) en lugar de "new MapIcon()"
       const firebaseDestMap = new Map(loadedDestinations.map(d => [d.id, d]));
       
       for (let i = 0; i < mergedDestinations.length; i++) {
@@ -159,7 +167,7 @@ function App() {
       alert(`Compartiendo: "${content}"\n\n(Enlace copiado al portapapeles)`);
   };
 
-  const handleCreateContent = async (image: string, caption: string, location: string, type: 'post' | 'story') => {
+  const handleCreateContent = async (image: string, caption: string, location: string, type: 'post' | 'story', mediaType: 'image' | 'video') => {
     if (!user) return;
     if (type === 'post') {
       const newPost: Post = {
@@ -169,6 +177,7 @@ function App() {
         userAvatar: user.avatar,
         location,
         imageUrl: image,
+        mediaType: mediaType,
         caption,
         likes: 0,
         comments: [],
@@ -183,6 +192,7 @@ function App() {
         userName: user.name,
         userAvatar: user.avatar,
         imageUrl: image,
+        mediaType: mediaType,
         timestamp: Date.now(),
         isViewed: false,
         caption: caption,
@@ -235,6 +245,22 @@ function App() {
     );
   };
 
+  const handleChangeDestinationCover = async (image: string) => {
+    if (!selectedDestination || !user) return;
+    await StorageService.updateDestinationCover(selectedDestination.id, image);
+  };
+  
+  const handleDeleteDestinationPhoto = async (photoUrl: string) => {
+    if (!selectedDestination || !user) return;
+    if (confirm("¿Eliminar esta foto de la galería?")) {
+        await StorageService.removeDestinationPhoto(
+            selectedDestination.id,
+            selectedDestination.gallery,
+            photoUrl
+        );
+    }
+  };
+
   const handleEditPost = (post: Post) => setEditingPost(post);
   const handleUpdatePost = async (id: string, caption: string, location: string) => {
     await StorageService.updatePost(id, { caption, location });
@@ -252,7 +278,13 @@ function App() {
     const dest = destinations.find(d => d.name === destinationName);
     if (dest) setSelectedDestination(dest);
   };
-  const handleAskAIFromGuide = (query: string) => alert("Abre el chat y pregúntale: " + query);
+  
+  // New ChatBot Logic
+  const handleAskAIFromGuide = (query: string) => {
+    setChatQuery(query);
+    setChatOpen(true);
+  };
+
   const handleUserClick = (userId: string) => {
     setViewingProfileId(userId);
     setActiveTab('profile');
@@ -270,6 +302,13 @@ function App() {
       await AuthService.updateUserAvatar(user.id, newAvatar);
     } catch (err) { console.error(err); }
   };
+  const handleUpdateName = async () => {
+     if(user && newName.trim()) {
+        await AuthService.updateUserName(user.id, newName);
+        setIsEditingName(false);
+     }
+  };
+
   const openStories = (idx: number, storyList: Story[]) => {
     setViewingStoryList(storyList);
     setViewingStoryIndex(idx);
@@ -280,7 +319,6 @@ function App() {
   
   const getProvincesForRegion = (region: EcuadorRegion | 'Todas') => {
     if (region === 'Todas') return [];
-    // Extract unique provinces from destinations in that region
     const destsInRegion = destinations.filter(d => d.region === region);
     const provinces = new Set(destsInRegion.map(d => d.province || ''));
     return Array.from(provinces).filter(p => p !== '');
@@ -537,10 +575,8 @@ function App() {
              </div>
           )}
 
-          {/* PROFILE TAB (Reusable Logic from previous file, condensed here for XML size) */}
+          {/* PROFILE TAB */}
           {activeTab === 'profile' && (
-             // ... Profile rendering logic is complex, assuming standard implementation ...
-             // Re-implementing the core profile view for safety
              (() => {
                 const targetId = viewingProfileId || user.id;
                 const isMe = targetId === user.id;
@@ -560,13 +596,21 @@ function App() {
                     </div>
                     <div className="px-6 pb-6 relative">
                       <div className="flex justify-between items-end -mt-12 mb-4">
-                        <div className="w-24 h-24 rounded-full border-4 border-white shadow-md bg-white relative group overflow-hidden" onClick={() => isMe && profileInputRef.current?.click()}>
+                        <div 
+                           className="w-24 h-24 rounded-full border-4 border-white shadow-md bg-white relative group overflow-hidden cursor-pointer" 
+                           onClick={() => setViewingProfileImage(targetUser!.avatar)}
+                        >
                           <img src={targetUser!.avatar} alt={targetUser!.name} className="w-full h-full object-cover" />
-                          {isMe && <input type="file" ref={profileInputRef} hidden accept="image/*" onChange={handleProfileImageChange} />}
                         </div>
                         <div className="flex gap-2 mb-1">
                            {isMe ? (
-                             <button onClick={handleLogout} className="text-xs text-stone-600 bg-stone-100 px-3 py-1.5 rounded-full font-bold flex gap-1"><LogOut size={12} /> Salir</button>
+                             <div className="flex gap-2">
+                                <button onClick={() => profileInputRef.current?.click()} className="text-xs text-cyan-700 bg-cyan-50 px-3 py-1.5 rounded-full font-bold flex gap-1 hover:bg-cyan-100 border border-cyan-100">
+                                   <Camera size={14} /> Foto
+                                </button>
+                                <input type="file" ref={profileInputRef} hidden accept="image/*" onChange={handleProfileImageChange} />
+                                <button onClick={handleLogout} className="text-xs text-stone-600 bg-stone-100 px-3 py-1.5 rounded-full font-bold flex gap-1"><LogOut size={12} /> Salir</button>
+                             </div>
                            ) : (
                              <button onClick={() => handleFollowToggle(targetUser!.id)} className={`px-4 py-1.5 rounded-full font-bold text-xs ${isFollowing ? 'bg-stone-100' : 'bg-cyan-600 text-white'}`}>
                                {isFollowing ? 'Siguiendo' : 'Seguir'}
@@ -574,7 +618,31 @@ function App() {
                            )}
                         </div>
                       </div>
-                      <h2 className="text-2xl font-bold text-stone-800">{targetUser!.name}</h2>
+                      
+                      <div className="flex items-center gap-2 mb-1">
+                        {isMe && isEditingName ? (
+                           <div className="flex gap-2 w-full max-w-xs">
+                              <input 
+                                 className="border rounded px-2 py-1 text-sm w-full" 
+                                 value={newName} 
+                                 onChange={e => setNewName(e.target.value)}
+                                 placeholder={user.name}
+                              />
+                              <button onClick={handleUpdateName} className="text-green-600 text-xs font-bold">OK</button>
+                              <button onClick={() => setIsEditingName(false)} className="text-red-500 text-xs">X</button>
+                           </div>
+                        ) : (
+                           <>
+                             <h2 className="text-2xl font-bold text-stone-800">{targetUser!.name}</h2>
+                             {isMe && (
+                                <button onClick={() => { setIsEditingName(true); setNewName(user.name); }} className="text-stone-400 hover:text-cyan-600">
+                                   <Edit3 size={16} />
+                                </button>
+                             )}
+                           </>
+                        )}
+                      </div>
+
                       <p className="text-stone-500 mb-4">{targetUser!.bio || 'Explorando Ecuador.'}</p>
                       
                       <div className="flex gap-4 mb-8 border-y border-stone-100 py-4 text-center">
@@ -583,10 +651,14 @@ function App() {
                         <div><div className="font-bold text-lg">{targetUser!.following?.length || 0}</div><div className="text-xs text-stone-400">Siguiendo</div></div>
                       </div>
                       
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-3 gap-1">
                         {userPosts.map(post => (
-                           <div key={post.id} className="rounded-xl overflow-hidden aspect-square relative cursor-pointer" onClick={() => handleViewPost(post)}>
-                              <img src={post.imageUrl} className="w-full h-full object-cover" alt="" />
+                           <div key={post.id} className="aspect-square relative cursor-pointer bg-gray-100" onClick={() => handleViewPost(post)}>
+                              {post.mediaType === 'video' ? (
+                                <video src={post.imageUrl} className="w-full h-full object-cover" />
+                              ) : (
+                                <img src={post.imageUrl} className="w-full h-full object-cover" alt="" />
+                              )}
                            </div>
                         ))}
                       </div>
@@ -626,13 +698,39 @@ function App() {
         <button onClick={() => { setActiveTab('profile'); setViewingProfileId(null); }} className={`flex flex-col items-center gap-1 ${activeTab === 'profile' ? 'text-cyan-700' : 'text-stone-400'}`}><UserCircle size={24} /></button>
       </div>
 
+      {/* Profile Image Lightbox */}
+      {viewingProfileImage && (
+         <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4" onClick={() => setViewingProfileImage(null)}>
+            <img src={viewingProfileImage} className="max-w-full max-h-full rounded-full border-4 border-white shadow-2xl" alt="Profile" />
+            <button className="absolute top-4 right-4 text-white p-2">
+               <X size={32} />
+            </button>
+         </div>
+      )}
+
       <CreatePostModal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} onSubmit={handleCreateContent} />
       <AddDestinationModal isOpen={isAddDestinationModalOpen} onClose={() => setIsAddDestinationModalOpen(false)} onSubmit={handleAddDestination} />
       <EditPostModal isOpen={!!editingPost} post={editingPost} onClose={() => setEditingPost(null)} onSave={handleUpdatePost} />
       {viewingPost && <PostViewer post={viewingPost} currentUserId={user.id} onClose={() => setViewingPost(null)} onLike={handleLike} onComment={handleComment} onShare={handleShare} onEdit={handleEditPost} onDelete={handleDeletePost} />}
-      <ChatBot />
+      
+      {/* Updated ChatBot Integration */}
+      <ChatBot externalIsOpen={chatOpen} externalQuery={chatQuery} onCloseExternal={() => setChatOpen(false)} />
+      
       {viewingStoryIndex !== null && <StoryViewer stories={viewingStoryList} initialStoryIndex={viewingStoryIndex} currentUserId={user.id} onClose={() => setViewingStoryIndex(null)} onMarkViewed={handleMarkStoryViewed} onDelete={handleDeleteStory} onLike={handleLikeStory} onShare={handleShare} />}
-      {selectedDestination && <TravelGuideModal destination={selectedDestination} onClose={() => setSelectedDestination(null)} onAskAI={handleAskAIFromGuide} onRate={handleRateDestination} onAddPhoto={handleAddPhotoToDestination} />}
+      
+      {/* Updated TravelGuideModal */}
+      {selectedDestination && (
+          <TravelGuideModal 
+              destination={selectedDestination} 
+              onClose={() => setSelectedDestination(null)} 
+              onAskAI={handleAskAIFromGuide} 
+              onRate={handleRateDestination} 
+              onAddPhoto={handleAddPhotoToDestination}
+              onChangeCover={handleChangeDestinationCover}
+              onDeletePhoto={handleDeleteDestinationPhoto}
+              isAdminUser={isAdmin(user.email)}
+          />
+      )}
     </div>
   );
 }

@@ -2,31 +2,60 @@ import React, { useState, useRef, useEffect } from 'react';
 import { MessageSquare, X, Send, Bot, Loader2 } from 'lucide-react';
 import { getTravelAdvice } from '../services/geminiService';
 
-export const ChatBot: React.FC = () => {
+interface ChatBotProps {
+  externalIsOpen?: boolean;
+  externalQuery?: string;
+  onCloseExternal?: () => void;
+}
+
+export const ChatBot: React.FC<ChatBotProps> = ({ externalIsOpen, externalQuery, onCloseExternal }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<{role: 'user' | 'model', text: string}[]>([
-    { role: 'model', text: '¡Hola! Soy tu guía de Manabí. ¿Quieres saber cómo llegar a Los Frailes o dónde comer en Puerto López?' }
+    { role: 'model', text: '¡Hola! Soy tu guía de Ecuador. Pregúntame sobre cualquier lugar turístico, comida o consejo de viaje.' }
   ]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  // Ref to track if we've handled the external query to prevent double sending
+  const handledQueryRef = useRef<string | null>(null);
 
-  const toggleChat = () => setIsOpen(!isOpen);
+  useEffect(() => {
+    if (externalIsOpen) {
+      setIsOpen(true);
+    }
+  }, [externalIsOpen]);
+
+  useEffect(() => {
+    if (externalQuery && externalQuery !== handledQueryRef.current && isOpen) {
+       handledQueryRef.current = externalQuery;
+       // Execute immediate search
+       handleSend(undefined, externalQuery);
+    }
+  }, [externalQuery, isOpen]);
+
+  const toggleChat = () => {
+    const newState = !isOpen;
+    setIsOpen(newState);
+    if (!newState && onCloseExternal) onCloseExternal();
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isOpen]);
 
-  const handleSend = async (e?: React.FormEvent) => {
+  const handleSend = async (e?: React.FormEvent, overrideText?: string) => {
     e?.preventDefault();
-    if (!inputValue.trim()) return;
+    const textToSend = overrideText || inputValue;
+    
+    if (!textToSend.trim()) return;
 
-    const userMsg = inputValue;
-    setInputValue('');
-    setMessages(prev => [...prev, { role: 'user', text: userMsg }]);
+    if (!overrideText) setInputValue(''); // Clear input if manual
+    
+    setMessages(prev => [...prev, { role: 'user', text: textToSend }]);
     setIsLoading(true);
 
-    const response = await getTravelAdvice(userMsg);
+    const response = await getTravelAdvice(textToSend);
     
     setMessages(prev => [...prev, { role: 'model', text: response }]);
     setIsLoading(false);
@@ -34,7 +63,6 @@ export const ChatBot: React.FC = () => {
 
   return (
     <>
-      {/* Floating Button */}
       <button 
         onClick={toggleChat}
         className={`fixed bottom-6 right-6 z-40 p-4 rounded-full shadow-lg transition-all duration-300 ${isOpen ? 'rotate-90 scale-0' : 'bg-cyan-600 hover:bg-cyan-700 text-white scale-100'}`}
@@ -42,17 +70,15 @@ export const ChatBot: React.FC = () => {
         <MessageSquare size={28} />
       </button>
 
-      {/* Chat Window */}
       <div className={`fixed bottom-6 right-6 z-50 w-80 md:w-96 bg-white rounded-2xl shadow-2xl flex flex-col transition-all duration-300 origin-bottom-right overflow-hidden ${isOpen ? 'scale-100 opacity-100' : 'scale-0 opacity-0 pointer-events-none'}`} style={{ height: '500px' }}>
         
-        {/* Header */}
         <div className="bg-gradient-to-r from-cyan-600 to-blue-600 p-4 text-white flex justify-between items-center">
           <div className="flex items-center space-x-2">
             <div className="bg-white/20 p-1 rounded-full">
               <Bot size={20} />
             </div>
             <div>
-              <h3 className="font-bold text-sm">Guía Virtual Manabí</h3>
+              <h3 className="font-bold text-sm">Guía Virtual Ecuador</h3>
               <span className="text-xs text-cyan-100 flex items-center">
                 <span className="w-2 h-2 bg-green-400 rounded-full mr-1"></span> En línea
               </span>
@@ -63,7 +89,6 @@ export const ChatBot: React.FC = () => {
           </button>
         </div>
 
-        {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 bg-gray-50 space-y-4">
           {messages.map((msg, idx) => (
             <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -87,7 +112,6 @@ export const ChatBot: React.FC = () => {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input */}
         <form onSubmit={handleSend} className="p-3 bg-white border-t flex items-center space-x-2">
           <input
             type="text"
