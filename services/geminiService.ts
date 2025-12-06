@@ -1,16 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 
-// Usamos import.meta.env que es el estándar de Vite, o un string vacío para evitar errores
-const apiKey = import.meta.env.VITE_API_KEY || '';
-let ai: GoogleGenAI | null = null;
-
-if (apiKey) {
-  try {
-    ai = new GoogleGenAI({ apiKey });
-  } catch (error) {
-    console.error("Error inicializando Gemini:", error);
-  }
-}
+// The API key must be obtained exclusively from the environment variable process.env.API_KEY.
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 const MANABI_SYSTEM_INSTRUCTION = `Eres un experto guía turístico de la provincia de Manabí, Ecuador. 
 Tu objetivo es promover el turismo de manera entusiasta, especialmente en el Parque Nacional Machalilla, 
@@ -18,11 +9,6 @@ Playa Los Frailes y Puerto López. Eres amable, usas emojis y das consejos prác
 Responde siempre en español.`;
 
 export const getTravelAdvice = async (query: string): Promise<string> => {
-  if (!ai || !apiKey) {
-    console.warn("API Key no encontrada");
-    return "⚠️ Modo Demo: El asistente de IA no está activo en este entorno local. Cuando configures la VITE_API_KEY en Vercel, funcionaré correctamente. 🌴";
-  }
-
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
@@ -39,8 +25,6 @@ export const getTravelAdvice = async (query: string): Promise<string> => {
 };
 
 export const generateCaptionForImage = async (location: string, details: string): Promise<string> => {
-  if (!ai || !apiKey) return "Descripción no disponible (Falta API Key)";
-
   try {
     const prompt = `Escribe un pie de foto (caption) corto, inspirador y atractivo para Instagram sobre una foto tomada en ${location}. Detalles extra: ${details}. Incluye hashtags relevantes de turismo en Ecuador.`;
     

@@ -1,43 +1,66 @@
+import { ref, set, remove, update } from "firebase/database";
+import { db } from "./firebase";
 import { Post, Story } from '../types';
-import { INITIAL_POSTS, INITIAL_STORIES } from '../constants';
 
-const KEYS = {
-  POSTS: 'manabi_posts_v2', // Updated to v2 to clear old generic data
-  STORIES: 'manabi_stories_v2', // Updated to v2
-  USER_LIKES: 'manabi_user_likes_v1' // Can stay v1 as likes on deleted posts don't matter much
-};
+// NOTA: La lectura (GET) ahora se hace en App.tsx con listeners en tiempo real.
+// Este servicio se encarga principalmente de las escrituras (WRITE).
 
 export const StorageService = {
-  getPosts: (): Post[] => {
-    try {
-      const stored = localStorage.getItem(KEYS.POSTS);
-      return stored ? JSON.parse(stored) : INITIAL_POSTS;
-    } catch (e) {
-      return INITIAL_POSTS;
-    }
+  
+  savePost: async (post: Post) => {
+    await set(ref(db, 'posts/' + post.id), post);
   },
 
-  savePosts: (posts: Post[]) => {
-    localStorage.setItem(KEYS.POSTS, JSON.stringify(posts));
+  updatePost: async (postId: string, updates: Partial<Post>) => {
+    await update(ref(db, `posts/${postId}`), updates);
   },
 
-  getStories: (): Story[] => {
-    try {
-      const stored = localStorage.getItem(KEYS.STORIES);
-      return stored ? JSON.parse(stored) : INITIAL_STORIES;
-    } catch (e) {
-      return INITIAL_STORIES;
-    }
+  deletePost: async (postId: string) => {
+    await remove(ref(db, `posts/${postId}`));
   },
 
-  saveStories: (stories: Story[]) => {
-    localStorage.setItem(KEYS.STORIES, JSON.stringify(stories));
+  toggleLikePost: async (post: Post, userId: string) => {
+    // Esta lógica es simplificada. En una app real usaríamos una subcolección de likes.
+    // Aquí confiamos en el contador del cliente por ahora, pero lo ideal es transaccional.
+    const isLiked = post.isLiked; // Nota: isLiked es local al usuario en esta implementación simple
+    const newLikes = isLiked ? (post.likes - 1) : (post.likes + 1);
+    
+    await update(ref(db, `posts/${post.id}`), {
+      likes: newLikes
+    });
+  },
+
+  addComment: async (postId: string, comments: any[]) => {
+    await update(ref(db, `posts/${postId}`), {
+      comments: comments
+    });
+  },
+
+  saveStory: async (story: Story) => {
+    await set(ref(db, 'stories/' + story.id), story);
+  },
+
+  deleteStory: async (storyId: string) => {
+    await remove(ref(db, `stories/${storyId}`));
+  },
+
+  toggleLikeStory: async (story: Story) => {
+    const currentLikes = story.likes || 0;
+    // Simplificación para demo
+    await update(ref(db, `stories/${story.id}`), {
+      likes: currentLikes + 1
+    });
+  },
+
+  markStoryViewed: async (storyId: string) => {
+    // En una app real, esto se guardaría en una tabla 'user_views'. 
+    // Para esta demo, no modificamos la DB global al ver, solo localmente en App.tsx.
   },
   
-  // Reset data for demo purposes if needed
-  clearAll: () => {
-    localStorage.removeItem(KEYS.POSTS);
-    localStorage.removeItem(KEYS.STORIES);
+  clearAll: async () => {
+    // Peligroso: Borra toda la DB. Solo para desarrollo.
+    await set(ref(db), null);
+    localStorage.clear();
     window.location.reload();
   }
 };

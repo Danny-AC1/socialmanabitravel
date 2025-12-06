@@ -13,7 +13,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Form States
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -26,7 +25,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
     const file = e.target.files?.[0];
     if (file) {
       try {
-        const resized = await resizeImage(file, 400); // Resize for avatar
+        const resized = await resizeImage(file, 400); 
         setAvatar(resized);
       } catch (err) {
         console.error("Error resizing image", err);
@@ -39,18 +38,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
     setError('');
     setLoading(true);
 
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
     try {
       if (isLogin) {
-        const user = AuthService.login(email, password);
+        const user = await AuthService.login(email, password);
         onLoginSuccess(user);
       } else {
         if (!name || !email || !password) {
           throw new Error('Por favor completa todos los campos requeridos.');
         }
-        const user = AuthService.register(name, email, password, bio, avatar || undefined);
+        const user = await AuthService.register(name, email, password, bio, avatar || undefined);
         onLoginSuccess(user);
       }
     } catch (err: any) {
@@ -63,7 +59,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
     <div className="min-h-screen bg-stone-50 flex items-center justify-center p-4">
       <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row min-h-[600px]">
         
-        {/* Left Side - Visual */}
         <div className="md:w-1/2 bg-cyan-900 relative p-8 md:p-12 text-white flex flex-col justify-between">
           <div className="absolute inset-0 z-0">
             <img 
@@ -94,7 +89,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
           </div>
         </div>
 
-        {/* Right Side - Form */}
         <div className="md:w-1/2 p-8 md:p-12 flex flex-col justify-center overflow-y-auto max-h-screen">
           <h2 className="text-2xl font-bold text-stone-800 mb-2">
             {isLogin ? 'Iniciar Sesión' : 'Crear Cuenta'}

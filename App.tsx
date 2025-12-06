@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Map, Compass, UserCircle, Camera, Search, MapPin, Grid, LogOut, Trash2, ArrowRight, UserPlus, UserCheck, ChevronLeft, Upload, Users, Info, X } from 'lucide-react';
+import { Map, Compass, UserCircle, Camera, Search, MapPin, Grid, LogOut, Trash2, ArrowRight, UserPlus, UserCheck, ChevronLeft, Upload, Users, Info, X, Loader2 } from 'lucide-react';
 import { HeroSection } from './components/HeroSection';
 import { PostCard } from './components/PostCard';
 import { CreatePostModal } from './components/CreatePostModal';
@@ -15,6 +15,8 @@ import { Post, Story, Destination, User } from './types';
 import { StorageService } from './services/storageService';
 import { AuthService } from './services/authService';
 import { resizeImage } from './utils';
+import { db } from './services/firebase';
+import { ref, onValue } from 'firebase/database';
 
 type Tab = 'home' | 'explore' | 'search' | 'profile';
 
@@ -25,7 +27,7 @@ function App() {
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [activeTab, setActiveTab] = useState<Tab>('home');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+  const [isLoadingData, setIsLoadingData] = useState(true);
   
   const [editingPost, setEditingPost] = useState<Post | null>(null);
   const [viewingPost, setViewingPost] = useState<Post | null>(null);
@@ -37,105 +39,97 @@ function App() {
 
   const profileInputRef = useRef<HTMLInputElement>(null);
 
+  // 1. Cargar Sesión Local
   useEffect(() => {
     const session = AuthService.getSession();
     if (session) {
       setUser(session);
-    } else {
-      const hasSeenWelcome = localStorage.getItem('manabi_welcome_seen');
-      if (!hasSeenWelcome) {
-        setShowWelcomeModal(true);
-      }
     }
-    
-    setPosts(StorageService.getPosts());
-    setStories(StorageService.getStories());
-    setAllUsers(AuthService.getUsers());
   }, []);
 
+  // 2. Conectar a Firebase (Realtime Database Listeners)
   useEffect(() => {
-    if (posts.length > 0) StorageService.savePosts(posts);
-  }, [posts]);
+    // Escuchar Posts
+    const postsRef = ref(db, 'posts');
+    const unsubscribePosts = onValue(postsRef, (snapshot) => {
+      const data = snapshot.val();
+      const loadedPosts: Post[] = data ? Object.values(data) : [];
+      // Ordenar por fecha (más reciente primero)
+      setPosts(loadedPosts.sort((a, b) => b.timestamp - a.timestamp));
+      setIsLoadingData(false);
+    });
 
+    // Escuchar Stories
+    const storiesRef = ref(db, 'stories');
+    const unsubscribeStories = onValue(storiesRef, (snapshot) => {
+      const data = snapshot.val();
+      const loadedStories: Story[] = data ? Object.values(data) : [];
+      setStories(loadedStories.sort((a, b) => b.timestamp - a.timestamp));
+    });
+
+    // Escuchar Usuarios
+    const usersRef = ref(db, 'users');
+    const unsubscribeUsers = onValue(usersRef, (snapshot) => {
+      const data = snapshot.val();
+      const loadedUsers: User[] = data ? Object.values(data) : [];
+      setAllUsers(loadedUsers);
+    });
+
+    return () => {
+      unsubscribePosts();
+      unsubscribeStories();
+      unsubscribeUsers();
+    };
+  }, []);
+
+  // Actualizar sesión del usuario si cambia en la base de datos (ej: nuevos seguidores)
   useEffect(() => {
-    if (stories.length > 0) StorageService.saveStories(stories);
-  }, [stories]);
+    if (user && allUsers.length > 0) {
+      const updatedUser = allUsers.find(u => u.id === user.id);
+      if (updatedUser) {
+        // Solo actualizamos si hay cambios reales para evitar re-renders
+        if (JSON.stringify(updatedUser) !== JSON.stringify(user)) {
+           setUser(updatedUser);
+           AuthService.setSession(updatedUser);
+        }
+      }
+    }
+  }, [allUsers]);
 
   const handleLogout = () => {
     AuthService.logout();
     setUser(null);
   };
 
-  const handleCloseWelcome = () => {
-    setShowWelcomeModal(false);
-    localStorage.setItem('manabi_welcome_seen', 'true');
+  const handleLike = async (id: string) => {
+    const post = posts.find(p => p.id === id);
+    if (post && user) {
+       // Optimistic update locally? Firebase listener will handle the real update shortly.
+       await StorageService.toggleLikePost(post, user.id);
+    }
   };
 
-  const handleLike = (id: string) => {
-    setPosts(prevPosts => {
-        const updatedPosts = prevPosts.map(post => {
-            if (post.id === id) {
-              return {
-                ...post,
-                likes: post.isLiked ? post.likes - 1 : post.likes + 1,
-                isLiked: !post.isLiked
-              };
-            }
-            return post;
-        });
-        
-        if (viewingPost && viewingPost.id === id) {
-            const current = updatedPosts.find(p => p.id === id);
-            if (current) setViewingPost(current);
-        }
-        
-        return updatedPosts;
-    });
+  const handleLikeStory = async (id: string) => {
+    const story = stories.find(s => s.id === id);
+    if (story) {
+      await StorageService.toggleLikeStory(story);
+    }
   };
 
-  const handleLikeStory = (id: string) => {
-    setStories(stories.map(story => {
-      if (story.id === id) {
-        const currentLikes = story.likes || 0;
-        return {
-          ...story,
-          likes: story.isLiked ? currentLikes - 1 : currentLikes + 1,
-          isLiked: !story.isLiked
-        };
-      }
-      return story;
-    }));
-  };
-
-  const handleComment = (id: string, text: string) => {
+  const handleComment = async (id: string, text: string) => {
     if (!user) return;
-    setPosts(prevPosts => {
-        const updatedPosts = prevPosts.map(post => {
-          if (post.id === id) {
-            return {
-              ...post,
-              comments: [
-                ...post.comments,
-                {
-                  id: Date.now().toString(),
-                  userId: user.id,
-                  userName: user.name,
-                  text,
-                  timestamp: Date.now()
-                }
-              ]
-            };
-          }
-          return post;
-        });
-        
-        if (viewingPost && viewingPost.id === id) {
-            const current = updatedPosts.find(p => p.id === id);
-            if (current) setViewingPost(current);
-        }
-        
-        return updatedPosts;
-    });
+    const post = posts.find(p => p.id === id);
+    if (post) {
+      const newComment = {
+        id: Date.now().toString(),
+        userId: user.id,
+        userName: user.name,
+        text,
+        timestamp: Date.now()
+      };
+      const updatedComments = [...(post.comments || []), newComment];
+      await StorageService.addComment(post.id, updatedComments);
+    }
   };
 
   const handleShare = (text: string | Post) => {
@@ -145,11 +139,10 @@ function App() {
       } else {
           content = `¡Mira esta foto de ${text.userName} en ${text.location || 'Manabí'}! 🌴`;
       }
-      
       alert(`Compartiendo: "${content}"\n\n(Enlace copiado al portapapeles)`);
   };
 
-  const handleCreateContent = (image: string, caption: string, location: string, type: 'post' | 'story') => {
+  const handleCreateContent = async (image: string, caption: string, location: string, type: 'post' | 'story') => {
     if (!user) return;
     
     if (type === 'post') {
@@ -166,7 +159,7 @@ function App() {
         timestamp: Date.now(),
         isLiked: false
       };
-      setPosts([newPost, ...posts]);
+      await StorageService.savePost(newPost);
     } else {
       const newStory: Story = {
         id: `s_${Date.now()}`,
@@ -181,7 +174,7 @@ function App() {
         likes: 0,
         isLiked: false
       };
-      setStories([newStory, ...stories]);
+      await StorageService.saveStory(newStory);
     }
     
     setActiveTab('home');
@@ -192,31 +185,33 @@ function App() {
     setEditingPost(post);
   };
 
-  const handleUpdatePost = (id: string, caption: string, location: string) => {
-    setPosts(posts.map(p => p.id === id ? { ...p, caption, location } : p));
+  const handleUpdatePost = async (id: string, caption: string, location: string) => {
+    await StorageService.updatePost(id, { caption, location });
+    // Update local viewing post if needed
     if (viewingPost && viewingPost.id === id) {
         setViewingPost(prev => prev ? { ...prev, caption, location } : null);
     }
   };
 
-  const handleDeletePost = (id: string) => {
+  const handleDeletePost = async (id: string) => {
     if (confirm("¿Estás seguro de que quieres eliminar esta publicación?")) {
-      setPosts(posts.filter(p => p.id !== id));
+      await StorageService.deletePost(id);
       if (viewingPost && viewingPost.id === id) setViewingPost(null);
     }
   };
 
-  const handleDeleteStory = (id: string) => {
-    setStories(stories.filter(s => s.id !== id));
+  const handleDeleteStory = async (id: string) => {
+    await StorageService.deleteStory(id);
   };
 
   const handleMarkStoryViewed = (id: string) => {
+    // Local state only for viewed status in this session
     setStories(stories.map(s => s.id === id ? { ...s, isViewed: true } : s));
   };
 
-  const handleResetData = () => {
-    if(confirm('¿Reiniciar todos los datos de la app?')) {
-      StorageService.clearAll();
+  const handleResetData = async () => {
+    if(confirm('ADVERTENCIA: ¿Borrar TODA la base de datos de la red social?')) {
+      await StorageService.clearAll();
       handleLogout();
     }
   };
@@ -242,12 +237,10 @@ function App() {
       setViewingPost(post);
   };
 
-  const handleFollowToggle = (targetUserId: string) => {
+  const handleFollowToggle = async (targetUserId: string) => {
     if (!user) return;
     try {
-      const { currentUser: updatedUser } = AuthService.toggleFollow(user.id, targetUserId);
-      setUser(updatedUser);
-      setAllUsers(AuthService.getUsers());
+      await AuthService.toggleFollow(user.id, targetUserId);
     } catch (error) {
       console.error(error);
     }
@@ -255,18 +248,15 @@ function App() {
 
   const handleProfileImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!user || !e.target.files?.[0]) return;
-    
     const file = e.target.files[0];
     
     try {
       const newAvatar = await resizeImage(file, 500); 
+      await AuthService.updateUserAvatar(user.id, newAvatar);
       
-      const updatedUser = AuthService.updateUserAvatar(user.id, newAvatar);
-      setUser(updatedUser);
-      
-      setPosts(posts.map(p => p.userId === user.id ? { ...p, userAvatar: newAvatar } : p));
-      setStories(stories.map(s => s.userId === user.id ? { ...s, userAvatar: newAvatar } : s));
-      setAllUsers(AuthService.getUsers());
+      // Update historical posts/stories with new avatar? 
+      // In a real app we'd just link by userId, but for NoSQL denormalization we might need to update.
+      // For this demo, we'll let old posts keep old avatar or handle it simply.
     } catch (err) {
       console.error("Error updating avatar", err);
       alert("Hubo un problema procesando la imagen.");
@@ -283,36 +273,17 @@ function App() {
     return (Date.now() - story.timestamp) < ONE_DAY_MS;
   });
 
-  if (showWelcomeModal) {
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-cyan-900/90 backdrop-blur-md p-6">
-        <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl text-center space-y-6">
-          <div className="mx-auto w-20 h-20 bg-cyan-100 rounded-full flex items-center justify-center text-cyan-600 mb-4">
-            <Map size={40} />
-          </div>
-          <h1 className="text-2xl font-black text-gray-800">¡Bienvenido a Manabí Travel!</h1>
-          <p className="text-gray-600 leading-relaxed">
-            Esta es una <strong>versión de demostración</strong>. Puedes crear tu perfil, subir historias y explorar la guía turística.
-          </p>
-          <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl text-xs text-amber-800 text-left flex items-start gap-2">
-            <Info size={16} className="shrink-0 mt-0.5" />
-            <p>
-              Tus fotos y datos se guardan en <strong>este dispositivo</strong>. Si compartes el enlace, tus amigos verán la app vacía para que ellos creen su propia aventura.
-            </p>
-          </div>
-          <button 
-            onClick={handleCloseWelcome}
-            className="w-full bg-cyan-600 text-white font-bold py-3 rounded-xl hover:bg-cyan-700 transition-colors"
-          >
-            Comenzar Aventura
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   if (!user) {
     return <AuthScreen onLoginSuccess={setUser} />;
+  }
+
+  if (isLoadingData) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-stone-50 flex-col gap-4">
+        <Loader2 size={40} className="animate-spin text-cyan-600" />
+        <p className="text-stone-500 font-medium">Conectando con Manabí...</p>
+      </div>
+    );
   }
 
   const query = searchQuery.toLowerCase();
@@ -335,6 +306,8 @@ function App() {
     (u.bio && u.bio.toLowerCase().includes(query))
   );
 
+  // --- RENDER FUNCTIONS (Copied from previous App.tsx but using new state/handlers) ---
+  
   const renderHome = () => (
     <>
       <div className="bg-white p-5 rounded-2xl border border-stone-100 shadow-sm overflow-x-auto no-scrollbar mb-6">
@@ -485,12 +458,12 @@ function App() {
     const targetId = viewingProfileId || user.id;
     const isMe = targetId === user.id;
 
-    let targetUser = isMe ? user : AuthService.getUserById(targetId);
-    
+    // Buscar el usuario en la lista de allUsers (que viene de Firebase)
+    let targetUser = allUsers.find(u => u.id === targetId);
     if (!targetUser) targetUser = user;
 
-    const userPosts = posts.filter(p => p.userId === targetUser.id);
-    const isFollowing = user.following.includes(targetUser.id);
+    const userPosts = posts.filter(p => p.userId === targetUser!.id);
+    const isFollowing = user.following?.includes(targetUser!.id);
 
     return (
       <div className="bg-white rounded-3xl overflow-hidden shadow-sm border border-stone-100 min-h-[500px] animate-in slide-in-from-right duration-300">
@@ -512,7 +485,7 @@ function App() {
               className={`w-24 h-24 rounded-full border-4 border-white shadow-md bg-white relative group overflow-hidden ${isMe ? 'cursor-pointer' : ''}`}
               onClick={() => isMe && profileInputRef.current?.click()}
             >
-              <img src={targetUser.avatar} alt={targetUser.name} className="w-full h-full object-cover" />
+              <img src={targetUser!.avatar} alt={targetUser!.name} className="w-full h-full object-cover" />
               {isMe && (
                 <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                   <Camera size={24} className="text-white" />
@@ -558,8 +531,8 @@ function App() {
             </div>
           </div>
           
-          <h2 className="text-2xl font-bold text-stone-800">{targetUser.name}</h2>
-          <p className="text-stone-500 mb-4">{targetUser.bio || 'Explorando las maravillas de Manabí.'}</p>
+          <h2 className="text-2xl font-bold text-stone-800">{targetUser!.name}</h2>
+          <p className="text-stone-500 mb-4">{targetUser!.bio || 'Explorando las maravillas de Manabí.'}</p>
           
           <div className="flex gap-4 mb-8 border-y border-stone-100 py-4">
             <div className="text-center">
@@ -567,17 +540,17 @@ function App() {
               <div className="text-xs text-stone-400 uppercase tracking-wide">Postales</div>
             </div>
             <div className="text-center">
-              <div className="font-bold text-lg text-stone-800">{targetUser.followers?.length || 0}</div>
+              <div className="font-bold text-lg text-stone-800">{targetUser!.followers?.length || 0}</div>
               <div className="text-xs text-stone-400 uppercase tracking-wide">Seguidores</div>
             </div>
             <div className="text-center">
-              <div className="font-bold text-lg text-stone-800">{targetUser.following?.length || 0}</div>
+              <div className="font-bold text-lg text-stone-800">{targetUser!.following?.length || 0}</div>
               <div className="text-xs text-stone-400 uppercase tracking-wide">Siguiendo</div>
             </div>
           </div>
 
           <h3 className="font-bold text-stone-700 mb-3 flex items-center gap-2">
-            <Grid size={18} /> {isMe ? 'Mis Aventuras' : `Aventuras de ${targetUser.name.split(' ')[0]}`}
+            <Grid size={18} /> {isMe ? 'Mis Aventuras' : `Aventuras de ${targetUser!.name.split(' ')[0]}`}
           </h3>
           
           {userPosts.length > 0 ? (

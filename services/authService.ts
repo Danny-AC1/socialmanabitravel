@@ -1,141 +1,145 @@
+import { ref, get, set, child, update } from "firebase/database";
+import { db } from "./firebase";
 import { User } from '../types';
 
-const KEYS = {
-  USERS: 'manabi_users_v1',
-  CURRENT_SESSION: 'manabi_session_v1'
-};
-
 export const AuthService = {
-  // Get all registered users
-  getUsers: (): User[] => {
+  // Obtener todos los usuarios (Async)
+  getUsers: async (): Promise<User[]> => {
     try {
-      const stored = localStorage.getItem(KEYS.USERS);
-      return stored ? JSON.parse(stored) : [];
-    } catch {
+      const dbRef = ref(db);
+      const snapshot = await get(child(dbRef, `users`));
+      if (snapshot.exists()) {
+        return Object.values(snapshot.val());
+      } else {
+        return [];
+      }
+    } catch (error) {
+      console.error(error);
       return [];
     }
   },
 
-  getUserById: (id: string): User | undefined => {
-    const users = AuthService.getUsers();
-    return users.find(u => u.id === id);
+  // Obtener un usuario por ID (Async)
+  getUserById: async (id: string): Promise<User | undefined> => {
+    try {
+      const dbRef = ref(db);
+      const snapshot = await get(child(dbRef, `users/${id}`));
+      if (snapshot.exists()) {
+        return snapshot.val();
+      }
+      return undefined;
+    } catch {
+      return undefined;
+    }
   },
 
-  // Save users list
-  saveUsers: (users: User[]) => {
-    localStorage.setItem(KEYS.USERS, JSON.stringify(users));
-  },
-
-  // Register a new user
-  register: (name: string, email: string, password: string, bio: string, customAvatar?: string): User => {
-    const users = AuthService.getUsers();
+  // Registro en la Nube
+  register: async (name: string, email: string, password: string, bio: string, customAvatar?: string): Promise<User> => {
+    const users = await AuthService.getUsers();
     
     if (users.find(u => u.email === email)) {
       throw new Error('El correo electrónico ya está registrado.');
     }
 
+    const userId = `u_${Date.now()}`;
     const newUser: User = {
-      id: `u_${Date.now()}`,
+      id: userId,
       name,
       email,
-      password, // In a real app, never store plain text passwords!
+      password, 
       bio: bio || 'Explorando Manabí 🌴',
-      // Use custom avatar if provided, else generate one
       avatar: customAvatar || `https://api.dicebear.com/7.x/adventurer/svg?seed=${name.replace(/\s/g, '')}&backgroundColor=b6e3f4`,
       followers: [],
       following: []
     };
 
-    users.push(newUser);
-    AuthService.saveUsers(users);
+    // Guardar en Firebase
+    await set(ref(db, 'users/' + userId), newUser);
+    
     AuthService.setSession(newUser);
     return newUser;
   },
 
-  // Login existing user
-  login: (email: string, pass: string): User => {
-    const users = AuthService.getUsers();
+  // Login validando con la Nube
+  login: async (email: string, pass: string): Promise<User> => {
+    const users = await AuthService.getUsers();
     const user = users.find(u => u.email === email && u.password === pass);
     
     if (!user) {
       throw new Error('Credenciales incorrectas.');
     }
 
-    // Refresh user data from DB to session to ensure latest followers/following
     AuthService.setSession(user);
     return user;
   },
 
-  // Update User Avatar
-  updateUserAvatar: (userId: string, newAvatar: string): User => {
-    const users = AuthService.getUsers();
-    const userIndex = users.findIndex(u => u.id === userId);
+  updateUserAvatar: async (userId: string, newAvatar: string): Promise<User> => {
+    const updates: any = {};
+    updates[`/users/${userId}/avatar`] = newAvatar;
     
-    if (userIndex === -1) throw new Error("Usuario no encontrado");
+    await update(ref(db), updates);
 
-    // Update in list
-    users[userIndex].avatar = newAvatar;
-    AuthService.saveUsers(users);
-
-    // Update session if it's the current user
+    // Actualizar sesión local si es necesario
     const session = AuthService.getSession();
     if (session && session.id === userId) {
       session.avatar = newAvatar;
       AuthService.setSession(session);
+      return session;
     }
-
-    return users[userIndex];
+    
+    // Si no hay sesión, devolver el usuario actualizado parcialmente (solo para cumplir el tipo)
+    return { ...session!, avatar: newAvatar };
   },
 
-  // Toggle Follow
-  toggleFollow: (currentUserId: string, targetUserId: string): { currentUser: User, targetUser: User } => {
-    const users = AuthService.getUsers();
-    const currentUserIdx = users.findIndex(u => u.id === currentUserId);
-    const targetUserIdx = users.findIndex(u => u.id === targetUserId);
+  toggleFollow: async (currentUserId: string, targetUserId: string) => {
+    const currentUser = await AuthService.getUserById(currentUserId);
+    const targetUser = await AuthService.getUserById(targetUserId);
 
-    if (currentUserIdx === -1 || targetUserIdx === -1) throw new Error("Usuario no encontrado");
+    if (!currentUser || !targetUser) throw new Error("Usuario no encontrado");
 
-    const currentUser = users[currentUserIdx];
-    const targetUser = users[targetUserIdx];
+    // Inicializar arrays si no existen (Firebase no guarda arrays vacíos)
+    if (!currentUser.following) currentUser.following = [];
+    if (!targetUser.followers) targetUser.followers = [];
 
     const isFollowing = currentUser.following.includes(targetUserId);
 
+    let newFollowing = [...currentUser.following];
+    let newFollowers = [...targetUser.followers];
+
     if (isFollowing) {
-      // Unfollow
-      currentUser.following = currentUser.following.filter(id => id !== targetUserId);
-      targetUser.followers = targetUser.followers.filter(id => id !== currentUserId);
+      newFollowing = newFollowing.filter(id => id !== targetUserId);
+      newFollowers = newFollowers.filter(id => id !== currentUserId);
     } else {
-      // Follow
-      currentUser.following.push(targetUserId);
-      targetUser.followers.push(currentUserId);
+      newFollowing.push(targetUserId);
+      newFollowers.push(currentUserId);
     }
 
-    users[currentUserIdx] = currentUser;
-    users[targetUserIdx] = targetUser;
-    
-    AuthService.saveUsers(users);
-    AuthService.setSession(currentUser); // Update session
+    // Actualizar en Firebase
+    const updates: any = {};
+    updates[`/users/${currentUserId}/following`] = newFollowing;
+    updates[`/users/${targetUserId}/followers`] = newFollowers;
 
-    return { currentUser, targetUser };
+    await update(ref(db), updates);
+
+    // Actualizar sesión local
+    currentUser.following = newFollowing;
+    AuthService.setSession(currentUser);
   },
 
-  // Set current active session
   setSession: (user: User) => {
-    localStorage.setItem(KEYS.CURRENT_SESSION, JSON.stringify(user));
+    localStorage.setItem('manabi_session_v1', JSON.stringify(user));
   },
 
-  // Get current session
   getSession: (): User | null => {
     try {
-      const stored = localStorage.getItem(KEYS.CURRENT_SESSION);
+      const stored = localStorage.getItem('manabi_session_v1');
       return stored ? JSON.parse(stored) : null;
     } catch {
       return null;
     }
   },
 
-  // Logout
   logout: () => {
-    localStorage.removeItem(KEYS.CURRENT_SESSION);
+    localStorage.removeItem('manabi_session_v1');
   }
 };
