@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { X, MapPin, Star, Info, Camera, Compass, Wallet, MessageSquare, Plus, Upload, Trash2, Edit2, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react';
 import { Destination } from '../types';
@@ -13,7 +12,7 @@ interface TravelGuideModalProps {
   isAdminUser: boolean; 
   onChangeCover?: (image: string) => void;
   onDeletePhoto?: (photoUrl: string) => void;
-  onDeleteDestination?: (id: string) => void; // Nueva prop
+  onDeleteDestination?: (id: string) => void;
 }
 
 export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({ 
@@ -142,24 +141,23 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
             <X size={24} />
           </button>
 
+          {/* ADMIN CONTROLS: Solo Admins ven esto */}
           {isAdminUser && (
-             <>
-               <div className="absolute top-4 left-4 z-10 flex gap-2">
-                  <button 
-                    onClick={() => coverInputRef.current?.click()}
-                    className="bg-white/20 hover:bg-white text-white hover:text-cyan-900 px-3 py-1.5 rounded-full backdrop-blur-md transition-all text-xs font-bold flex items-center gap-1"
-                  >
-                     <Edit2 size={12} /> Portada
-                  </button>
-                  <button 
-                    onClick={handleDeleteDestination}
-                    className="bg-red-600/80 hover:bg-red-600 text-white px-3 py-1.5 rounded-full backdrop-blur-md transition-all text-xs font-bold flex items-center gap-1 border border-red-400"
-                  >
-                     <Trash2 size={12} /> Eliminar Lugar
-                  </button>
-                  <input type="file" ref={coverInputRef} hidden accept="image/*" onChange={(e) => handlePhotoUpload(e, true)} />
-               </div>
-             </>
+             <div className="absolute top-4 left-4 z-10 flex gap-2">
+                <button 
+                  onClick={() => coverInputRef.current?.click()}
+                  className="bg-white/20 hover:bg-white text-white hover:text-cyan-900 px-3 py-1.5 rounded-full backdrop-blur-md transition-all text-xs font-bold flex items-center gap-1"
+                >
+                   <Edit2 size={12} /> Portada
+                </button>
+                <button 
+                  onClick={handleDeleteDestination}
+                  className="bg-red-600/80 hover:bg-red-600 text-white px-3 py-1.5 rounded-full backdrop-blur-md transition-all text-xs font-bold flex items-center gap-1 border border-red-400"
+                >
+                   <Trash2 size={12} /> Eliminar Lugar
+                </button>
+                <input type="file" ref={coverInputRef} hidden accept="image/*" onChange={(e) => handlePhotoUpload(e, true)} />
+             </div>
           )}
 
           <div className="absolute bottom-0 left-0 p-6 md:p-8 text-white w-full">
@@ -227,15 +225,14 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
                     Galería de la Comunidad
                     </h3>
                     
-                    {isAdminUser && (
-                        <button 
-                            onClick={() => fileInputRef.current?.click()}
-                            disabled={isUploading}
-                            className="text-xs bg-cyan-100 hover:bg-cyan-200 text-cyan-800 px-3 py-1.5 rounded-full font-bold flex items-center gap-1 transition-colors"
-                        >
-                            {isUploading ? "Subiendo..." : <><Plus size={14}/> Gestionar Fotos</>}
-                        </button>
-                    )}
+                    {/* BOTÓN "AGREGAR FOTO" (Disponible para TODOS) */}
+                    <button 
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isUploading}
+                        className="text-xs bg-cyan-100 hover:bg-cyan-200 text-cyan-800 px-3 py-1.5 rounded-full font-bold flex items-center gap-1 transition-colors"
+                    >
+                        {isUploading ? "Subiendo..." : <><Plus size={14}/> Agregar Foto</>}
+                    </button>
                     <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={(e) => handlePhotoUpload(e)} />
                 </div>
                 
@@ -247,6 +244,8 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
                         className={`rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-pointer relative group/img ${idx === 0 ? 'col-span-2 h-48 md:h-64' : 'h-32 md:h-40'}`}
                     >
                       <img src={img} alt={`Gallery ${idx}`} className="w-full h-full object-cover hover:scale-105 transition-transform duration-700" />
+                      
+                      {/* BOTÓN ELIMINAR (Solo Admins) */}
                       {isAdminUser && (
                          <button 
                            onClick={(e) => { e.stopPropagation(); onDeletePhoto && onDeletePhoto(img); }}
@@ -259,7 +258,7 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
                   ))}
                   {(!destination.gallery || destination.gallery.length === 0) && (
                      <div className="col-span-2 py-8 text-center text-stone-400 bg-stone-100 rounded-xl border border-dashed border-stone-200">
-                        No hay fotos en la galería aún.
+                        Sé el primero en agregar una foto.
                      </div>
                   )}
                 </div>
@@ -319,6 +318,7 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
         </div>
       </div>
 
+      {/* LIGHTBOX FOR GALLERY */}
       {viewingImage && (
         <div 
           className="fixed inset-0 z-[60] bg-black/95 flex items-center justify-center animate-in fade-in duration-200 select-none"

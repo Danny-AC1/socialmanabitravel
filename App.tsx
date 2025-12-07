@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Map as MapIcon, Compass, UserCircle, Camera, Search, Grid, LogOut, ArrowRight, UserPlus, UserCheck, ChevronLeft, PlusCircle, Globe, Filter, Edit3, X, MessageSquarePlus, Mail, MapPin, Plus, MessageCircle, Users, Bell, LayoutGrid, Award, Home } from 'lucide-react';
+import { Map as MapIcon, Compass, UserCircle, Camera, Search, Grid, LogOut, ArrowRight, UserPlus, UserCheck, ChevronLeft, PlusCircle, Globe, Filter, Edit3, X, MessageSquarePlus, Mail, MapPin, Plus, MessageCircle, Users, Bell, LayoutGrid, Award } from 'lucide-react';
 import { HeroSection } from './components/HeroSection';
 import { PostCard } from './components/PostCard';
 import { CreatePostModal } from './components/CreatePostModal';
@@ -307,9 +307,9 @@ function App() {
 
   const normalizeText = (text: string | undefined | null) => { return (text || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""); };
   const normalizedQuery = normalizeText(searchQuery).trim();
-  const filteredPosts = (posts || []).filter(post => normalizeText(post.location).includes(normalizedQuery) || normalizeText(post.caption).includes(normalizedQuery) || normalizeText(post.userName).includes(normalizedQuery));
-  const searchDestinations = (destinations || []).filter(dest => normalizeText(dest.name).includes(normalizedQuery) || normalizeText(dest.location).includes(normalizedQuery) || normalizeText(dest.category).includes(normalizedQuery));
-  const filteredUsers = (allUsers || []).filter(u => normalizeText(u.name).includes(normalizedQuery) || normalizeText(u.bio).includes(normalizedQuery));
+  const filteredPosts = posts.filter(post => normalizeText(post.location).includes(normalizedQuery) || normalizeText(post.caption).includes(normalizedQuery) || normalizeText(post.userName).includes(normalizedQuery));
+  const searchDestinations = destinations.filter(dest => normalizeText(dest.name).includes(normalizedQuery) || normalizeText(dest.location).includes(normalizedQuery) || normalizeText(dest.category).includes(normalizedQuery));
+  const filteredUsers = allUsers.filter(u => normalizeText(u.name).includes(normalizedQuery) || normalizeText(u.bio).includes(normalizedQuery));
   
   const isAdminUser = user ? isAdmin(user.email) : false;
 
@@ -333,11 +333,11 @@ function App() {
   const availableProvinces = getProvincesForRegion(selectedRegion);
 
   return (
-    <div className="min-h-screen bg-stone-50 pb-20 md:pb-24 font-sans">
+    <div className="min-h-screen bg-stone-50 pb-20 md:pb-10 font-sans">
       
       <Helmet>
         <title>{getPageTitle()}</title>
-        <meta name="description" content="Descubre Ecuador con nuestra guía turística inteligente." />
+        <meta name="description" content="Descubre Ecuador con nuestra guía turística inteligente y red social de viajeros." />
       </Helmet>
 
       {/* TOP NAVBAR (Mobile: Logo + Actions / Desktop: Full Nav) */}
@@ -376,10 +376,13 @@ function App() {
              <button onClick={() => { navigateToTab('profile'); }} className={`rounded-full overflow-hidden ring-2 ring-transparent hover:ring-cyan-400 transition-all ${activeTab === 'profile' && !viewingProfileId ? 'ring-cyan-600' : ''}`}> <img src={user.avatar} alt="Profile" className="w-9 h-9 object-cover" /> </button>
           </div>
 
-          {/* Mobile Right Icons (Chat & Bell) */}
+          {/* Mobile Right Icons (Chat, Bell, Admin) */}
           <div className="flex md:hidden items-center gap-4 text-stone-600">
              {isAdminUser && (
-                 <button onClick={() => openModal(setIsSuggestionsModalOpen)} className="text-cyan-600"><Mail size={22} /></button>
+                 <>
+                    <button onClick={() => openModal(setIsAdminUsersModalOpen)} className="text-cyan-600"><Users size={22} /></button>
+                    <button onClick={() => openModal(setIsSuggestionsModalOpen)} className="text-cyan-600"><Mail size={22} /></button>
+                 </>
              )}
              <button onClick={() => handleOpenChat()} className="relative">
                 <MessageCircle size={24} />
@@ -476,7 +479,7 @@ function App() {
             </div>
         )}
 
-        {/* --- EXPLORE TAB --- */}
+        {/* --- EXPLORE TAB RESTORED --- */}
         {activeTab === 'explore' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-20">
                 <div className="md:col-span-2 flex flex-col gap-4 mb-2">
@@ -571,7 +574,9 @@ function App() {
                 if (!targetUser) targetUser = user;
                 
                 const userPosts = posts.filter(p => p.userId === targetUser!.id);
+                // Safe check for followers array which might be undefined in new users
                 const isFollowing = (user.following || []).includes(targetUser!.id);
+                // Get user contributions (Destinations created by user)
                 const userContributions = destinations.filter(d => d.createdBy === targetUser!.id);
 
                 return (
@@ -672,7 +677,7 @@ function App() {
       {/* MOBILE BOTTOM NAVIGATION (Fixed) */}
       <div className="fixed bottom-0 w-full bg-white border-t border-stone-200 flex justify-around items-center p-3 md:hidden z-50 pb-safe">
         <button onClick={() => navigateToTab('home')} className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'home' ? 'text-cyan-600' : 'text-stone-400'}`}>
-           <Home size={24} strokeWidth={activeTab === 'home' ? 2.5 : 2} />
+           <MapIcon size={24} strokeWidth={activeTab === 'home' ? 2.5 : 2} />
         </button>
         <button onClick={() => navigateToTab('explore')} className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'explore' ? 'text-cyan-600' : 'text-stone-400'}`}>
            <Compass size={24} strokeWidth={activeTab === 'explore' ? 2.5 : 2} />
