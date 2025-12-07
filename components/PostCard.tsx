@@ -32,6 +32,8 @@ export const PostCard: React.FC<PostCardProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const isOwner = post.userId === currentUserId;
+  // PROTECCIÓN: Si post.comments es undefined (Firebase), usar array vacío
+  const comments = post.comments || [];
 
   const handleCommentSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -168,18 +170,18 @@ export const PostCard: React.FC<PostCardProps> = ({
           <span className="text-sm text-gray-600 leading-relaxed">{post.caption}</span>
         </div>
 
-        {post.comments.length > 0 && (
+        {comments.length > 0 && (
           <button 
             onClick={() => setShowComments(!showComments)}
             className="text-gray-400 text-sm mb-2 hover:text-gray-600"
           >
-            {showComments ? 'Ocultar opiniones' : `Ver las ${post.comments.length} opiniones`}
+            {showComments ? 'Ocultar opiniones' : `Ver las ${comments.length} opiniones`}
           </button>
         )}
 
         {showComments && (
           <div className="space-y-3 mb-3 max-h-40 overflow-y-auto no-scrollbar bg-gray-50 p-3 rounded-lg">
-            {post.comments.map((comment) => (
+            {comments.map((comment) => (
               <div key={comment.id} className="flex items-start space-x-2 text-sm">
                 <span className="font-semibold text-gray-700 min-w-max">{comment.userName}</span>
                 <span className="text-gray-600">{comment.text}</span>

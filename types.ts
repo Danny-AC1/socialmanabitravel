@@ -7,6 +7,8 @@ export interface User {
   bio?: string;
   followers: string[];
   following: string[];
+  isOnline?: boolean;
+  lastSeen?: number;
 }
 
 export interface Comment {
@@ -65,8 +67,6 @@ export interface Suggestion {
   isRead: boolean;
 }
 
-// --- CHAT TYPES ---
-
 export interface Message {
   id: string;
   senderId: string;
@@ -77,7 +77,7 @@ export interface Message {
     id: string;
     text: string;
     senderName: string;
-    type?: string; // Campo opcional para icono en respuesta
+    type?: string;
   } | null;
   timestamp: number;
   isRead: boolean;
@@ -90,6 +90,19 @@ export interface Chat {
   lastTimestamp: number;
   updatedAt: number;
   unreadCount?: number; 
+}
+
+// --- RE-ADDED NOTIFICATION TYPE ---
+export interface Notification {
+  id: string;
+  recipientId: string;
+  senderId: string;
+  senderName: string;
+  senderAvatar: string;
+  type: 'follow' | 'like_post' | 'comment' | 'new_post' | 'new_story';
+  targetId?: string;
+  timestamp: number;
+  isRead: boolean;
 }
 
 export type EcuadorRegion = 'Costa' | 'Sierra' | 'Amazonía' | 'Insular';

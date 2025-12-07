@@ -27,6 +27,7 @@ export const PostViewer: React.FC<PostViewerProps> = ({
   const [showMenu, setShowMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const isOwner = post.userId === currentUserId;
+  const comments = post.comments || []; // Defensive check
 
   const handleCommentSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -130,12 +131,12 @@ export const PostViewer: React.FC<PostViewerProps> = ({
 
             <div className="h-px bg-gray-100 my-2" />
 
-            {post.comments.length === 0 ? (
+            {comments.length === 0 ? (
                <div className="text-center py-10 text-gray-400 text-sm">
                   Sé el primero en opinar.
                </div>
             ) : (
-               post.comments.map(comment => (
+               comments.map(comment => (
                   <div key={comment.id} className="flex gap-3">
                     <div className="w-8 h-8 rounded-full bg-cyan-100 flex items-center justify-center text-cyan-700 font-bold text-xs shrink-0">
                         {comment.userName.charAt(0)}

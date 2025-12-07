@@ -9,7 +9,13 @@ export const AuthService = {
       const dbRef = ref(db);
       const snapshot = await get(child(dbRef, `users`));
       if (snapshot.exists()) {
-        return Object.values(snapshot.val());
+        const users = Object.values(snapshot.val()) as User[];
+        // Normalizar arrays vacíos
+        return users.map(u => ({
+            ...u,
+            followers: u.followers || [],
+            following: u.following || []
+        }));
       } else {
         return [];
       }
@@ -25,7 +31,12 @@ export const AuthService = {
       const dbRef = ref(db);
       const snapshot = await get(child(dbRef, `users/${id}`));
       if (snapshot.exists()) {
-        return snapshot.val();
+        const user = snapshot.val();
+        return {
+            ...user,
+            followers: user.followers || [],
+            following: user.following || []
+        };
       }
       return undefined;
     } catch {
@@ -69,11 +80,14 @@ export const AuthService = {
       throw new Error('Credenciales incorrectas.');
     }
 
+    // Asegurar arrays locales
+    user.followers = user.followers || [];
+    user.following = user.following || [];
+
     AuthService.setSession(user);
     return user;
   },
 
-  // Simulación de reseteo de contraseña
   resetPassword: async (email: string): Promise<void> => {
     const users = await AuthService.getUsers();
     const user = users.find(u => u.email === email);
@@ -81,35 +95,26 @@ export const AuthService = {
     if (!user) {
       throw new Error('No encontramos una cuenta con este correo.');
     }
-
-    // En un sistema real aquí se enviaría un email. 
-    // Como es Firebase RTDB sin Auth real, simulamos el éxito.
-    // Opcional: Podríamos cambiar la contraseña a una temporal, pero es arriesgado sin validar email real.
     return new Promise(resolve => setTimeout(resolve, 1000));
   },
 
   updateUserAvatar: async (userId: string, newAvatar: string): Promise<User> => {
     const updates: any = {};
     updates[`/users/${userId}/avatar`] = newAvatar;
-    
     await update(ref(db), updates);
 
-    // Actualizar sesión local si es necesario
     const session = AuthService.getSession();
     if (session && session.id === userId) {
       session.avatar = newAvatar;
       AuthService.setSession(session);
       return session;
     }
-    
-    // Si no hay sesión, devolver el usuario actualizado parcialmente
     return { ...session!, avatar: newAvatar };
   },
 
   updateUserName: async (userId: string, newName: string): Promise<User> => {
     const updates: any = {};
     updates[`/users/${userId}/name`] = newName;
-    
     await update(ref(db), updates);
 
     const session = AuthService.getSession();
@@ -163,7 +168,16 @@ export const AuthService = {
   getSession: (): User | null => {
     try {
       const stored = localStorage.getItem('manabi_session_v1');
-      return stored ? JSON.parse(stored) : null;
+      if (stored) {
+          const user = JSON.parse(stored);
+          // Garantizar arrays al recuperar sesión
+          return {
+              ...user,
+              followers: user.followers || [],
+              following: user.following || []
+          };
+      }
+      return null;
     } catch {
       return null;
     }

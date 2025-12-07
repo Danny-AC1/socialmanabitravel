@@ -77,9 +77,13 @@ export const validateVideo = (file: File): Promise<string> => {
 
 // --- SECURITY UTILS ---
 
-export const ADMIN_EMAILS = ["danny.asc25@gmail.com", "d.e.a.c@outlook.com"];
+export const ADMIN_EMAILS = [
+  "danny.asc25@gmail.com", 
+  "d.e.a.c@outlook.com"
+];
 
 export const isAdmin = (email: string | undefined): boolean => {
   if (!email) return false;
+  // Comparamos el email limpio (minúsculas y sin espacios) con la lista oficial
   return ADMIN_EMAILS.includes(email.toLowerCase().trim());
 };

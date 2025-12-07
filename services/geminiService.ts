@@ -1,130 +1,104 @@
 import { GoogleGenAI } from "@google/genai";
 
-let ai: GoogleGenAI | null = null;
+// Guideline: Always use const ai = new GoogleGenAI({apiKey: process.env.API_KEY});
+// Guideline: The API key must be obtained exclusively from the environment variable process.env.API_KEY.
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-// Función auxiliar para limpiar la clave
-const cleanKey = (key: string | undefined): string => {
-  if (!key) return "";
-  return key.replace(/["']/g, "").trim(); 
-};
-
-const getApiKey = (): string => {
-  // @ts-ignore
-  if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_KEY) {
-    // @ts-ignore
-    return cleanKey(import.meta.env.VITE_API_KEY);
-  }
-  if (typeof process !== 'undefined' && process.env) {
-    if (process.env.VITE_API_KEY) return cleanKey(process.env.VITE_API_KEY);
-    if (process.env.API_KEY) return cleanKey(process.env.API_KEY);
-  }
-  return "";
-};
-
-const getAiInstance = (): GoogleGenAI | null => {
-  if (ai) return ai;
-  const key = getApiKey();
-  
-  if (key && key.length > 10 && !key.includes("PEGA_AQUI")) {
-    try {
-      ai = new GoogleGenAI({ apiKey: key });
-      return ai;
-    } catch (e) {
-      console.error("Error inicializando Gemini:", e);
-      return null;
-    }
-  }
-  return null;
-};
-
-// --- MODO RESPALDO (MOCK) ---
-// Si la API falla, usamos estas respuestas para que la app no parezca rota.
-const getMockResponse = (query: string): string => {
-  const q = query.toLowerCase();
-  
-  if (q.includes('comida') || q.includes('comer') || q.includes('plato')) {
-    return "🍽️ [Modo Respaldo] En Ecuador la gastronomía es increíble. Te recomiendo probar el **Encebollado** en la costa, el **Hornado** en la sierra o un **Maito** en la Amazonía. ¡El Viche de Manabí es patrimonio nacional!";
-  }
-  if (q.includes('playa') || q.includes('mar')) {
-    return "🏖️ [Modo Respaldo] Las mejores playas están en la Ruta del Spondylus. **Los Frailes** es imprescindible por su naturaleza virgen. También visita **Canoa** para surf o **Salinas** para diversión.";
-  }
-  if (q.includes('llegar') || q.includes('transporte') || q.includes('donde')) {
-    return "Bus [Modo Respaldo] Para moverte por Ecuador, los buses interprovinciales son económicos y frecuentes. Para Galápagos necesitas vuelo desde Quito o Guayaquil.";
-  }
-  if (q.includes('clima') || q.includes('tiempo')) {
-    return "☀️ [Modo Respaldo] El clima varía mucho. Costa: Caluroso (25-30°C). Sierra: Fresco/Frío (10-20°C). Amazonía: Húmedo (25°C+). ¡Trae ropa para todo!";
-  }
-  
-  return "🇪🇨 [Modo Respaldo] ¡Hola! Soy tu guía virtual de Ecuador. Aunque mi conexión neuronal está descansando, te puedo decir que Ecuador es el país de los 4 mundos. ¿Te gustaría saber sobre playas, montañas o selva?";
-};
-
-const ECUADOR_SYSTEM_INSTRUCTION = `Eres el guía turístico oficial de 'Ecuador Travel'. Responde en español, con emojis y datos reales.`;
+const ECUADOR_SYSTEM_INSTRUCTION = `Eres el guía turístico oficial de 'Ecuador Travel'.
+Tu misión es promocionar el turismo en las 4 regiones del Ecuador: Costa, Sierra, Amazonía e Insular (Galápagos).
+Tu tono es amigable, entusiasta y experto. Usas emojis de banderas de Ecuador, plantas y animales.
+Si te preguntan por un lugar específico, da datos reales sobre ubicación, comida típica y qué hacer.
+Responde siempre en español. Sé conciso pero útil.`;
 
 export const getTravelAdvice = async (query: string): Promise<string> => {
-  const aiInstance = getAiInstance();
-
-  // Si no hay instancia, usamos respaldo directo
-  if (!aiInstance) {
-    console.warn("Gemini no configurado, usando respaldo.");
-    return getMockResponse(query);
-  }
-
   try {
-    const response = await aiInstance.models.generateContent({
+    const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: query,
-      config: { systemInstruction: ECUADOR_SYSTEM_INSTRUCTION },
+      config: {
+        systemInstruction: ECUADOR_SYSTEM_INSTRUCTION,
+      },
     });
-    return response.text || getMockResponse(query);
+    
+    return response.text || "Lo siento, me quedé sin palabras. Intenta de nuevo.";
   } catch (error: any) {
-    console.error("Error API Gemini (usando respaldo):", error.message);
-    // Si falla por CUALQUIER razón (403, 400, internet), devolvemos respuesta simulada
-    // para que el usuario final no vea un error técnico.
-    return getMockResponse(query);
+    console.error("Error detallado de Gemini:", error);
+    
+    // MENSAJES DE DIAGNÓSTICO REALES
+    const errorMsg = error.message || JSON.stringify(error);
+
+    if (errorMsg.includes('API key not valid')) {
+       return `🔑 Error: Google dice que la clave no es válida. \n(Detalle: ${errorMsg})`;
+    }
+    
+    if (errorMsg.includes('not enabled')) {
+       return `🛑 Error: La API 'Generative Language' no está activada en tu cuenta de Google Cloud. \n(Ve a console.cloud.google.com y actívala).`;
+    }
+
+    if (errorMsg.includes('403')) {
+       return `🚫 Error 403: Permiso denegado. Posiblemente tu clave tiene restricciones de IP que bloquean a Vercel. Crea una clave SIN restricciones.`;
+    }
+    
+    return `⚠️ Ocurrió un error técnico: ${errorMsg.substring(0, 100)}...`;
   }
 };
 
 export const generateCaptionForImage = async (location: string, details: string): Promise<string> => {
-  const aiInstance = getAiInstance();
-  if (!aiInstance) return `Disfrutando de las maravillas de ${location} 🇪🇨✨ #EcuadorTravel #Turismo`;
-
   try {
-    const response = await aiInstance.models.generateContent({
+    const prompt = `Escribe un pie de foto (caption) corto, inspirador y atractivo para Instagram sobre una foto en ${location}, Ecuador. Contexto: ${details}. Usa emojis y hashtags.`;
+    
+    const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: `Caption Instagram corto para foto en ${location}: ${details}`,
+      contents: prompt,
     });
-    return response.text || `Explorando ${location} 🇪🇨`;
+    return response.text || "";
   } catch (error) {
-    return `Momentos inolvidables en ${location} 🇪🇨 #ViajaEcuador`;
+    console.error("Error generating caption:", error);
+    return "";
   }
 };
 
 export const generateDestinationDetails = async (name: string, location: string, category: string): Promise<any> => {
-  const aiInstance = getAiInstance();
-  
-  // Datos de respaldo robustos por si falla la IA al crear destino
   const fallbackData = {
-    description: `Un destino increíble en ${location} que debes visitar.`,
-    fullDescription: `Este es uno de los lugares más destacados de ${location}. Ofrece una experiencia única de ${category.toLowerCase()} con paisajes impresionantes y cultura local vibrante. Ideal para tomar fotos y disfrutar la naturaleza.`,
-    highlights: ["Vistas panorámicas", "Gastronomía local", "Senderos naturales", "Sitios fotográficos"],
-    travelTips: ["Lleva ropa cómoda", "Usa protector solar", "Lleva efectivo", "Visita temprano en la mañana"]
+    description: `Un hermoso lugar para visitar en ${location}.`,
+    fullDescription: `Disfruta de la experiencia única que ofrece ${name}. Este destino ubicado en ${location} es ideal para los amantes de ${category}. Ofrece paisajes increíbles y una conexión profunda con la naturaleza y la cultura local.`,
+    highlights: ["Paisajes increíbles", "Gastronomía local", "Fotos únicas"],
+    travelTips: ["Lleva ropa cómoda", "No olvides tu cámara", "Hidrátate bien"]
   };
 
-  if (!aiInstance) return fallbackData;
+  const prompt = `
+    Actúa como un historiador y guía turístico experto de Ecuador con más de 20 años de experiencia.
+    Genera un objeto JSON con información EXTREMADAMENTE DETALLADA, PRECISA y EXTENSA sobre el destino turístico: "${name}" ubicado en "${location}" (Categoría: ${category}).
+
+    REQUISITOS OBLIGATORIOS PARA EL CONTENIDO:
+    1. La "fullDescription" debe ser muy larga (mínimo 20 líneas de texto rico).
+    2. Debe incluir datos históricos, geográficos exactos, clima, flora, fauna y relevancia cultural.
+    3. Debe mencionar explícitamente a qué cantón y provincia pertenece.
+    4. Usa un tono profesional pero inspirador.
+
+    El JSON debe tener EXACTAMENTE esta estructura:
+    {
+      "description": "Resumen atractivo de 2 frases para la tarjeta (max 150 caracteres).",
+      "fullDescription": "Aquí va el texto largo. Mínimo 3 párrafos extensos detallando historia, ubicación exacta, clima, biodiversidad y actividades específicas.",
+      "highlights": ["Punto destacado 1", "Punto destacado 2", "Punto destacado 3", "Punto destacado 4"],
+      "travelTips": ["Consejo práctico 1", "Consejo práctico 2", "Consejo práctico 3", "Consejo práctico 4"]
+    }
+    
+    IMPORTANTE: Responde SOLO con el JSON puro, sin bloques de código markdown ni texto adicional.
+  `;
 
   try {
-    const prompt = `Genera JSON turístico para: "${name}" en "${location}" (Cat: ${category}). Estructura: { "description": "...", "fullDescription": "...", "highlights": [], "travelTips": [] }`;
-    
-    const response = await aiInstance.models.generateContent({
+    const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
     });
 
     let text = response.text || "{}";
     text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    
     return JSON.parse(text);
   } catch (error) {
-    console.error("Error generando detalles (usando fallback):", error);
+    console.error("Error generating destination details:", error);
     return fallbackData;
   }
 };

@@ -1,15 +1,15 @@
-import { ref, set, remove, update, get, push, child } from "firebase/database";
+import { ref, set, remove, update, get, push } from "firebase/database";
 import { db } from "./firebase";
-import { Post, Story, Destination, Suggestion, User, Chat, Message } from '../types';
+import { Post, Story, Destination, Suggestion, User, Chat, Message, Notification } from '../types';
 import { EncryptionService } from "./encryptionService";
-
-// NOTA: La lectura (GET) ahora se hace en App.tsx con listeners en tiempo real.
-// Este servicio se encarga principalmente de las escrituras (WRITE).
+import { AuthService } from "./authService"; // Necesario para obtener seguidores
 
 export const StorageService = {
   
   savePost: async (post: Post) => {
     await set(ref(db, 'posts/' + post.id), post);
+    // Notificar
+    await StorageService.notifyFollowers(post.userId, post.userName, post.userAvatar, 'new_post', post.id);
   },
 
   updatePost: async (postId: string, updates: Partial<Post>) => {
@@ -23,20 +23,17 @@ export const StorageService = {
   toggleLikePost: async (post: Post, userId: string) => {
     const isLiked = post.isLiked;
     const newLikes = isLiked ? (post.likes - 1) : (post.likes + 1);
-    
-    await update(ref(db, `posts/${post.id}`), {
-      likes: newLikes
-    });
+    await update(ref(db, `posts/${post.id}`), { likes: newLikes });
   },
 
   addComment: async (postId: string, comments: any[]) => {
-    await update(ref(db, `posts/${postId}`), {
-      comments: comments
-    });
+    await update(ref(db, `posts/${postId}`), { comments: comments });
   },
 
   saveStory: async (story: Story) => {
     await set(ref(db, 'stories/' + story.id), story);
+    // Notificar
+    await StorageService.notifyFollowers(story.userId, story.userName, story.userAvatar, 'new_story', story.id);
   },
 
   updateStory: async (storyId: string, updates: Partial<Story>) => {
@@ -49,9 +46,7 @@ export const StorageService = {
 
   toggleLikeStory: async (story: Story) => {
     const currentLikes = story.likes || 0;
-    await update(ref(db, `stories/${story.id}`), {
-      likes: currentLikes + 1
-    });
+    await update(ref(db, `stories/${story.id}`), { likes: currentLikes + 1 });
   },
 
   markStoryViewed: async (storyId: string, user: User) => {
@@ -62,6 +57,47 @@ export const StorageService = {
       timestamp: Date.now()
     };
     await update(ref(db, `stories/${storyId}/viewers/${user.id}`), viewerData);
+  },
+
+  // --- NOTIFICATIONS (RE-ADDED) ---
+
+  notifyFollowers: async (senderId: string, senderName: string, senderAvatar: string, type: Notification['type'], targetId: string) => {
+    try {
+        const user = await AuthService.getUserById(senderId);
+        if (!user || !user.followers) return;
+
+        const notificationsUpdates: any = {};
+        
+        user.followers.forEach(followerId => {
+            const notifId = `notif_${Date.now()}_${followerId}`;
+            const notification: Notification = {
+                id: notifId,
+                recipientId: followerId,
+                senderId,
+                senderName,
+                senderAvatar,
+                type,
+                targetId,
+                timestamp: Date.now(),
+                isRead: false
+            };
+            notificationsUpdates[`/notifications/${followerId}/${notifId}`] = notification;
+        });
+
+        if (Object.keys(notificationsUpdates).length > 0) {
+            await update(ref(db), notificationsUpdates);
+        }
+    } catch (e) {
+        console.error("Error sending notifications", e);
+    }
+  },
+
+  markNotificationRead: async (userId: string, notificationId: string) => {
+      await update(ref(db, `notifications/${userId}/${notificationId}`), { isRead: true });
+  },
+
+  clearNotifications: async (userId: string) => {
+      await remove(ref(db, `notifications/${userId}`));
   },
 
   // --- SUGGESTIONS ---
@@ -86,21 +122,29 @@ export const StorageService = {
 
   rateDestination: async (destinationId: string, userId: string, rating: number, currentRating: number, reviewCount: number = 0) => {
     await set(ref(db, `destinations/${destinationId}/ratings/${userId}`), rating);
-    
     const newCount = (reviewCount || 0) + 1;
     const newAvg = ((currentRating * (reviewCount || 0)) + rating) / newCount;
-
-    await update(ref(db, `destinations/${destinationId}`), {
-      rating: newAvg,
-      reviewsCount: newCount
-    });
+    await update(ref(db, `destinations/${destinationId}`), { rating: newAvg, reviewsCount: newCount });
   },
 
   addPhotoToDestinationGallery: async (destinationId: string, currentGallery: string[], newImageUrl: string) => {
     const updatedGallery = [newImageUrl, ...(currentGallery || [])];
-    await update(ref(db, `destinations/${destinationId}`), {
-      gallery: updatedGallery
-    });
+    await update(ref(db, `destinations/${destinationId}`), { gallery: updatedGallery });
+  },
+
+  updateDestinationCover: async (destinationId: string, newImageUrl: string) => {
+    await update(ref(db, `destinations/${destinationId}`), { imageUrl: newImageUrl });
+  },
+
+  removeDestinationPhoto: async (destinationId: string, currentGallery: string[], photoUrlToRemove: string) => {
+    const updatedGallery = currentGallery.filter(url => url !== photoUrlToRemove);
+    await update(ref(db, `destinations/${destinationId}`), { gallery: updatedGallery });
+  },
+  
+  clearAll: async () => {
+    await set(ref(db), null);
+    localStorage.clear();
+    window.location.reload();
   },
 
   // --- CHAT SYSTEM ---
@@ -112,7 +156,6 @@ export const StorageService = {
   initiateChat: async (currentUserId: string, targetUserId: string) => {
     const chatId = StorageService.getChatId(currentUserId, targetUserId);
     const chatRef = ref(db, `chats/${chatId}`);
-    
     const snapshot = await get(chatRef);
     if (!snapshot.exists()) {
       const newChat: Chat = {
@@ -132,19 +175,15 @@ export const StorageService = {
     senderId: string, 
     text: string, 
     type: 'text' | 'image' | 'video' | 'audio' = 'text',
-    mediaUrl?: string,
-    replyTo?: Message['replyTo']
+    mediaUrl?: string | null,
+    replyTo?: any
   ) => {
-    // 1. Encriptar contenido
     const encryptedText = text ? EncryptionService.encrypt(text, chatId) : '';
     const encryptedMedia = mediaUrl ? EncryptionService.encrypt(mediaUrl, chatId) : null;
 
-    // 2. Crear referencia
     const messageRef = push(ref(db, `chats/${chatId}/messages`));
     
-    // 3. Construir objeto LIMPIO (sin undefined)
-    // Firebase falla si pasamos propiedades con valor undefined
-    const payload: any = {
+    const messagePayload: any = {
       id: messageRef.key!,
       senderId,
       text: encryptedText,
@@ -153,21 +192,15 @@ export const StorageService = {
       isRead: false
     };
 
-    // Solo agregamos estas propiedades si tienen valor real
-    if (encryptedMedia) payload.mediaUrl = encryptedMedia;
-    if (replyTo) payload.replyTo = replyTo;
+    if (encryptedMedia) messagePayload.mediaUrl = encryptedMedia;
+    if (replyTo) messagePayload.replyTo = replyTo;
 
-    // 4. Guardar mensaje
-    await set(messageRef, payload);
+    await set(messageRef, messagePayload);
 
-    // 5. Actualizar vista previa del chat
     let previewText = encryptedText;
-    // Si es solo multimedia, mostramos descripción cifrada
-    if (!text) {
-        if (type === 'image') previewText = EncryptionService.encrypt('📷 Foto', chatId);
-        else if (type === 'video') previewText = EncryptionService.encrypt('🎥 Video', chatId);
-        else if (type === 'audio') previewText = EncryptionService.encrypt('🎤 Nota de voz', chatId);
-    }
+    if (type === 'image') previewText = EncryptionService.encrypt('📷 Foto', chatId);
+    if (type === 'video') previewText = EncryptionService.encrypt('🎥 Video', chatId);
+    if (type === 'audio') previewText = EncryptionService.encrypt('🎤 Nota de voz', chatId);
 
     await update(ref(db, `chats/${chatId}`), {
       lastMessage: previewText, 
@@ -176,11 +209,20 @@ export const StorageService = {
     });
   },
 
+  deleteMessage: async (chatId: string, messageId: string) => {
+    await remove(ref(db, `chats/${chatId}/messages/${messageId}`));
+  },
+
+  editMessage: async (chatId: string, messageId: string, newText: string) => {
+    const encryptedText = EncryptionService.encrypt(newText, chatId);
+    await update(ref(db, `chats/${chatId}/messages/${messageId}`), {
+      text: encryptedText
+    });
+  },
+
   markChatAsRead: async (chatId: string, currentUserId: string) => {
-    // Obtener mensajes no leídos que NO sean míos
     const messagesRef = ref(db, `chats/${chatId}/messages`);
     const snapshot = await get(messagesRef);
-    
     if (snapshot.exists()) {
       const updates: any = {};
       snapshot.forEach((childSnapshot) => {
@@ -189,31 +231,9 @@ export const StorageService = {
           updates[`${childSnapshot.key}/isRead`] = true;
         }
       });
-      
       if (Object.keys(updates).length > 0) {
         await update(messagesRef, updates);
       }
     }
-  },
-
-  // --- ADMIN FUNCTIONS ---
-
-  updateDestinationCover: async (destinationId: string, newImageUrl: string) => {
-    await update(ref(db, `destinations/${destinationId}`), {
-      imageUrl: newImageUrl
-    });
-  },
-
-  removeDestinationPhoto: async (destinationId: string, currentGallery: string[], photoUrlToRemove: string) => {
-    const updatedGallery = currentGallery.filter(url => url !== photoUrlToRemove);
-    await update(ref(db, `destinations/${destinationId}`), {
-      gallery: updatedGallery
-    });
-  },
-  
-  clearAll: async () => {
-    await set(ref(db), null);
-    localStorage.clear();
-    window.location.reload();
   }
 };
