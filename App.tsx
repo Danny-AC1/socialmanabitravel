@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect, useRef } from 'react';
-import { Map as MapIcon, Compass, UserCircle, Camera, Search, Grid, LogOut, ArrowRight, UserPlus, UserCheck, ChevronLeft, PlusCircle, Globe, Filter, Edit3, X, MessageSquarePlus, Mail, MapPin } from 'lucide-react';
+import { Map as MapIcon, Compass, UserCircle, Camera, Search, Grid, LogOut, ArrowRight, UserPlus, UserCheck, ChevronLeft, PlusCircle, Globe, Filter, Edit3, X, MessageSquarePlus, Mail, MapPin, Plus, MessageCircle } from 'lucide-react';
 import { HeroSection } from './components/HeroSection';
 import { PostCard } from './components/PostCard';
 import { CreatePostModal } from './components/CreatePostModal';
@@ -12,6 +11,7 @@ import { DestinationCard } from './components/DestinationCard';
 import { TravelGuideModal } from './components/TravelGuideModal';
 import { AddDestinationModal } from './components/AddDestinationModal';
 import { SuggestionsModal } from './components/SuggestionsModal';
+import { ChatModal } from './components/ChatModal';
 import { AuthScreen } from './components/AuthScreen';
 import { PostViewer } from './components/PostViewer';
 import { ALL_DESTINATIONS as STATIC_DESTINATIONS } from './constants';
@@ -36,6 +36,8 @@ function App() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isAddDestinationModalOpen, setIsAddDestinationModalOpen] = useState(false);
   const [isSuggestionsModalOpen, setIsSuggestionsModalOpen] = useState(false);
+  const [isChatModalOpen, setIsChatModalOpen] = useState(false);
+  const [initialChatId, setInitialChatId] = useState<string | null>(null);
   
   const [editingPost, setEditingPost] = useState<Post | null>(null);
   const [editingStory, setEditingStory] = useState<Story | null>(null);
@@ -71,6 +73,7 @@ function App() {
       if (isCreateModalOpen) setIsCreateModalOpen(false);
       else if (isAddDestinationModalOpen) setIsAddDestinationModalOpen(false);
       else if (isSuggestionsModalOpen) setIsSuggestionsModalOpen(false);
+      else if (isChatModalOpen) setIsChatModalOpen(false);
       else if (viewingPost) setViewingPost(null);
       else if (viewingStoryIndex !== null) setViewingStoryIndex(null);
       else if (selectedDestination) setSelectedDestination(null);
@@ -89,7 +92,7 @@ function App() {
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, [
-    isCreateModalOpen, isAddDestinationModalOpen, isSuggestionsModalOpen, viewingPost, viewingStoryIndex, 
+    isCreateModalOpen, isAddDestinationModalOpen, isSuggestionsModalOpen, isChatModalOpen, viewingPost, viewingStoryIndex, 
     selectedDestination, viewingProfileImage, editingPost, editingStory, chatOpen, viewingProfileId
   ]);
 
@@ -108,6 +111,19 @@ function App() {
   const openDetail = (setter: (val: any) => void, val: any) => {
     setter(val);
     pushHistory({ type: 'detail' });
+  };
+
+  const handleOpenChat = async (targetUserId?: string) => {
+    if (targetUserId && user) {
+        // Generar ID de chat o buscarlo
+        const chatId = StorageService.getChatId(user.id, targetUserId);
+        // Asegurar que el chat existe en la DB
+        await StorageService.initiateChat(user.id, targetUserId);
+        setInitialChatId(chatId);
+    } else {
+        setInitialChatId(null);
+    }
+    openModal(setIsChatModalOpen);
   };
 
   useEffect(() => {
@@ -199,6 +215,12 @@ function App() {
   const handleAddPhotoToDestination = async (image: string) => { if (!selectedDestination || !user) return; await StorageService.addPhotoToDestinationGallery( selectedDestination.id, selectedDestination.gallery, image ); };
   const handleChangeDestinationCover = async (image: string) => { if (!selectedDestination || !user) return; await StorageService.updateDestinationCover(selectedDestination.id, image); };
   const handleDeleteDestinationPhoto = async (photoUrl: string) => { if (!selectedDestination || !user) return; if (confirm("¿Eliminar esta foto de la galería?")) { await StorageService.removeDestinationPhoto( selectedDestination.id, selectedDestination.gallery, photoUrl ); } };
+  
+  const handleDeleteDestination = async (id: string) => {
+    await StorageService.deleteDestination(id);
+    setSelectedDestination(null);
+  };
+
   const handleEditPost = (post: Post) => openDetail(setEditingPost, post);
   const handleUpdatePost = async (id: string, caption: string, location: string) => { await StorageService.updatePost(id, { caption, location }); if (viewingPost && viewingPost.id === id) setViewingPost(prev => prev ? { ...prev, caption, location } : null); };
   const handleDeletePost = async (id: string) => { if (confirm("¿Estás seguro?")) { await StorageService.deletePost(id); if (viewingPost && viewingPost.id === id) setViewingPost(null); } };
@@ -206,10 +228,8 @@ function App() {
   const handleUpdateStory = async (id: string, caption: string, location: string) => { await StorageService.updateStory(id, { caption, location }); };
   const handleDeleteStory = async (id: string) => await StorageService.deleteStory(id);
   const handleMarkStoryViewed = (id: string) => {
-    // FIX: Ahora pasamos el usuario completo para registrar quién vio la historia
     if (user) {
         StorageService.markStoryViewed(id, user);
-        // Actualizamos localmente para feedback inmediato en UI (opcional, ya que Firebase actualizará)
         setStories(stories.map(s => s.id === id ? { ...s, isViewed: true } : s));
     }
   };
@@ -319,6 +339,12 @@ function App() {
             <span className="text-2xl font-light text-stone-600">TRAVEL</span>
           </div>
           <div className="md:hidden flex items-center gap-3">
+             <button 
+                onClick={() => handleOpenChat()}
+                className="bg-white text-cyan-700 border border-stone-200 p-2 rounded-full relative"
+             >
+                <MessageCircle size={20} />
+             </button>
              {isAdminUser && (
                <button 
                   onClick={() => openModal(setIsSuggestionsModalOpen)} 
@@ -347,6 +373,15 @@ function App() {
              <button onClick={() => navigateToTab('home')} className={`hover:text-cyan-700 transition-colors ${activeTab === 'home' ? 'text-cyan-700' : ''}`}><MapIcon size={24} /></button>
              <button onClick={() => navigateToTab('explore')} className={`hover:text-cyan-700 transition-colors ${activeTab === 'explore' ? 'text-cyan-700' : ''}`}><Compass size={24} /></button>
              
+             {/* CHAT BUTTON DESKTOP */}
+             <button 
+                onClick={() => handleOpenChat()} 
+                className="hover:text-cyan-700 transition-colors"
+                title="Mensajes Privados"
+             >
+                <MessageCircle size={24} />
+             </button>
+
              {isAdminUser && (
                 <button 
                   onClick={() => openModal(setIsSuggestionsModalOpen)} 
@@ -364,31 +399,61 @@ function App() {
         </div>
       </nav>
 
+      {/* Main Content Areas */}
       <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8 pt-6 px-4 md:px-0">
+        {/* ... (Existing Content Logic for Tabs) ... */}
         <div className="md:col-span-2">
           {activeTab === 'home' && (
             <>
-              <div className="bg-white p-5 rounded-2xl border border-stone-100 shadow-sm overflow-x-auto no-scrollbar mb-6">
-                <h4 className="text-xs font-bold text-stone-400 uppercase tracking-widest mb-3">Diarios de Viaje (24h)</h4>
-                <div className="flex space-x-4">
-                  <div className="flex flex-col items-center space-y-2 min-w-[72px] cursor-pointer group" onClick={() => openModal(setIsCreateModalOpen)}>
-                    <div className="w-16 h-16 rounded-2xl border-2 border-stone-200 p-0.5 relative group-hover:border-cyan-400 transition-colors">
-                      <img src={user.avatar} alt="You" className="w-full h-full rounded-xl object-cover opacity-90" />
-                      <div className="absolute -bottom-2 -right-2 bg-cyan-600 text-white rounded-lg p-1 shadow-sm">
-                        <Camera size={14} />
-                      </div>
-                    </div>
-                    <span className="text-xs font-medium text-stone-600">Crear</span>
-                  </div>
-                  {activeStories.map((story, idx) => (
-                    <div key={story.id} className="flex flex-col items-center space-y-2 min-w-[72px] cursor-pointer" onClick={() => openStories(idx, activeStories)}>
-                      <div className={`w-16 h-16 rounded-2xl p-0.5 border-2 transition-all ${story.isViewed ? 'border-stone-200 grayscale-[0.5]' : 'border-cyan-500 shadow-md shadow-cyan-100'}`}>
-                        {story.mediaType === 'video' ? ( <video src={story.imageUrl} className="w-full h-full rounded-xl object-cover border border-white" /> ) : ( <img src={story.userAvatar} alt={story.userName} className="w-full h-full rounded-xl object-cover border border-white" /> )}
-                      </div>
-                      <span className="text-xs font-medium text-stone-700 truncate w-20 text-center">{story.userName}</span>
-                    </div>
-                  ))}
-                </div>
+              {/* STORIES SECTION */}
+              <div className="mb-6">
+                 <h4 className="text-xs font-bold text-stone-400 uppercase tracking-widest mb-3 pl-1">Historias (24h)</h4>
+                 <div className="flex space-x-3 overflow-x-auto no-scrollbar pb-4">
+                   
+                   {/* CREATE STORY CARD */}
+                   <div 
+                      className="relative w-24 h-40 shrink-0 rounded-xl overflow-hidden cursor-pointer group shadow-sm transition-transform active:scale-95" 
+                      onClick={() => openModal(setIsCreateModalOpen)}
+                   >
+                     <img src={user.avatar} alt="You" className="w-full h-full object-cover opacity-60 group-hover:scale-110 transition-transform duration-700" />
+                     <div className="absolute inset-0 bg-stone-900/20 group-hover:bg-stone-900/10 transition-colors" />
+                     
+                     <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-white text-cyan-600 rounded-full p-1 shadow-lg border-2 border-white/50">
+                        <Plus size={16} strokeWidth={3} />
+                     </div>
+                     <div className="absolute bottom-9 left-0 w-full text-center text-white text-[10px] font-bold tracking-wide drop-shadow-md">
+                        Crear
+                     </div>
+                   </div>
+
+                   {/* STORY CARDS */}
+                   {activeStories.map((story, idx) => {
+                     const isViewed = story.isViewed;
+                     return (
+                        <div 
+                           key={story.id} 
+                           className={`relative w-24 h-40 shrink-0 rounded-xl overflow-hidden cursor-pointer group shadow-sm transition-transform active:scale-95 ring-2 ring-offset-2 ${isViewed ? 'ring-stone-200' : 'ring-cyan-500'}`}
+                           onClick={() => openStories(idx, activeStories)}
+                        >
+                           {story.mediaType === 'video' ? (
+                              <video src={story.imageUrl} className="w-full h-full object-cover" />
+                           ) : (
+                              <img src={story.imageUrl} alt={story.userName} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                           )}
+                           
+                           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-80" />
+                           
+                           <div className="absolute top-2 left-2 rounded-full border-2 border-cyan-500 w-8 h-8 overflow-hidden bg-white">
+                              <img src={story.userAvatar} className="w-full h-full object-cover" />
+                           </div>
+                           
+                           <span className="absolute bottom-2 left-2 right-2 text-white text-[10px] font-bold truncate drop-shadow-md">
+                              {story.userName}
+                           </span>
+                        </div>
+                     );
+                   })}
+                 </div>
               </div>
               
               {!searchQuery && ( <HeroSection onGuideClick={() => handleOpenGuide('Parque Nacional Machalilla')} /> )}
@@ -444,7 +509,7 @@ function App() {
                        </div>
                      )}
 
-                     {/* DESTINATIONS SECTION */}
+                     {/* DESTINATIONS AND POSTS SECTIONS SAME AS BEFORE */}
                      {searchDestinations.length > 0 && (
                        <div>
                           <div className="flex items-center justify-between mb-3 px-1">
@@ -468,7 +533,6 @@ function App() {
                        </div>
                      )}
 
-                     {/* POSTS SECTION */}
                      {filteredPosts.length > 0 && (
                         <div>
                            <div className="flex items-center justify-between mb-3 px-1">
@@ -535,7 +599,15 @@ function App() {
                                 <button onClick={handleLogout} className="text-xs text-stone-600 bg-stone-100 px-3 py-1.5 rounded-full font-bold flex gap-1"><LogOut size={12} /> Salir</button>
                              </div>
                            ) : (
-                             <button onClick={() => handleFollowToggle(targetUser!.id)} className={`px-4 py-1.5 rounded-full font-bold text-xs ${isFollowing ? 'bg-stone-100' : 'bg-cyan-600 text-white'}`}> {isFollowing ? 'Siguiendo' : 'Seguir'} </button>
+                             <div className="flex gap-2">
+                               <button 
+                                  onClick={() => handleOpenChat(targetUser!.id)} 
+                                  className="px-3 py-1.5 rounded-full font-bold text-xs bg-cyan-100 text-cyan-700 flex items-center gap-1 hover:bg-cyan-200"
+                               >
+                                  <MessageCircle size={14} /> Mensaje
+                               </button>
+                               <button onClick={() => handleFollowToggle(targetUser!.id)} className={`px-4 py-1.5 rounded-full font-bold text-xs ${isFollowing ? 'bg-stone-100' : 'bg-cyan-600 text-white'}`}> {isFollowing ? 'Siguiendo' : 'Seguir'} </button>
+                             </div>
                            )}
                         </div>
                       </div>
@@ -577,6 +649,7 @@ function App() {
           )}
         </div>
 
+        {/* SIDEBAR */}
         <div className="hidden md:block col-span-1 space-y-6">
           <div className="sticky top-24">
             <div className="bg-white rounded-2xl shadow-sm border border-stone-100 p-5 mb-6">
@@ -613,10 +686,19 @@ function App() {
       )}
 
       <CreatePostModal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} onSubmit={handleCreateContent} />
-      <AddDestinationModal isOpen={isAddDestinationModalOpen} onClose={() => setIsAddDestinationModalOpen(false)} onSubmit={handleAddDestination} />
+      <AddDestinationModal isOpen={isAddDestinationModalOpen} onClose={() => setIsAddDestinationModalOpen(false)} onSubmit={handleAddDestination} existingDestinations={destinations} />
       <EditPostModal isOpen={!!editingPost} post={editingPost} onClose={() => setEditingPost(null)} onSave={handleUpdatePost} />
       <EditStoryModal isOpen={!!editingStory} story={editingStory} onClose={() => setEditingStory(null)} onSave={handleUpdateStory} />
       <SuggestionsModal isOpen={isSuggestionsModalOpen} onClose={() => setIsSuggestionsModalOpen(false)} currentUser={user} isAdmin={isAdminUser} suggestions={suggestions} />
+      
+      {/* CHAT MODAL */}
+      <ChatModal 
+        isOpen={isChatModalOpen} 
+        onClose={() => setIsChatModalOpen(false)} 
+        currentUser={user} 
+        allUsers={allUsers}
+        initialChatId={initialChatId} 
+      />
 
       {viewingPost && <PostViewer post={viewingPost} currentUserId={user.id} onClose={() => setViewingPost(null)} onLike={handleLike} onComment={handleComment} onShare={handleShare} onEdit={handleEditPost} onDelete={handleDeletePost} />}
       
@@ -625,7 +707,17 @@ function App() {
       {viewingStoryIndex !== null && <StoryViewer stories={viewingStoryList} initialStoryIndex={viewingStoryIndex} currentUserId={user.id} onClose={() => setViewingStoryIndex(null)} onMarkViewed={handleMarkStoryViewed} onDelete={handleDeleteStory} onEdit={handleEditStory} onLike={handleLikeStory} onShare={handleShare} />}
       
       {selectedDestination && (
-          <TravelGuideModal destination={selectedDestination} onClose={() => setSelectedDestination(null)} onAskAI={handleAskAIFromGuide} onRate={handleRateDestination} onAddPhoto={handleAddPhotoToDestination} onChangeCover={handleChangeDestinationCover} onDeletePhoto={handleDeleteDestinationPhoto} isAdminUser={isAdmin(user.email)} />
+          <TravelGuideModal 
+            destination={selectedDestination} 
+            onClose={() => setSelectedDestination(null)} 
+            onAskAI={handleAskAIFromGuide} 
+            onRate={handleRateDestination} 
+            onAddPhoto={handleAddPhotoToDestination} 
+            onChangeCover={handleChangeDestinationCover} 
+            onDeletePhoto={handleDeleteDestinationPhoto} 
+            onDeleteDestination={handleDeleteDestination}
+            isAdminUser={isAdmin(user.email)} 
+          />
       )}
     </div>
   );

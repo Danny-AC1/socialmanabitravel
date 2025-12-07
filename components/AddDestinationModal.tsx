@@ -1,16 +1,18 @@
+
 import React, { useState, useRef } from 'react';
-import { X, MapPin, Loader2, Image as ImageIcon, Wand2, Globe } from 'lucide-react';
+import { X, MapPin, Loader2, Image as ImageIcon, Wand2, Globe, AlertTriangle } from 'lucide-react';
 import { resizeImage } from '../utils';
 import { generateDestinationDetails } from '../services/geminiService';
-import { EcuadorRegion } from '../types';
+import { EcuadorRegion, Destination } from '../types';
 
 interface AddDestinationModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (data: any) => void;
+  existingDestinations: Destination[];
 }
 
-export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen, onClose, onSubmit }) => {
+export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen, onClose, onSubmit, existingDestinations }) => {
   const [name, setName] = useState('');
   const [region, setRegion] = useState<EcuadorRegion>('Costa');
   const [province, setProvince] = useState('');
@@ -21,7 +23,7 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
   const [aiStatus, setAiStatus] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Provincias por región (Simplificado para UX)
+  // Provincias por región
   const provincesByRegion: Record<EcuadorRegion, string[]> = {
     'Costa': ['Manabí', 'Guayas', 'Santa Elena', 'El Oro', 'Esmeraldas', 'Los Ríos', 'Santo Domingo'],
     'Sierra': ['Pichincha', 'Azuay', 'Loja', 'Imbabura', 'Tungurahua', 'Cotopaxi', 'Chimborazo', 'Cañar', 'Carchi', 'Bolívar'],
@@ -30,6 +32,10 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
   };
 
   if (!isOpen) return null;
+
+  const normalize = (text: string) => {
+    return text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  };
 
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -46,6 +52,15 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
   const handleSubmit = async () => {
     if (!name || !province || !imagePreview) {
       alert("Por favor completa el nombre, la provincia y sube una foto.");
+      return;
+    }
+
+    // --- VALIDACIÓN DE DUPLICADOS ---
+    const normalizedName = normalize(name);
+    const duplicate = existingDestinations.find(d => normalize(d.name) === normalizedName);
+
+    if (duplicate) {
+      alert(`⚠️ ¡Atención!\n\nEl destino "${duplicate.name}" ya existe en nuestra base de datos (Ubicación: ${duplicate.location}).\n\nPor favor verifica si es el mismo lugar.`);
       return;
     }
 
@@ -151,7 +166,7 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
                   value={region}
                   onChange={(e) => {
                      setRegion(e.target.value as EcuadorRegion);
-                     setProvince(''); // Reset provincia al cambiar región
+                     setProvince('');
                   }}
                 >
                    <option value="Costa">Costa</option>
@@ -201,6 +216,11 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
                 <option value="Aventura">Aventura</option>
                 <option value="Gastronomía">Gastronomía</option>
              </select>
+          </div>
+
+          <div className="bg-yellow-50 p-3 rounded-lg flex gap-2 text-yellow-700 text-xs border border-yellow-100">
+             <AlertTriangle size={16} className="shrink-0" />
+             <p>El sistema verificará si este lugar ya existe antes de crearlo.</p>
           </div>
 
           <button 

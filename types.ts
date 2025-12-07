@@ -1,4 +1,3 @@
-
 export interface User {
   id: string;
   name: string;
@@ -24,8 +23,8 @@ export interface Post {
   userName: string;
   userAvatar: string;
   location: string;
-  imageUrl: string; // Used for both image and video URL (base64)
-  mediaType?: 'image' | 'video'; // New field
+  imageUrl: string; 
+  mediaType?: 'image' | 'video';
   caption: string;
   likes: number;
   comments: Comment[];
@@ -45,15 +44,15 @@ export interface Story {
   userId: string;
   userName: string;
   userAvatar: string;
-  imageUrl: string; // Used for both image and video URL
-  mediaType?: 'image' | 'video'; // New field
+  imageUrl: string;
+  mediaType?: 'image' | 'video';
   timestamp: number;
   isViewed: boolean;
   caption?: string;
   location?: string;
   likes?: number;
   isLiked?: boolean;
-  viewers?: Record<string, StoryViewer>; // Map of userId -> ViewerData
+  viewers?: Record<string, StoryViewer>;
 }
 
 export interface Suggestion {
@@ -64,6 +63,24 @@ export interface Suggestion {
   text: string;
   timestamp: number;
   isRead: boolean;
+}
+
+// --- CHAT TYPES ---
+
+export interface Message {
+  id: string;
+  senderId: string;
+  text: string; // Este texto estará cifrado en la base de datos
+  timestamp: number;
+  isRead?: boolean;
+}
+
+export interface Chat {
+  id: string; // ID único formado por los IDs de los participantes ordenados
+  participants: string[];
+  lastMessage: string;
+  lastTimestamp: number;
+  updatedAt: number;
 }
 
 export type EcuadorRegion = 'Costa' | 'Sierra' | 'Amazonía' | 'Insular';

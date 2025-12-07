@@ -1,7 +1,7 @@
-
-import { ref, set, remove, update, get } from "firebase/database";
+import { ref, set, remove, update, get, push, child } from "firebase/database";
 import { db } from "./firebase";
-import { Post, Story, Destination, Suggestion, User } from '../types';
+import { Post, Story, Destination, Suggestion, User, Chat, Message } from '../types';
+import { EncryptionService } from "./encryptionService";
 
 // NOTA: La lectura (GET) ahora se hace en App.tsx con listeners en tiempo real.
 // Este servicio se encarga principalmente de las escrituras (WRITE).
@@ -39,7 +39,6 @@ export const StorageService = {
     await set(ref(db, 'stories/' + story.id), story);
   },
 
-  // Nueva función para editar historias
   updateStory: async (storyId: string, updates: Partial<Story>) => {
     await update(ref(db, `stories/${storyId}`), updates);
   },
@@ -56,14 +55,12 @@ export const StorageService = {
   },
 
   markStoryViewed: async (storyId: string, user: User) => {
-    // Registramos que este usuario vio la historia
     const viewerData = {
       userId: user.id,
       userName: user.name,
       userAvatar: user.avatar,
       timestamp: Date.now()
     };
-    // Usamos el ID del usuario como clave para evitar duplicados
     await update(ref(db, `stories/${storyId}/viewers/${user.id}`), viewerData);
   },
 
@@ -81,6 +78,10 @@ export const StorageService = {
 
   addDestination: async (destination: Destination) => {
     await set(ref(db, `destinations/${destination.id}`), destination);
+  },
+
+  deleteDestination: async (destinationId: string) => {
+    await remove(ref(db, `destinations/${destinationId}`));
   },
 
   rateDestination: async (destinationId: string, userId: string, rating: number, currentRating: number, reviewCount: number = 0) => {
@@ -102,8 +103,56 @@ export const StorageService = {
     });
   },
 
+  // --- CHAT SYSTEM ---
+
+  // Crea un ID de chat determinista (siempre el mismo para los mismos 2 usuarios)
+  getChatId: (userId1: string, userId2: string) => {
+    return [userId1, userId2].sort().join('_');
+  },
+
+  initiateChat: async (currentUserId: string, targetUserId: string) => {
+    const chatId = StorageService.getChatId(currentUserId, targetUserId);
+    const chatRef = ref(db, `chats/${chatId}`);
+    
+    const snapshot = await get(chatRef);
+    if (!snapshot.exists()) {
+      const newChat: Chat = {
+        id: chatId,
+        participants: [currentUserId, targetUserId],
+        lastMessage: '',
+        lastTimestamp: Date.now(),
+        updatedAt: Date.now()
+      };
+      await set(chatRef, newChat);
+    }
+    return chatId;
+  },
+
+  sendMessage: async (chatId: string, senderId: string, text: string) => {
+    // 1. Encriptar el mensaje antes de enviarlo
+    const encryptedText = EncryptionService.encrypt(text, chatId);
+
+    // 2. Crear objeto mensaje
+    const messageRef = push(ref(db, `chats/${chatId}/messages`));
+    const newMessage: Message = {
+      id: messageRef.key!,
+      senderId,
+      text: encryptedText,
+      timestamp: Date.now()
+    };
+
+    await set(messageRef, newMessage);
+
+    // 3. Actualizar el "Último Mensaje" del chat para la vista de lista
+    // También encriptamos el preview para que no se vea en notificaciones inseguras
+    await update(ref(db, `chats/${chatId}`), {
+      lastMessage: encryptedText, 
+      lastTimestamp: Date.now(),
+      updatedAt: Date.now()
+    });
+  },
+
   // --- ADMIN FUNCTIONS ---
-  // Estas son las funciones que faltaban y causaban el error en App.tsx
 
   updateDestinationCover: async (destinationId: string, newImageUrl: string) => {
     await update(ref(db, `destinations/${destinationId}`), {

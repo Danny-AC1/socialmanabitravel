@@ -1,5 +1,6 @@
+
 import React, { useState, useRef, useEffect } from 'react';
-import { X, MapPin, Star, Info, Camera, Compass, Wallet, MessageSquare, Plus, Upload, Trash2, Edit2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, MapPin, Star, Info, Camera, Compass, Wallet, MessageSquare, Plus, Upload, Trash2, Edit2, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react';
 import { Destination } from '../types';
 import { resizeImage } from '../utils';
 
@@ -12,6 +13,7 @@ interface TravelGuideModalProps {
   isAdminUser: boolean; 
   onChangeCover?: (image: string) => void;
   onDeletePhoto?: (photoUrl: string) => void;
+  onDeleteDestination?: (id: string) => void; // Nueva prop
 }
 
 export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({ 
@@ -22,7 +24,8 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
   onAddPhoto, 
   isAdminUser,
   onChangeCover,
-  onDeletePhoto
+  onDeletePhoto,
+  onDeleteDestination
 }) => {
   const [userRating, setUserRating] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
@@ -58,6 +61,12 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
         alert("Error al subir imagen");
       }
       setIsUploading(false);
+    }
+  };
+
+  const handleDeleteDestination = () => {
+    if (confirm(`ATENCIÓN: ¿Estás seguro de ELIMINAR PERMANENTEMENTE "${destination.name}"?\n\nEsta acción no se puede deshacer.`)) {
+        if(onDeleteDestination) onDeleteDestination(destination.id);
     }
   };
 
@@ -134,15 +143,23 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
           </button>
 
           {isAdminUser && (
-             <div className="absolute top-4 left-4 z-10">
-                <button 
-                  onClick={() => coverInputRef.current?.click()}
-                  className="bg-white/20 hover:bg-white text-white hover:text-cyan-900 px-3 py-1.5 rounded-full backdrop-blur-md transition-all text-xs font-bold flex items-center gap-1"
-                >
-                   <Edit2 size={12} /> Cambiar Portada
-                </button>
-                <input type="file" ref={coverInputRef} hidden accept="image/*" onChange={(e) => handlePhotoUpload(e, true)} />
-             </div>
+             <>
+               <div className="absolute top-4 left-4 z-10 flex gap-2">
+                  <button 
+                    onClick={() => coverInputRef.current?.click()}
+                    className="bg-white/20 hover:bg-white text-white hover:text-cyan-900 px-3 py-1.5 rounded-full backdrop-blur-md transition-all text-xs font-bold flex items-center gap-1"
+                  >
+                     <Edit2 size={12} /> Portada
+                  </button>
+                  <button 
+                    onClick={handleDeleteDestination}
+                    className="bg-red-600/80 hover:bg-red-600 text-white px-3 py-1.5 rounded-full backdrop-blur-md transition-all text-xs font-bold flex items-center gap-1 border border-red-400"
+                  >
+                     <Trash2 size={12} /> Eliminar Lugar
+                  </button>
+                  <input type="file" ref={coverInputRef} hidden accept="image/*" onChange={(e) => handlePhotoUpload(e, true)} />
+               </div>
+             </>
           )}
 
           <div className="absolute bottom-0 left-0 p-6 md:p-8 text-white w-full">
@@ -302,7 +319,6 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
         </div>
       </div>
 
-      {/* Image Lightbox with Navigation */}
       {viewingImage && (
         <div 
           className="fixed inset-0 z-[60] bg-black/95 flex items-center justify-center animate-in fade-in duration-200 select-none"
@@ -318,7 +334,6 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
              <X size={32} />
            </button>
 
-           {/* Desktop Arrows */}
            {hasMultipleImages && (
              <>
                <button 
@@ -343,7 +358,6 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
              onClick={(e) => e.stopPropagation()}
            />
            
-           {/* Mobile Swipe Hint */}
            {hasMultipleImages && (
              <div className="absolute bottom-6 text-white/40 text-xs md:hidden animate-pulse pointer-events-none">
                Desliza para ver más
