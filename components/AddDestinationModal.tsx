@@ -1,6 +1,6 @@
 
 import React, { useState, useRef } from 'react';
-import { X, MapPin, Loader2, Image as ImageIcon, Wand2, Globe, AlertTriangle } from 'lucide-react';
+import { X, MapPin, Loader2, Image as ImageIcon, Wand2, Globe, AlertTriangle, CheckCircle, Search } from 'lucide-react';
 import { resizeImage } from '../utils';
 import { generateDestinationDetails } from '../services/geminiService';
 import { EcuadorRegion, Destination } from '../types';
@@ -21,6 +21,11 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [aiStatus, setAiStatus] = useState('');
+  
+  // Estados para la verificación
+  const [isVerified, setIsVerified] = useState(false);
+  const [verificationError, setVerificationError] = useState<string | null>(null);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Provincias por región
@@ -37,6 +42,31 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
     return text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
   };
 
+  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setName(e.target.value);
+    // Si cambia el nombre, reiniciamos la verificación
+    setIsVerified(false);
+    setVerificationError(null);
+  };
+
+  const handleVerify = () => {
+    if (!name.trim()) {
+        setVerificationError("Por favor escribe un nombre primero.");
+        return;
+    }
+
+    const normalizedName = normalize(name);
+    const duplicate = existingDestinations.find(d => normalize(d.name) === normalizedName);
+
+    if (duplicate) {
+        setVerificationError(`Este lugar ya existe en: ${duplicate.location}. No se puede duplicar.`);
+        setIsVerified(false);
+    } else {
+        setVerificationError(null);
+        setIsVerified(true);
+    }
+  };
+
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -50,17 +80,10 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
   };
 
   const handleSubmit = async () => {
+    if (!isVerified) return; // Doble seguridad
+
     if (!name || !province || !imagePreview) {
       alert("Por favor completa el nombre, la provincia y sube una foto.");
-      return;
-    }
-
-    // --- VALIDACIÓN DE DUPLICADOS ---
-    const normalizedName = normalize(name);
-    const duplicate = existingDestinations.find(d => normalize(d.name) === normalizedName);
-
-    if (duplicate) {
-      alert(`⚠️ ¡Atención!\n\nEl destino "${duplicate.name}" ya existe en nuestra base de datos (Ubicación: ${duplicate.location}).\n\nPor favor verifica si es el mismo lugar.`);
       return;
     }
 
@@ -97,6 +120,7 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
       setProvince('');
       setLocationDetail('');
       setImagePreview(null);
+      setIsVerified(false);
       onClose();
 
     } catch (error) {
@@ -123,123 +147,153 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
         </div>
 
         <div className="p-6 overflow-y-auto space-y-4">
-          <div 
-            onClick={() => fileInputRef.current?.click()}
-            className={`border-2 border-dashed rounded-2xl h-40 flex flex-col items-center justify-center cursor-pointer transition-colors ${
-              imagePreview ? 'border-transparent p-0' : 'border-gray-300 hover:border-cyan-500 bg-gray-50 hover:bg-cyan-50'
-            }`}
-          >
-            {imagePreview ? (
-              <img src={imagePreview} alt="Preview" className="w-full h-full object-cover rounded-2xl" />
-            ) : (
-              <div className="text-center text-gray-500">
-                <ImageIcon size={32} className="mx-auto mb-2 text-gray-400" />
-                <p className="font-semibold text-sm">Sube una foto portada</p>
-                <span className="text-xs">Requerido</span>
-              </div>
-            )}
-            <input 
-              type="file" 
-              ref={fileInputRef} 
-              className="hidden" 
-              accept="image/*" 
-              onChange={handleImageChange} 
-            />
-          </div>
-
+          
+          {/* 1. Nombre y Verificación */}
           <div>
             <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nombre del Lugar</label>
-            <input
-              type="text"
-              placeholder="Ej: Laguna de Quilotoa"
-              className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 outline-none focus:ring-2 focus:ring-cyan-500"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-             <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Región</label>
-                <select 
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 outline-none focus:ring-2 focus:ring-cyan-500"
-                  value={region}
-                  onChange={(e) => {
-                     setRegion(e.target.value as EcuadorRegion);
-                     setProvince('');
-                  }}
-                >
-                   <option value="Costa">Costa</option>
-                   <option value="Sierra">Sierra</option>
-                   <option value="Amazonía">Amazonía</option>
-                   <option value="Insular">Galápagos</option>
-                </select>
-             </div>
-             <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Provincia</label>
-                <select 
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 outline-none focus:ring-2 focus:ring-cyan-500"
-                  value={province}
-                  onChange={(e) => setProvince(e.target.value)}
-                >
-                   <option value="">Seleccionar</option>
-                   {provincesByRegion[region].map(p => (
-                      <option key={p} value={p}>{p}</option>
-                   ))}
-                </select>
-             </div>
-          </div>
-
-          <div>
-             <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Ciudad / Detalle (Opcional)</label>
-             <input
-               type="text"
-               placeholder="Ej: Pujilí"
-               className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 outline-none focus:ring-2 focus:ring-cyan-500"
-               value={locationDetail}
-               onChange={(e) => setLocationDetail(e.target.value)}
-             />
-          </div>
-
-          <div>
-             <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Categoría</label>
-             <select 
-               className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 outline-none focus:ring-2 focus:ring-cyan-500"
-               value={category}
-               onChange={(e) => setCategory(e.target.value)}
-             >
-                <option value="Naturaleza">Naturaleza</option>
-                <option value="Playa">Playa</option>
-                <option value="Montaña">Montaña</option>
-                <option value="Selva">Selva</option>
-                <option value="Cultura">Cultura</option>
-                <option value="Aventura">Aventura</option>
-                <option value="Gastronomía">Gastronomía</option>
-             </select>
-          </div>
-
-          <div className="bg-yellow-50 p-3 rounded-lg flex gap-2 text-yellow-700 text-xs border border-yellow-100">
-             <AlertTriangle size={16} className="shrink-0" />
-             <p>El sistema verificará si este lugar ya existe antes de crearlo.</p>
-          </div>
-
-          <button 
-            onClick={handleSubmit}
-            disabled={isSubmitting}
-            className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed mt-2"
-          >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="animate-spin" />
-                <span className="text-sm">{aiStatus}</span>
-              </>
-            ) : (
-              <>
-                <Wand2 size={20} />
-                <span>Generar con IA y Guardar</span>
-              </>
+            <div className="flex gap-2">
+                <input
+                type="text"
+                placeholder="Ej: Laguna de Quilotoa"
+                className={`flex-1 bg-gray-50 border rounded-xl p-3 outline-none focus:ring-2 transition-all ${verificationError ? 'border-red-300 focus:ring-red-200' : isVerified ? 'border-green-300 focus:ring-green-200' : 'border-gray-200 focus:ring-cyan-500'}`}
+                value={name}
+                onChange={handleNameChange}
+                />
+                {!isVerified && (
+                    <button 
+                        onClick={handleVerify}
+                        className="bg-stone-800 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-stone-700 transition-colors flex items-center gap-2"
+                    >
+                        <Search size={16} /> Verificar
+                    </button>
+                )}
+            </div>
+            
+            {verificationError && (
+                <p className="text-red-500 text-xs mt-2 flex items-center gap-1 font-medium animate-in slide-in-from-top-1">
+                    <AlertTriangle size={12} /> {verificationError}
+                </p>
             )}
-          </button>
+            
+            {isVerified && (
+                <p className="text-green-600 text-xs mt-2 flex items-center gap-1 font-bold animate-in slide-in-from-top-1">
+                    <CheckCircle size={14} /> ¡Lugar disponible! Puedes continuar.
+                </p>
+            )}
+          </div>
+
+          {/* Resto del formulario (Solo visible/habilitado si no hay error grave, pero visualmente siempre ahí) */}
+          <div className={`space-y-4 transition-opacity duration-300 ${!isVerified ? 'opacity-50 pointer-events-none grayscale-[0.5]' : 'opacity-100'}`}>
+            
+            <div 
+                onClick={() => isVerified && fileInputRef.current?.click()}
+                className={`border-2 border-dashed rounded-2xl h-40 flex flex-col items-center justify-center cursor-pointer transition-colors ${
+                imagePreview ? 'border-transparent p-0' : 'border-gray-300 hover:border-cyan-500 bg-gray-50 hover:bg-cyan-50'
+                }`}
+            >
+                {imagePreview ? (
+                <img src={imagePreview} alt="Preview" className="w-full h-full object-cover rounded-2xl" />
+                ) : (
+                <div className="text-center text-gray-500">
+                    <ImageIcon size={32} className="mx-auto mb-2 text-gray-400" />
+                    <p className="font-semibold text-sm">Sube una foto portada</p>
+                    <span className="text-xs">Requerido</span>
+                </div>
+                )}
+                <input 
+                type="file" 
+                ref={fileInputRef} 
+                className="hidden" 
+                accept="image/*" 
+                onChange={handleImageChange} 
+                />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Región</label>
+                    <select 
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 outline-none focus:ring-2 focus:ring-cyan-500"
+                    value={region}
+                    onChange={(e) => {
+                        setRegion(e.target.value as EcuadorRegion);
+                        setProvince('');
+                    }}
+                    >
+                    <option value="Costa">Costa</option>
+                    <option value="Sierra">Sierra</option>
+                    <option value="Amazonía">Amazonía</option>
+                    <option value="Insular">Galápagos</option>
+                    </select>
+                </div>
+                <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Provincia</label>
+                    <select 
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 outline-none focus:ring-2 focus:ring-cyan-500"
+                    value={province}
+                    onChange={(e) => setProvince(e.target.value)}
+                    >
+                    <option value="">Seleccionar</option>
+                    {provincesByRegion[region].map(p => (
+                        <option key={p} value={p}>{p}</option>
+                    ))}
+                    </select>
+                </div>
+            </div>
+
+            <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Ciudad / Detalle (Opcional)</label>
+                <input
+                type="text"
+                placeholder="Ej: Pujilí"
+                className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 outline-none focus:ring-2 focus:ring-cyan-500"
+                value={locationDetail}
+                onChange={(e) => setLocationDetail(e.target.value)}
+                />
+            </div>
+
+            <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Categoría</label>
+                <select 
+                className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 outline-none focus:ring-2 focus:ring-cyan-500"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                >
+                    <option value="Naturaleza">Naturaleza</option>
+                    <option value="Playa">Playa</option>
+                    <option value="Montaña">Montaña</option>
+                    <option value="Selva">Selva</option>
+                    <option value="Cultura">Cultura</option>
+                    <option value="Aventura">Aventura</option>
+                    <option value="Gastronomía">Gastronomía</option>
+                </select>
+            </div>
+          </div>
+
+          {/* Botón Final (Solo visible si está verificado) */}
+          {isVerified ? (
+              <button 
+                onClick={handleSubmit}
+                disabled={isSubmitting}
+                className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed mt-4 animate-in fade-in slide-in-from-bottom-2"
+              >
+                {isSubmitting ? (
+                <>
+                    <Loader2 className="animate-spin" />
+                    <span className="text-sm">{aiStatus}</span>
+                </>
+                ) : (
+                <>
+                    <Wand2 size={20} />
+                    <span>Generar con IA y Guardar</span>
+                </>
+                )}
+              </button>
+          ) : (
+              <div className="bg-gray-100 text-gray-400 text-center py-4 rounded-xl text-sm font-medium mt-4 border border-gray-200">
+                  Verifica el nombre para continuar
+              </div>
+          )}
         </div>
       </div>
     </div>

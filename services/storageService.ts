@@ -1,4 +1,3 @@
-
 import { ref, set, remove, update, get, push, child } from "firebase/database";
 import { db } from "./firebase";
 import { Post, Story, Destination, Suggestion, User, Chat, Message } from '../types';
@@ -138,29 +137,37 @@ export const StorageService = {
   ) => {
     // 1. Encriptar contenido
     const encryptedText = text ? EncryptionService.encrypt(text, chatId) : '';
-    // Para simplificar demo, mediaUrl también se cifra si existe
-    const encryptedMedia = mediaUrl ? EncryptionService.encrypt(mediaUrl, chatId) : undefined;
+    const encryptedMedia = mediaUrl ? EncryptionService.encrypt(mediaUrl, chatId) : null;
 
-    // 2. Crear objeto mensaje
+    // 2. Crear referencia
     const messageRef = push(ref(db, `chats/${chatId}/messages`));
-    const newMessage: Message = {
+    
+    // 3. Construir objeto LIMPIO (sin undefined)
+    // Firebase falla si pasamos propiedades con valor undefined
+    const payload: any = {
       id: messageRef.key!,
       senderId,
       text: encryptedText,
       type,
-      mediaUrl: encryptedMedia,
-      replyTo: replyTo || null,
       timestamp: Date.now(),
       isRead: false
     };
 
-    await set(messageRef, newMessage);
+    // Solo agregamos estas propiedades si tienen valor real
+    if (encryptedMedia) payload.mediaUrl = encryptedMedia;
+    if (replyTo) payload.replyTo = replyTo;
 
-    // 3. Actualizar chat (Vista previa)
+    // 4. Guardar mensaje
+    await set(messageRef, payload);
+
+    // 5. Actualizar vista previa del chat
     let previewText = encryptedText;
-    if (type === 'image') previewText = EncryptionService.encrypt('📷 Foto', chatId);
-    if (type === 'video') previewText = EncryptionService.encrypt('🎥 Video', chatId);
-    if (type === 'audio') previewText = EncryptionService.encrypt('🎤 Nota de voz', chatId);
+    // Si es solo multimedia, mostramos descripción cifrada
+    if (!text) {
+        if (type === 'image') previewText = EncryptionService.encrypt('📷 Foto', chatId);
+        else if (type === 'video') previewText = EncryptionService.encrypt('🎥 Video', chatId);
+        else if (type === 'audio') previewText = EncryptionService.encrypt('🎤 Nota de voz', chatId);
+    }
 
     await update(ref(db, `chats/${chatId}`), {
       lastMessage: previewText, 

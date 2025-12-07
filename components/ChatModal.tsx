@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, Send, Lock, ChevronLeft, Search, Image as ImageIcon, 
   Mic, Paperclip, Trash2, Check, CheckCheck, 
-  Play, Pause, Video
+  Play, Video, Reply as ReplyIcon
 } from 'lucide-react';
 import { User, Chat, Message } from '../types';
 import { StorageService } from '../services/storageService';
@@ -39,10 +39,9 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   const [mediaPreview, setMediaPreview] = useState<{type: 'image'|'video'|'audio', url: string} | null>(null);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   
-  // Recording States
-  const [isRecording, setIsRecording] = useState(false);
+  // Recording States (idle, recording, canceling)
+  const [recordingStatus, setRecordingStatus] = useState<'idle' | 'recording' | 'canceling'>('idle');
   const [recordingDuration, setRecordingDuration] = useState(0);
-  const [cancelThresholdReached, setCancelThresholdReached] = useState(false);
   
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -52,9 +51,29 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   const recordingTimerRef = useRef<any>(null);
   const touchStartXRef = useRef<number | null>(null);
 
+  // Swipe States
+  const [swipeStartX, setSwipeStartX] = useState<number | null>(null);
+  const [swipedMessageId, setSwipedMessageId] = useState<string | null>(null);
+
+  // --- HELPERS ---
+
+  const getChatPartner = (chat: Chat) => {
+    const partnerId = chat.participants.find(id => id !== currentUser.id);
+    return allUsers.find(u => u.id === partnerId);
+  };
+
+  const getSenderName = (id: string) => {
+      return id === currentUser.id ? 'Tú' : allUsers.find(u => u.id === id)?.name || 'Usuario';
+  };
+
+  const formatTime = (seconds: number) => {
+      const mins = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   // --- EFFECTS ---
 
-  // 1. Cargar Lista de Chats
   useEffect(() => {
     if (!isOpen) return;
     const chatsRef = ref(db, 'chats');
@@ -71,7 +90,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({
     });
   }, [isOpen, currentUser.id]);
 
-  // 2. Cargar Mensajes del Chat Activo
   useEffect(() => {
     if (!activeChatId) {
       setMessages([]);
@@ -90,7 +108,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({
         
         setMessages(loadedMessages.sort((a, b) => a.timestamp - b.timestamp));
         
-        // Marcar como leídos los que no son míos
         if (loadedMessages.some(m => !m.isRead && m.senderId !== currentUser.id)) {
            StorageService.markChatAsRead(activeChatId, currentUser.id);
         }
@@ -100,26 +117,19 @@ export const ChatModal: React.FC<ChatModalProps> = ({
     });
   }, [activeChatId]);
 
-  // 3. Auto Scroll
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages, mediaPreview, replyTo]);
 
-  // 4. Initial Chat
   useEffect(() => {
     if (initialChatId) setActiveChatId(initialChatId);
   }, [initialChatId]);
 
   if (!isOpen) return null;
 
-  // --- LOGIC ---
-
-  const getChatPartner = (chat: Chat) => {
-    const partnerId = chat.participants.find(id => id !== currentUser.id);
-    return allUsers.find(u => u.id === partnerId);
-  };
+  // --- HANDLERS ---
 
   const handleStartChat = async (targetUserId: string) => {
     const chatId = await StorageService.initiateChat(currentUser.id, targetUserId);
@@ -128,7 +138,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   };
 
   const handleSendMessage = async () => {
-    // Validar si hay contenido real
     if ((!inputText.trim() && !mediaPreview) || !activeChatId) return;
 
     let type: 'text' | 'image' | 'video' | 'audio' = 'text';
@@ -138,25 +147,24 @@ export const ChatModal: React.FC<ChatModalProps> = ({
     if (mediaPreview) {
         type = mediaPreview.type;
         url = mediaPreview.url;
-        // Si es solo media y no hay texto, content queda vacío (o con descripción opcional)
         if (!content.trim()) content = '';
     }
 
     const replyData = replyTo ? {
         id: replyTo.id,
         text: replyTo.type === 'text' ? replyTo.text : `[${replyTo.type}]`,
-        senderName: allUsers.find(u => u.id === replyTo.senderId)?.name || 'Usuario',
+        senderName: getSenderName(replyTo.senderId),
         type: replyTo.type
     } : undefined;
 
     try {
         await StorageService.sendMessage(activeChatId, currentUser.id, content, type, url, replyData);
-        // Limpiar
         setInputText('');
         setMediaPreview(null);
         setReplyTo(null);
-    } catch (e) {
-        alert("Error enviando mensaje");
+    } catch (e: any) {
+        console.error("Send Error:", e);
+        alert("Error enviando mensaje: " + (e.message || "Desconocido"));
     }
   };
 
@@ -178,7 +186,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  // --- AUDIO RECORDING (TELEGRAM STYLE) ---
+  // --- OPTIMIZED AUDIO RECORDING ---
 
   const startRecording = async () => {
     try {
@@ -192,81 +200,93 @@ export const ChatModal: React.FC<ChatModalProps> = ({
 
         mediaRecorderRef.current = recorder;
         recorder.start();
-        setIsRecording(true);
+        setRecordingStatus('recording');
         setRecordingDuration(0);
-        setCancelThresholdReached(false);
         
         recordingTimerRef.current = setInterval(() => {
             setRecordingDuration(prev => prev + 1);
         }, 1000);
 
     } catch (err) {
+        console.error(err);
         alert("No se pudo acceder al micrófono.");
+        setRecordingStatus('idle');
     }
   };
 
   const stopRecording = (shouldSave: boolean) => {
-    if (!mediaRecorderRef.current || !isRecording) return;
+    if (mediaRecorderRef.current && recordingStatus !== 'idle') {
+        mediaRecorderRef.current.stop();
+        mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
+        
+        clearInterval(recordingTimerRef.current);
 
-    mediaRecorderRef.current.stop();
-    mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
-    clearInterval(recordingTimerRef.current);
-    
-    if (shouldSave) {
-        // Pequeño delay para asegurar que ondataavailable capture todo
-        setTimeout(() => {
-            const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-            const reader = new FileReader();
-            reader.readAsDataURL(audioBlob);
-            reader.onloadend = () => {
-                const base64Audio = reader.result as string;
-                // En lugar de enviar directo, lo ponemos en preview
-                setMediaPreview({ type: 'audio', url: base64Audio });
-            };
-        }, 100);
+        if (shouldSave) {
+            setTimeout(() => {
+                const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+                const reader = new FileReader();
+                reader.readAsDataURL(audioBlob);
+                reader.onloadend = () => {
+                    const base64Audio = reader.result as string;
+                    setMediaPreview({ type: 'audio', url: base64Audio });
+                };
+            }, 200);
+        }
     }
-
-    setIsRecording(false);
-    setRecordingDuration(0);
-    setCancelThresholdReached(false);
+    setRecordingStatus('idle');
     touchStartXRef.current = null;
   };
 
-  // Gestures Handlers
   const handleRecordStart = (e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault(); // Previene selección o menú contextual
+    e.preventDefault(); 
     if ('touches' in e) touchStartXRef.current = e.touches[0].clientX;
     startRecording();
   };
 
   const handleRecordMove = (e: React.TouchEvent) => {
-    if (!isRecording) return;
+    if (recordingStatus === 'idle') return;
     const currentX = e.touches[0].clientX;
     const startX = touchStartXRef.current || currentX;
     
-    // Si desliza 100px a la izquierda -> Estado de Cancelar
+    // Slide left > 100px to cancel
     if (startX - currentX > 100) {
-        setCancelThresholdReached(true);
+        setRecordingStatus('canceling');
     } else {
-        setCancelThresholdReached(false);
+        setRecordingStatus('recording');
     }
   };
 
   const handleRecordEnd = (e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault();
-    if (cancelThresholdReached) {
-        stopRecording(false); // Descartar
+    if (recordingStatus === 'canceling') {
+        stopRecording(false); // Discard
     } else {
-        stopRecording(true); // Guardar en preview
+        stopRecording(true); // Save to preview
     }
   };
 
-  // --- RENDER HELPERS ---
-  const formatTime = (seconds: number) => {
-      const mins = Math.floor(seconds / 60);
-      const secs = seconds % 60;
-      return `${mins}:${secs.toString().padStart(2, '0')}`;
+  // --- SWIPE TO REPLY ---
+
+  const handleSwipeStart = (e: React.TouchEvent, msg: Message) => {
+    setSwipeStartX(e.targetTouches[0].clientX);
+    setSwipedMessageId(msg.id);
   };
+
+  const handleSwipeMove = (e: React.TouchEvent) => {
+    if (swipeStartX === null) return;
+  };
+
+  const handleSwipeEnd = (e: React.TouchEvent, msg: Message) => {
+    if (swipeStartX === null) return;
+    const endX = e.changedTouches[0].clientX;
+    if (endX - swipeStartX > 50) { 
+        setReplyTo(msg);
+    }
+    setSwipeStartX(null);
+    setSwipedMessageId(null);
+  };
+
+  // --- RENDER ---
 
   const filteredUsers = searchTerm 
     ? allUsers.filter(u => u.id !== currentUser.id && u.name.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -280,7 +300,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-0 md:p-4 animate-in fade-in duration-200">
       <div className="bg-white w-full h-full md:max-w-5xl md:h-[90vh] md:rounded-3xl overflow-hidden shadow-2xl flex flex-row">
         
-        {/* === LEFT SIDEBAR (Chat List) === */}
+        {/* LEFT SIDEBAR */}
         <div className={`w-full md:w-[350px] bg-white border-r border-gray-200 flex flex-col ${activeChatId ? 'hidden md:flex' : 'flex'}`}>
           <div className="p-3 border-b border-gray-100 flex items-center gap-3 bg-white">
              <button onClick={onClose} className="md:hidden text-gray-500"><X size={24} /></button>
@@ -342,10 +362,9 @@ export const ChatModal: React.FC<ChatModalProps> = ({
           </div>
         </div>
 
-        {/* === RIGHT SIDE (Chat Window) === */}
+        {/* RIGHT SIDE (Chat Window) */}
         <div className={`flex-1 bg-[#8e9aaf] flex flex-col relative ${!activeChatId ? 'hidden md:flex' : 'flex'}`}>
            
-           {/* Wallpaper Background */}
            <div className="absolute inset-0 opacity-10 pointer-events-none" style={{
               backgroundImage: `url("https://web.telegram.org/img/bg_0.png")`, 
               backgroundSize: '400px'
@@ -363,19 +382,11 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                           <div className="flex items-center text-xs text-cyan-600 gap-1"><Lock size={10} /> Cifrado E2E</div>
                        </div>
                     </div>
-                    <div className="flex gap-4 text-gray-400">
-                       <button onClick={(e) => { e.stopPropagation(); onClose(); }} className="hidden md:block hover:text-red-500"><X size={24} /></button>
-                    </div>
+                    <button onClick={(e) => { e.stopPropagation(); onClose(); }} className="hidden md:block hover:text-red-500"><X size={24} /></button>
                  </div>
 
                  {/* Messages List */}
                  <div className="flex-1 overflow-y-auto p-4 space-y-2 z-10" ref={messagesEndRef}>
-                    <div className="text-center my-4">
-                       <span className="bg-black/20 text-white text-xs px-3 py-1 rounded-full backdrop-blur-sm">
-                          {new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
-                       </span>
-                    </div>
-
                     {messages.map((msg, idx) => {
                        const isMe = msg.senderId === currentUser.id;
                        const showTail = idx === messages.length - 1 || messages[idx + 1]?.senderId !== msg.senderId;
@@ -384,6 +395,9 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                           <div 
                              key={msg.id} 
                              className={`flex w-full ${isMe ? 'justify-end' : 'justify-start'} group relative`}
+                             onTouchStart={(e) => handleSwipeStart(e, msg)}
+                             onTouchMove={handleSwipeMove}
+                             onTouchEnd={(e) => handleSwipeEnd(e, msg)}
                           >
                              <div 
                                 className={`max-w-[75%] md:max-w-[60%] relative shadow-sm text-sm p-1
@@ -394,9 +408,10 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                                    ${!showTail && isMe ? 'rounded-tr-2xl mb-1' : ''}
                                    ${!showTail && !isMe ? 'rounded-tl-2xl mb-1' : ''}
                                    ${showTail ? 'mb-3' : ''}
+                                   ${swipedMessageId === msg.id ? 'translate-x-10' : ''}
+                                   transition-transform
                                 `}
                              >
-                                {/* Reply Context */}
                                 {msg.replyTo && (
                                    <div className={`mx-2 mt-2 px-2 py-1 rounded border-l-2 mb-1 cursor-pointer bg-black/5 border-cyan-500`}>
                                       <p className="text-cyan-700 font-bold text-xs">{msg.replyTo.senderName}</p>
@@ -404,7 +419,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                                    </div>
                                 )}
 
-                                {/* Content */}
                                 <div className="px-2 pb-4 min-w-[120px]">
                                    {msg.type === 'image' && msg.mediaUrl && (
                                       <img src={msg.mediaUrl} className="rounded-lg mb-1 max-w-full" alt="Media" />
@@ -423,7 +437,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                                    {msg.text && <p className="whitespace-pre-wrap leading-snug px-1 pt-1">{msg.text}</p>}
                                 </div>
 
-                                {/* Metadata (Time & Checks) */}
                                 <div className="absolute bottom-1 right-2 flex items-center gap-1 select-none">
                                    <span className={`text-[10px] ${isMe ? 'text-cyan-800/60' : 'text-gray-400'}`}>
                                       {new Date(msg.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
@@ -434,6 +447,13 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                                       : <Check size={14} className="text-cyan-600" />
                                    )}
                                 </div>
+
+                                <button 
+                                    onClick={() => setReplyTo(msg)}
+                                    className={`absolute top-2 ${isMe ? '-left-10' : '-right-10'} p-2 bg-white rounded-full shadow opacity-0 group-hover:opacity-100 transition-opacity md:block hidden text-gray-500`}
+                                >
+                                    <ReplyIcon size={16} />
+                                </button>
                              </div>
                           </div>
                        );
@@ -449,7 +469,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                        <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-t border-gray-200 animate-in slide-in-from-bottom-2">
                           <div className="flex items-center gap-3 overflow-hidden">
                              <div className="border-l-2 border-cyan-600 pl-2">
-                                <p className="text-cyan-600 font-bold text-xs">Responder a {allUsers.find(u=>u.id===replyTo.senderId)?.name}</p>
+                                <p className="text-cyan-600 font-bold text-xs">Responder a {getSenderName(replyTo.senderId)}</p>
                                 <p className="text-gray-500 text-xs truncate max-w-[200px]">{replyTo.type === 'text' ? replyTo.text : 'Archivo adjunto'}</p>
                              </div>
                           </div>
@@ -457,7 +477,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                        </div>
                     )}
 
-                    {/* Media Preview */}
+                    {/* Media Preview (Includes Audio) */}
                     {mediaPreview && (
                        <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 flex justify-between items-center animate-in slide-in-from-bottom-2">
                           <div className="flex gap-4 items-center">
@@ -468,6 +488,9 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                                 </span>
                                 <span className="text-xs text-gray-500">Listo para enviar</span>
                              </div>
+                             {mediaPreview.type === 'audio' && (
+                                <audio src={mediaPreview.url} controls className="h-8 w-32" />
+                             )}
                           </div>
                           <button onClick={() => setMediaPreview(null)}><Trash2 size={20} className="text-red-500" /></button>
                        </div>
@@ -476,21 +499,25 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                     {/* Controls & Input */}
                     <div className="flex items-end gap-2 p-2 px-3">
                        
-                       {/* Attach Button */}
-                       <button onClick={() => fileInputRef.current?.click()} className="p-3 text-gray-500 hover:text-gray-700 transition-colors">
-                          <Paperclip size={24} className="rotate-45" />
-                       </button>
-                       <input type="file" ref={fileInputRef} hidden accept="image/*,video/*" onChange={handleFileUpload} />
+                       {/* Left Attachment Button (Hidden while recording) */}
+                       {recordingStatus === 'idle' && (
+                           <>
+                               <button onClick={() => fileInputRef.current?.click()} className="p-3 text-gray-500 hover:text-gray-700 transition-colors">
+                                  <Paperclip size={24} className="rotate-45" />
+                               </button>
+                               <input type="file" ref={fileInputRef} hidden accept="image/*,video/*" onChange={handleFileUpload} />
+                           </>
+                       )}
 
-                       {/* Text Input */}
-                       {isRecording ? (
-                          <div className={`flex-1 h-[48px] flex items-center px-4 rounded-2xl transition-colors ${cancelThresholdReached ? 'bg-red-50' : 'bg-gray-100'}`}>
+                       {/* Center Area: Textarea OR Recording Status */}
+                       {recordingStatus !== 'idle' ? (
+                          <div className={`flex-1 h-[48px] flex items-center px-4 rounded-2xl transition-colors ${recordingStatus === 'canceling' ? 'bg-red-50' : 'bg-gray-100'}`}>
                              <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse mr-3"></div>
-                             <span className={`font-mono font-bold ${cancelThresholdReached ? 'text-red-500' : 'text-gray-700'}`}>
+                             <span className={`font-mono font-bold ${recordingStatus === 'canceling' ? 'text-red-500' : 'text-gray-700'}`}>
                                 {formatTime(recordingDuration)}
                              </span>
                              <span className="ml-auto text-xs text-gray-400 uppercase font-bold tracking-wide">
-                                {cancelThresholdReached ? 'Soltar para cancelar' : '< Desliza para cancelar'}
+                                {recordingStatus === 'canceling' ? 'Soltar para cancelar' : '< Desliza para cancelar'}
                              </span>
                           </div>
                        ) : (
@@ -509,20 +536,21 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                           />
                        )}
 
-                       {/* DYNAMIC SEND / MIC BUTTON */}
-                       {(inputText.trim() || mediaPreview) ? (
+                       {/* Dynamic Button: SEND or MIC */}
+                       {(inputText.trim() || mediaPreview) && recordingStatus === 'idle' ? (
                           <button 
                              onClick={() => handleSendMessage()}
-                             className="p-3 bg-cyan-500 hover:bg-cyan-600 text-white rounded-full shadow-md transition-all active:scale-95 duration-200 ease-out flex items-center justify-center"
+                             type="button"
+                             className="p-3 bg-cyan-500 hover:bg-cyan-600 text-white rounded-full shadow-md transition-all active:scale-95 duration-200 ease-out flex items-center justify-center mb-1"
                           >
                              <Send size={20} className="ml-0.5 mt-0.5" />
                           </button>
                        ) : (
                           <div
-                             className={`p-3 rounded-full shadow-md transition-all duration-200 cursor-pointer touch-none select-none flex items-center justify-center ${
-                                cancelThresholdReached 
+                             className={`p-3 rounded-full shadow-md mb-1 transition-all duration-200 cursor-pointer touch-none select-none flex items-center justify-center ${
+                                recordingStatus === 'canceling' 
                                 ? 'bg-red-500 text-white scale-110 shake' 
-                                : isRecording 
+                                : recordingStatus === 'recording' 
                                    ? 'bg-cyan-500 text-white scale-125' 
                                    : 'bg-cyan-500 text-white hover:bg-cyan-600'
                              }`}
@@ -532,18 +560,18 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                              onMouseUp={handleRecordEnd}
                              onTouchEnd={handleRecordEnd}
                           >
-                             {cancelThresholdReached ? <Trash2 size={24} /> : <Mic size={24} />}
+                             {recordingStatus === 'canceling' ? <Trash2 size={24} /> : <Mic size={24} />}
                           </div>
                        )}
                     </div>
                  </div>
               </>
            ) : (
-              <div className="flex-1 flex flex-col items-center justify-center text-white/50 p-8 select-none">
-                 <div className="bg-black/20 p-6 rounded-full mb-4">
-                    <Send size={48} />
+              <div className="flex-1 flex flex-col items-center justify-center text-stone-300 p-8">
+                 <div className="bg-stone-50 p-6 rounded-full mb-4">
+                    <Lock size={48} className="opacity-20" />
                  </div>
-                 <p className="bg-black/20 px-4 py-1 rounded-full text-sm">Selecciona un chat para comenzar</p>
+                 <p>Selecciona un chat para comenzar.</p>
               </div>
            )}
         </div>

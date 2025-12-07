@@ -77,7 +77,7 @@ export interface Message {
     id: string;
     text: string;
     senderName: string;
-    type?: string; // Agregado para soportar iconos en respuestas
+    type?: string; // Campo opcional para icono en respuesta
   } | null;
   timestamp: number;
   isRead: boolean;
