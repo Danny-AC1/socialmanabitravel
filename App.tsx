@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Map as MapIcon, Compass, UserCircle, Camera, Search, Grid, LogOut, ArrowRight, UserPlus, UserCheck, ChevronLeft, PlusCircle, Globe, Filter, Edit3, X, MessageSquarePlus, Mail, MapPin, Plus, MessageCircle } from 'lucide-react';
 import { HeroSection } from './components/HeroSection';
@@ -15,7 +16,7 @@ import { ChatModal } from './components/ChatModal';
 import { AuthScreen } from './components/AuthScreen';
 import { PostViewer } from './components/PostViewer';
 import { ALL_DESTINATIONS as STATIC_DESTINATIONS } from './constants';
-import { Post, Story, Destination, User, EcuadorRegion, Suggestion } from './types';
+import { Post, Story, Destination, User, EcuadorRegion, Suggestion, Chat } from './types';
 import { StorageService } from './services/storageService';
 import { AuthService } from './services/authService';
 import { resizeImage, isAdmin } from './utils';
@@ -31,6 +32,7 @@ function App() {
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [destinations, setDestinations] = useState<Destination[]>(STATIC_DESTINATIONS);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
   
   const [activeTab, setActiveTab] = useState<Tab>('home');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -115,9 +117,7 @@ function App() {
 
   const handleOpenChat = async (targetUserId?: string) => {
     if (targetUserId && user) {
-        // Generar ID de chat o buscarlo
         const chatId = StorageService.getChatId(user.id, targetUserId);
-        // Asegurar que el chat existe en la DB
         await StorageService.initiateChat(user.id, targetUserId);
         setInitialChatId(chatId);
     } else {
@@ -181,14 +181,36 @@ function App() {
       setSuggestions(loadedSuggestions.sort((a, b) => b.timestamp - a.timestamp));
     });
 
+    // --- GLOBAL CHAT LISTENER FOR UNREAD COUNT ---
+    const chatsRef = ref(db, 'chats');
+    const unsubscribeChats = onValue(chatsRef, (snapshot) => {
+        if (!user) return;
+        const data = snapshot.val();
+        let totalUnread = 0;
+        
+        if (data) {
+            const userChats = Object.values(data) as Chat[];
+            userChats.forEach((chat: any) => {
+                if (chat.participants && chat.participants.includes(user.id) && chat.messages) {
+                    const messages = Object.values(chat.messages) as any[];
+                    // Count messages where I am NOT the sender and isRead is false
+                    const unread = messages.filter(m => m.senderId !== user.id && !m.isRead).length;
+                    totalUnread += unread;
+                }
+            });
+        }
+        setUnreadMessagesCount(totalUnread);
+    });
+
     return () => {
       unsubscribePosts();
       unsubscribeStories();
       unsubscribeUsers();
       unsubscribeDestinations();
       unsubscribeSuggestions();
+      unsubscribeChats();
     };
-  }, []);
+  }, [user]); // Re-run if user changes
 
   useEffect(() => {
     if (user && allUsers.length > 0) {
@@ -344,6 +366,11 @@ function App() {
                 className="bg-white text-cyan-700 border border-stone-200 p-2 rounded-full relative"
              >
                 <MessageCircle size={20} />
+                {unreadMessagesCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-4 h-4 flex items-center justify-center rounded-full font-bold border border-white">
+                        {unreadMessagesCount}
+                    </span>
+                )}
              </button>
              {isAdminUser && (
                <button 
@@ -376,10 +403,15 @@ function App() {
              {/* CHAT BUTTON DESKTOP */}
              <button 
                 onClick={() => handleOpenChat()} 
-                className="hover:text-cyan-700 transition-colors"
+                className="hover:text-cyan-700 transition-colors relative"
                 title="Mensajes Privados"
              >
                 <MessageCircle size={24} />
+                {unreadMessagesCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-4 h-4 flex items-center justify-center rounded-full font-bold border-2 border-white">
+                        {unreadMessagesCount}
+                    </span>
+                )}
              </button>
 
              {isAdminUser && (
@@ -399,9 +431,7 @@ function App() {
         </div>
       </nav>
 
-      {/* Main Content Areas */}
       <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8 pt-6 px-4 md:px-0">
-        {/* ... (Existing Content Logic for Tabs) ... */}
         <div className="md:col-span-2">
           {activeTab === 'home' && (
             <>
@@ -509,7 +539,7 @@ function App() {
                        </div>
                      )}
 
-                     {/* DESTINATIONS AND POSTS SECTIONS SAME AS BEFORE */}
+                     {/* DESTINATIONS SECTION */}
                      {searchDestinations.length > 0 && (
                        <div>
                           <div className="flex items-center justify-between mb-3 px-1">
@@ -533,6 +563,7 @@ function App() {
                        </div>
                      )}
 
+                     {/* POSTS SECTION */}
                      {filteredPosts.length > 0 && (
                         <div>
                            <div className="flex items-center justify-between mb-3 px-1">
@@ -649,7 +680,6 @@ function App() {
           )}
         </div>
 
-        {/* SIDEBAR */}
         <div className="hidden md:block col-span-1 space-y-6">
           <div className="sticky top-24">
             <div className="bg-white rounded-2xl shadow-sm border border-stone-100 p-5 mb-6">

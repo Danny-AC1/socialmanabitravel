@@ -1,3 +1,4 @@
+
 import { ref, set, remove, update, get, push, child } from "firebase/database";
 import { db } from "./firebase";
 import { Post, Story, Destination, Suggestion, User, Chat, Message } from '../types';
@@ -105,7 +106,6 @@ export const StorageService = {
 
   // --- CHAT SYSTEM ---
 
-  // Crea un ID de chat determinista (siempre el mismo para los mismos 2 usuarios)
   getChatId: (userId1: string, userId2: string) => {
     return [userId1, userId2].sort().join('_');
   },
@@ -128,9 +128,18 @@ export const StorageService = {
     return chatId;
   },
 
-  sendMessage: async (chatId: string, senderId: string, text: string) => {
-    // 1. Encriptar el mensaje antes de enviarlo
-    const encryptedText = EncryptionService.encrypt(text, chatId);
+  sendMessage: async (
+    chatId: string, 
+    senderId: string, 
+    text: string, 
+    type: 'text' | 'image' | 'video' | 'audio' = 'text',
+    mediaUrl?: string,
+    replyTo?: Message['replyTo']
+  ) => {
+    // 1. Encriptar contenido
+    const encryptedText = text ? EncryptionService.encrypt(text, chatId) : '';
+    // Para simplificar demo, mediaUrl también se cifra si existe
+    const encryptedMedia = mediaUrl ? EncryptionService.encrypt(mediaUrl, chatId) : undefined;
 
     // 2. Crear objeto mensaje
     const messageRef = push(ref(db, `chats/${chatId}/messages`));
@@ -138,18 +147,46 @@ export const StorageService = {
       id: messageRef.key!,
       senderId,
       text: encryptedText,
-      timestamp: Date.now()
+      type,
+      mediaUrl: encryptedMedia,
+      replyTo: replyTo || null,
+      timestamp: Date.now(),
+      isRead: false
     };
 
     await set(messageRef, newMessage);
 
-    // 3. Actualizar el "Último Mensaje" del chat para la vista de lista
-    // También encriptamos el preview para que no se vea en notificaciones inseguras
+    // 3. Actualizar chat (Vista previa)
+    let previewText = encryptedText;
+    if (type === 'image') previewText = EncryptionService.encrypt('📷 Foto', chatId);
+    if (type === 'video') previewText = EncryptionService.encrypt('🎥 Video', chatId);
+    if (type === 'audio') previewText = EncryptionService.encrypt('🎤 Nota de voz', chatId);
+
     await update(ref(db, `chats/${chatId}`), {
-      lastMessage: encryptedText, 
+      lastMessage: previewText, 
       lastTimestamp: Date.now(),
       updatedAt: Date.now()
     });
+  },
+
+  markChatAsRead: async (chatId: string, currentUserId: string) => {
+    // Obtener mensajes no leídos que NO sean míos
+    const messagesRef = ref(db, `chats/${chatId}/messages`);
+    const snapshot = await get(messagesRef);
+    
+    if (snapshot.exists()) {
+      const updates: any = {};
+      snapshot.forEach((childSnapshot) => {
+        const msg = childSnapshot.val();
+        if (!msg.isRead && msg.senderId !== currentUserId) {
+          updates[`${childSnapshot.key}/isRead`] = true;
+        }
+      });
+      
+      if (Object.keys(updates).length > 0) {
+        await update(messagesRef, updates);
+      }
+    }
   },
 
   // --- ADMIN FUNCTIONS ---
