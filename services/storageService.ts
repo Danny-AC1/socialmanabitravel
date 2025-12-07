@@ -2,13 +2,13 @@ import { ref, set, remove, update, get, push } from "firebase/database";
 import { db } from "./firebase";
 import { Post, Story, Destination, Suggestion, User, Chat, Message, Notification } from '../types';
 import { EncryptionService } from "./encryptionService";
-import { AuthService } from "./authService"; // Necesario para obtener seguidores
+import { AuthService } from "./authService";
 
 export const StorageService = {
   
   savePost: async (post: Post) => {
     await set(ref(db, 'posts/' + post.id), post);
-    // Notificar
+    // Notificar a los seguidores
     await StorageService.notifyFollowers(post.userId, post.userName, post.userAvatar, 'new_post', post.id);
   },
 
@@ -24,6 +24,11 @@ export const StorageService = {
     const isLiked = post.isLiked;
     const newLikes = isLiked ? (post.likes - 1) : (post.likes + 1);
     await update(ref(db, `posts/${post.id}`), { likes: newLikes });
+    
+    // Notificación opcional (simplificada)
+    if (!isLiked && post.userId !== userId) {
+        // En una app real verificaríamos si ya se notificó
+    }
   },
 
   addComment: async (postId: string, comments: any[]) => {
@@ -32,7 +37,6 @@ export const StorageService = {
 
   saveStory: async (story: Story) => {
     await set(ref(db, 'stories/' + story.id), story);
-    // Notificar
     await StorageService.notifyFollowers(story.userId, story.userName, story.userAvatar, 'new_story', story.id);
   },
 
@@ -59,7 +63,7 @@ export const StorageService = {
     await update(ref(db, `stories/${storyId}/viewers/${user.id}`), viewerData);
   },
 
-  // --- NOTIFICATIONS (RE-ADDED) ---
+  // --- NOTIFICATIONS ---
 
   notifyFollowers: async (senderId: string, senderName: string, senderAvatar: string, type: Notification['type'], targetId: string) => {
     try {
@@ -139,12 +143,6 @@ export const StorageService = {
   removeDestinationPhoto: async (destinationId: string, currentGallery: string[], photoUrlToRemove: string) => {
     const updatedGallery = currentGallery.filter(url => url !== photoUrlToRemove);
     await update(ref(db, `destinations/${destinationId}`), { gallery: updatedGallery });
-  },
-  
-  clearAll: async () => {
-    await set(ref(db), null);
-    localStorage.clear();
-    window.location.reload();
   },
 
   // --- CHAT SYSTEM ---
@@ -235,5 +233,11 @@ export const StorageService = {
         await update(messagesRef, updates);
       }
     }
+  },
+  
+  clearAll: async () => {
+    await set(ref(db), null);
+    localStorage.clear();
+    window.location.reload();
   }
 };
