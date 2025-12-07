@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect, useRef } from 'react';
-import { Map as MapIcon, Compass, UserCircle, Camera, Search, Grid, LogOut, ArrowRight, UserPlus, UserCheck, ChevronLeft, PlusCircle, Globe, Filter, Edit3, X, MessageSquarePlus, Mail, MapPin, Plus, MessageCircle } from 'lucide-react';
+import { Map as MapIcon, Compass, UserCircle, Camera, Search, Grid, LogOut, ArrowRight, UserPlus, UserCheck, ChevronLeft, PlusCircle, Globe, Filter, Edit3, X, MessageSquarePlus, Mail, MapPin, Plus, MessageCircle, Users } from 'lucide-react';
 import { HeroSection } from './components/HeroSection';
 import { PostCard } from './components/PostCard';
 import { CreatePostModal } from './components/CreatePostModal';
@@ -12,6 +11,7 @@ import { DestinationCard } from './components/DestinationCard';
 import { TravelGuideModal } from './components/TravelGuideModal';
 import { AddDestinationModal } from './components/AddDestinationModal';
 import { SuggestionsModal } from './components/SuggestionsModal';
+import { AdminUsersModal } from './components/AdminUsersModal';
 import { ChatModal } from './components/ChatModal';
 import { AuthScreen } from './components/AuthScreen';
 import { PostViewer } from './components/PostViewer';
@@ -38,6 +38,7 @@ function App() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isAddDestinationModalOpen, setIsAddDestinationModalOpen] = useState(false);
   const [isSuggestionsModalOpen, setIsSuggestionsModalOpen] = useState(false);
+  const [isAdminUsersModalOpen, setIsAdminUsersModalOpen] = useState(false);
   const [isChatModalOpen, setIsChatModalOpen] = useState(false);
   const [initialChatId, setInitialChatId] = useState<string | null>(null);
   
@@ -75,6 +76,7 @@ function App() {
       if (isCreateModalOpen) setIsCreateModalOpen(false);
       else if (isAddDestinationModalOpen) setIsAddDestinationModalOpen(false);
       else if (isSuggestionsModalOpen) setIsSuggestionsModalOpen(false);
+      else if (isAdminUsersModalOpen) setIsAdminUsersModalOpen(false);
       else if (isChatModalOpen) setIsChatModalOpen(false);
       else if (viewingPost) setViewingPost(null);
       else if (viewingStoryIndex !== null) setViewingStoryIndex(null);
@@ -94,7 +96,7 @@ function App() {
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, [
-    isCreateModalOpen, isAddDestinationModalOpen, isSuggestionsModalOpen, isChatModalOpen, viewingPost, viewingStoryIndex, 
+    isCreateModalOpen, isAddDestinationModalOpen, isSuggestionsModalOpen, isAdminUsersModalOpen, isChatModalOpen, viewingPost, viewingStoryIndex, 
     selectedDestination, viewingProfileImage, editingPost, editingStory, chatOpen, viewingProfileId
   ]);
 
@@ -210,7 +212,7 @@ function App() {
       unsubscribeSuggestions();
       unsubscribeChats();
     };
-  }, [user]); // Re-run if user changes
+  }, [user]);
 
   useEffect(() => {
     if (user && allUsers.length > 0) {
@@ -373,13 +375,21 @@ function App() {
                 )}
              </button>
              {isAdminUser && (
-               <button 
-                  onClick={() => openModal(setIsSuggestionsModalOpen)} 
-                  className="bg-cyan-100 text-cyan-800 p-2 rounded-full relative"
-               >
-                  <Mail size={20} />
-                  {suggestions.length > 0 && <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white"></span>}
-               </button>
+                <>
+                   <button 
+                      onClick={() => openModal(setIsAdminUsersModalOpen)} 
+                      className="bg-stone-100 text-stone-700 p-2 rounded-full"
+                   >
+                      <Users size={20} />
+                   </button>
+                   <button 
+                      onClick={() => openModal(setIsSuggestionsModalOpen)} 
+                      className="bg-cyan-100 text-cyan-800 p-2 rounded-full relative"
+                   >
+                      <Mail size={20} />
+                      {suggestions.length > 0 && <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white"></span>}
+                   </button>
+               </>
              )}
             <button onClick={() => { navigateToTab('profile'); }} className={`rounded-full overflow-hidden w-9 h-9 border-2 transition-all ${activeTab === 'profile' && !viewingProfileId ? 'border-cyan-600' : 'border-stone-200'}`}>
               <img src={user.avatar} alt="Perfil" className="w-full h-full object-cover" />
@@ -415,14 +425,23 @@ function App() {
              </button>
 
              {isAdminUser && (
-                <button 
-                  onClick={() => openModal(setIsSuggestionsModalOpen)} 
-                  className="relative hover:text-cyan-700 transition-colors"
-                  title="Buzón de Administración"
-                >
-                  <Mail size={24} />
-                  {suggestions.length > 0 && <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white"></span>}
-                </button>
+                <>
+                    <button 
+                        onClick={() => openModal(setIsAdminUsersModalOpen)} 
+                        className="hover:text-cyan-700 transition-colors"
+                        title="Ver Usuarios Registrados"
+                    >
+                        <Users size={24} />
+                    </button>
+                    <button 
+                        onClick={() => openModal(setIsSuggestionsModalOpen)} 
+                        className="relative hover:text-cyan-700 transition-colors"
+                        title="Buzón de Administración"
+                    >
+                        <Mail size={24} />
+                        {suggestions.length > 0 && <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white"></span>}
+                    </button>
+                </>
              )}
 
              <button onClick={() => openModal(setIsCreateModalOpen)} className="flex items-center gap-2 bg-cyan-600 text-white px-4 py-2 rounded-full hover:bg-cyan-700 transition-colors shadow-md hover:shadow-lg font-semibold text-sm"> <Camera size={18} /> <span>Publicar</span> </button>
@@ -720,6 +739,7 @@ function App() {
       <EditPostModal isOpen={!!editingPost} post={editingPost} onClose={() => setEditingPost(null)} onSave={handleUpdatePost} />
       <EditStoryModal isOpen={!!editingStory} story={editingStory} onClose={() => setEditingStory(null)} onSave={handleUpdateStory} />
       <SuggestionsModal isOpen={isSuggestionsModalOpen} onClose={() => setIsSuggestionsModalOpen(false)} currentUser={user} isAdmin={isAdminUser} suggestions={suggestions} />
+      <AdminUsersModal isOpen={isAdminUsersModalOpen} onClose={() => setIsAdminUsersModalOpen(false)} users={allUsers} />
       
       {/* CHAT MODAL */}
       <ChatModal 

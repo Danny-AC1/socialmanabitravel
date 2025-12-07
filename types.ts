@@ -1,4 +1,3 @@
-
 export interface User {
   id: string;
   name: string;
@@ -71,13 +70,14 @@ export interface Suggestion {
 export interface Message {
   id: string;
   senderId: string;
-  text: string; // Texto cifrado (o vacío si es solo media)
+  text: string; 
   type: 'text' | 'image' | 'video' | 'audio';
-  mediaUrl?: string; // URL/Base64 cifrada del archivo
+  mediaUrl?: string; 
   replyTo?: {
     id: string;
     text: string;
     senderName: string;
+    type?: string; // Agregado para soportar iconos en respuestas
   } | null;
   timestamp: number;
   isRead: boolean;
@@ -89,7 +89,7 @@ export interface Chat {
   lastMessage: string;
   lastTimestamp: number;
   updatedAt: number;
-  unreadCount?: number; // Calculado en cliente
+  unreadCount?: number; 
 }
 
 export type EcuadorRegion = 'Costa' | 'Sierra' | 'Amazonía' | 'Insular';

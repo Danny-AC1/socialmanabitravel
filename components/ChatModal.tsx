@@ -1,5 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Send, Lock, ChevronLeft, Search, Image as ImageIcon, Video, Mic, Smile, Reply, StopCircle, Play, Pause } from 'lucide-react';
+import { 
+  X, Send, Lock, ChevronLeft, Search, Image as ImageIcon, 
+  Mic, Paperclip, Trash2, Check, CheckCheck, 
+  Play, Pause, Video
+} from 'lucide-react';
 import { User, Chat, Message } from '../types';
 import { StorageService } from '../services/storageService';
 import { EncryptionService } from '../services/encryptionService';
@@ -22,33 +26,39 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   allUsers,
   initialChatId 
 }) => {
+  // --- STATES ---
   const [activeChatId, setActiveChatId] = useState<string | null>(initialChatId || null);
   const [chats, setChats] = useState<Chat[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [newMessage, setNewMessage] = useState('');
+  
+  // Input & Search
+  const [inputText, setInputText] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   
-  // Multimedia & Reply States
-  const [isRecording, setIsRecording] = useState(false);
-  const [mediaPreview, setMediaPreview] = useState<{type: 'image'|'video', url: string} | null>(null);
+  // Media & Reply
+  const [mediaPreview, setMediaPreview] = useState<{type: 'image'|'video'|'audio', url: string} | null>(null);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
-  const [showEmoji, setShowEmoji] = useState(false);
+  
+  // Recording States
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const [cancelThresholdReached, setCancelThresholdReached] = useState(false);
   
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const recordingTimerRef = useRef<any>(null);
+  const touchStartXRef = useRef<number | null>(null);
 
-  // Swipe States
-  const [swipeStartX, setSwipeStartX] = useState<number | null>(null);
-  const [swipedMessageId, setSwipedMessageId] = useState<string | null>(null);
+  // --- EFFECTS ---
 
-  // Cargar lista de chats
+  // 1. Cargar Lista de Chats
   useEffect(() => {
     if (!isOpen) return;
     const chatsRef = ref(db, 'chats');
-    const unsubscribe = onValue(chatsRef, (snapshot) => {
+    return onValue(chatsRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
         const userChats = Object.values(data)
@@ -59,10 +69,9 @@ export const ChatModal: React.FC<ChatModalProps> = ({
         setChats([]);
       }
     });
-    return () => off(chatsRef);
   }, [isOpen, currentUser.id]);
 
-  // Cargar mensajes y marcar como leídos
+  // 2. Cargar Mensajes del Chat Activo
   useEffect(() => {
     if (!activeChatId) {
       setMessages([]);
@@ -70,7 +79,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
     }
 
     const messagesRef = ref(db, `chats/${activeChatId}/messages`);
-    const unsubscribe = onValue(messagesRef, (snapshot) => {
+    return onValue(messagesRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
         const loadedMessages = Object.values(data).map((msg: any) => ({
@@ -81,7 +90,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
         
         setMessages(loadedMessages.sort((a, b) => a.timestamp - b.timestamp));
         
-        // Optimización: Marcar como leído al entrar o recibir nuevo
+        // Marcar como leídos los que no son míos
         if (loadedMessages.some(m => !m.isRead && m.senderId !== currentUser.id)) {
            StorageService.markChatAsRead(activeChatId, currentUser.id);
         }
@@ -89,47 +98,66 @@ export const ChatModal: React.FC<ChatModalProps> = ({
         setMessages([]);
       }
     });
-
-    return () => off(messagesRef);
   }, [activeChatId]);
 
+  // 3. Auto Scroll
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages, mediaPreview, replyTo]);
 
+  // 4. Initial Chat
   useEffect(() => {
     if (initialChatId) setActiveChatId(initialChatId);
   }, [initialChatId]);
 
   if (!isOpen) return null;
 
-  // --- HANDLERS ---
+  // --- LOGIC ---
 
-  const handleSendMessage = async (e?: React.FormEvent) => {
-    e?.preventDefault();
-    if ((!newMessage.trim() && !mediaPreview) || !activeChatId) return;
+  const getChatPartner = (chat: Chat) => {
+    const partnerId = chat.participants.find(id => id !== currentUser.id);
+    return allUsers.find(u => u.id === partnerId);
+  };
 
-    let type: 'text' | 'image' | 'video' = 'text';
-    let content = newMessage;
+  const handleStartChat = async (targetUserId: string) => {
+    const chatId = await StorageService.initiateChat(currentUser.id, targetUserId);
+    setActiveChatId(chatId);
+    setSearchTerm('');
+  };
+
+  const handleSendMessage = async () => {
+    // Validar si hay contenido real
+    if ((!inputText.trim() && !mediaPreview) || !activeChatId) return;
+
+    let type: 'text' | 'image' | 'video' | 'audio' = 'text';
+    let content = inputText;
     let url = undefined;
 
     if (mediaPreview) {
         type = mediaPreview.type;
         url = mediaPreview.url;
+        // Si es solo media y no hay texto, content queda vacío (o con descripción opcional)
+        if (!content.trim()) content = '';
     }
 
     const replyData = replyTo ? {
         id: replyTo.id,
         text: replyTo.type === 'text' ? replyTo.text : `[${replyTo.type}]`,
-        senderName: getSenderName(replyTo.senderId)
+        senderName: allUsers.find(u => u.id === replyTo.senderId)?.name || 'Usuario',
+        type: replyTo.type
     } : undefined;
 
-    await StorageService.sendMessage(activeChatId, currentUser.id, content, type, url, replyData);
-    
-    setNewMessage('');
-    setMediaPreview(null);
-    setReplyTo(null);
-    setShowEmoji(false);
+    try {
+        await StorageService.sendMessage(activeChatId, currentUser.id, content, type, url, replyData);
+        // Limpiar
+        setInputText('');
+        setMediaPreview(null);
+        setReplyTo(null);
+    } catch (e) {
+        alert("Error enviando mensaje");
+    }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -144,10 +172,13 @@ export const ChatModal: React.FC<ChatModalProps> = ({
             const base64 = await resizeImage(file, 800);
             setMediaPreview({ type: 'image', url: base64 });
         }
-    } catch (err) {
-        alert("Error al procesar archivo: " + err);
+    } catch (err: any) {
+        alert(err.message);
     }
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
+
+  // --- AUDIO RECORDING (TELEGRAM STYLE) ---
 
   const startRecording = async () => {
     try {
@@ -159,318 +190,362 @@ export const ChatModal: React.FC<ChatModalProps> = ({
             if (e.data.size > 0) audioChunksRef.current.push(e.data);
         };
 
-        recorder.onstop = async () => {
-            const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-            const reader = new FileReader();
-            reader.readAsDataURL(audioBlob);
-            reader.onloadend = async () => {
-                const base64Audio = reader.result as string;
-                if (activeChatId) {
-                    await StorageService.sendMessage(activeChatId, currentUser.id, '', 'audio', base64Audio);
-                }
-            };
-            stream.getTracks().forEach(track => track.stop());
-        };
-
         mediaRecorderRef.current = recorder;
         recorder.start();
         setIsRecording(true);
+        setRecordingDuration(0);
+        setCancelThresholdReached(false);
+        
+        recordingTimerRef.current = setInterval(() => {
+            setRecordingDuration(prev => prev + 1);
+        }, 1000);
+
     } catch (err) {
         alert("No se pudo acceder al micrófono.");
     }
   };
 
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-        mediaRecorderRef.current.stop();
-        setIsRecording(false);
-    }
-  };
+  const stopRecording = (shouldSave: boolean) => {
+    if (!mediaRecorderRef.current || !isRecording) return;
 
-  const handleSwipeStart = (e: React.TouchEvent, msg: Message) => {
-    setSwipeStartX(e.targetTouches[0].clientX);
-    setSwipedMessageId(msg.id);
-  };
-
-  const handleSwipeMove = (e: React.TouchEvent) => {
-    if (swipeStartX === null) return;
-    const currentX = e.targetTouches[0].clientX;
-    const diff = currentX - swipeStartX;
+    mediaRecorderRef.current.stop();
+    mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
+    clearInterval(recordingTimerRef.current);
     
-    // Solo permitir swipe a la derecha (Reply)
-    if (diff > 50) {
-        // Visual feedback logic could go here via ref or state style
+    if (shouldSave) {
+        // Pequeño delay para asegurar que ondataavailable capture todo
+        setTimeout(() => {
+            const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+            const reader = new FileReader();
+            reader.readAsDataURL(audioBlob);
+            reader.onloadend = () => {
+                const base64Audio = reader.result as string;
+                // En lugar de enviar directo, lo ponemos en preview
+                setMediaPreview({ type: 'audio', url: base64Audio });
+            };
+        }, 100);
+    }
+
+    setIsRecording(false);
+    setRecordingDuration(0);
+    setCancelThresholdReached(false);
+    touchStartXRef.current = null;
+  };
+
+  // Gestures Handlers
+  const handleRecordStart = (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault(); // Previene selección o menú contextual
+    if ('touches' in e) touchStartXRef.current = e.touches[0].clientX;
+    startRecording();
+  };
+
+  const handleRecordMove = (e: React.TouchEvent) => {
+    if (!isRecording) return;
+    const currentX = e.touches[0].clientX;
+    const startX = touchStartXRef.current || currentX;
+    
+    // Si desliza 100px a la izquierda -> Estado de Cancelar
+    if (startX - currentX > 100) {
+        setCancelThresholdReached(true);
+    } else {
+        setCancelThresholdReached(false);
     }
   };
 
-  const handleSwipeEnd = (e: React.TouchEvent, msg: Message) => {
-    if (swipeStartX === null) return;
-    const endX = e.changedTouches[0].clientX;
-    if (endX - swipeStartX > 50) { // Umbral de swipe
-        setReplyTo(msg);
+  const handleRecordEnd = (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    if (cancelThresholdReached) {
+        stopRecording(false); // Descartar
+    } else {
+        stopRecording(true); // Guardar en preview
     }
-    setSwipeStartX(null);
-    setSwipedMessageId(null);
   };
 
-  const addEmoji = (emoji: string) => {
-      setNewMessage(prev => prev + emoji);
-  };
-
-  // --- HELPERS ---
-
-  const getChatPartner = (chat: Chat) => {
-    const partnerId = chat.participants.find(id => id !== currentUser.id);
-    return allUsers.find(u => u.id === partnerId);
-  };
-
-  const getSenderName = (id: string) => {
-      return id === currentUser.id ? 'Tú' : allUsers.find(u => u.id === id)?.name || 'Usuario';
+  // --- RENDER HELPERS ---
+  const formatTime = (seconds: number) => {
+      const mins = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   const filteredUsers = searchTerm 
     ? allUsers.filter(u => u.id !== currentUser.id && u.name.toLowerCase().includes(searchTerm.toLowerCase()))
     : [];
 
-  const handleStartChat = async (targetUserId: string) => {
-    const chatId = await StorageService.initiateChat(currentUser.id, targetUserId);
-    setActiveChatId(chatId);
-    setSearchTerm('');
-  };
-
-  const emojis = ["👍", "❤️", "😂", "😮", "😢", "🔥", "🎉", "🌴", "🌊", "😎", "📷", "🇪🇨"];
+  const activePartner = activeChatId 
+    ? getChatPartner(chats.find(c => c.id === activeChatId) || { participants: activeChatId.split('_') } as Chat) 
+    : null;
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-stone-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-4xl h-[85vh] rounded-3xl overflow-hidden shadow-2xl flex flex-col md:flex-row">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-0 md:p-4 animate-in fade-in duration-200">
+      <div className="bg-white w-full h-full md:max-w-5xl md:h-[90vh] md:rounded-3xl overflow-hidden shadow-2xl flex flex-row">
         
-        {/* SIDEBAR */}
-        <div className={`w-full md:w-1/3 bg-stone-50 border-r border-stone-200 flex flex-col ${activeChatId ? 'hidden md:flex' : 'flex'}`}>
-          <div className="p-4 border-b border-stone-200 bg-white">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold text-stone-800">Mensajes</h2>
-              <button onClick={onClose} className="md:hidden p-2 rounded-full hover:bg-stone-100">
-                <X size={20} />
-              </button>
-            </div>
-            <div className="relative">
-              <input 
-                type="text" 
-                placeholder="Buscar usuario..." 
-                className="w-full bg-stone-100 border-none rounded-xl py-2 pl-9 pr-4 text-sm focus:ring-2 focus:ring-cyan-500 outline-none"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-              <Search className="absolute left-3 top-2.5 text-stone-400" size={16} />
-            </div>
+        {/* === LEFT SIDEBAR (Chat List) === */}
+        <div className={`w-full md:w-[350px] bg-white border-r border-gray-200 flex flex-col ${activeChatId ? 'hidden md:flex' : 'flex'}`}>
+          <div className="p-3 border-b border-gray-100 flex items-center gap-3 bg-white">
+             <button onClick={onClose} className="md:hidden text-gray-500"><X size={24} /></button>
+             <div className="flex-1 relative bg-gray-100 rounded-full h-10 flex items-center px-4 overflow-hidden focus-within:ring-2 focus-within:ring-cyan-500 transition-all">
+                <Search size={18} className="text-gray-400 mr-2" />
+                <input 
+                   className="bg-transparent outline-none w-full text-sm text-gray-700 placeholder-gray-400"
+                   placeholder="Buscar chats..."
+                   value={searchTerm}
+                   onChange={(e) => setSearchTerm(e.target.value)}
+                />
+             </div>
           </div>
 
           <div className="flex-1 overflow-y-auto">
-            {searchTerm ? (
-              <div className="p-2">
-                {filteredUsers.map(user => (
-                  <div key={user.id} onClick={() => handleStartChat(user.id)} className="flex items-center gap-3 p-3 rounded-xl hover:bg-white cursor-pointer transition-colors">
-                    <img src={user.avatar} className="w-10 h-10 rounded-full object-cover" alt="" />
-                    <span className="font-semibold text-sm text-stone-700">{user.name}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="p-2 space-y-1">
-                {chats.map(chat => {
-                  const partner = getChatPartner(chat);
-                  if (!partner) return null;
-                  const isSelected = activeChatId === chat.id;
-                  const unreadCount = messages.filter(m => !m.isRead && m.senderId !== currentUser.id).length; // Simplified local check not efficient for list but ok for demo
-                  
-                  return (
-                    <div key={chat.id} onClick={() => setActiveChatId(chat.id)} className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors ${isSelected ? 'bg-white shadow-sm border border-stone-100' : 'hover:bg-stone-100'}`}>
-                      <div className="relative">
-                        <img src={partner.avatar} className="w-12 h-12 rounded-full object-cover" alt="" />
+             {searchTerm ? (
+                <div className="p-2">
+                   {filteredUsers.map(u => (
+                      <div key={u.id} onClick={() => handleStartChat(u.id)} className="flex items-center gap-3 p-3 hover:bg-gray-100 rounded-xl cursor-pointer transition-colors">
+                         <img src={u.avatar} className="w-12 h-12 rounded-full object-cover" />
+                         <span className="font-bold text-gray-800">{u.name}</span>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex justify-between items-baseline">
-                          <h4 className="font-bold text-sm text-stone-800 truncate">{partner.name}</h4>
-                          <span className="text-[10px] text-stone-400">{new Date(chat.updatedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                        </div>
-                        <p className="text-xs text-stone-500 truncate flex items-center gap-1">
-                           {chat.lastMessage ? EncryptionService.decrypt(chat.lastMessage, chat.id) : 'Inicia la conversación'}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+                   ))}
+                </div>
+             ) : (
+                <div>
+                   {chats.map(chat => {
+                      const partner = getChatPartner(chat);
+                      if (!partner) return null;
+                      const isActive = activeChatId === chat.id;
+                      const decryptedLastMsg = chat.lastMessage ? EncryptionService.decrypt(chat.lastMessage, chat.id) : '';
+                      
+                      return (
+                         <div 
+                            key={chat.id} 
+                            onClick={() => setActiveChatId(chat.id)}
+                            className={`flex items-center gap-3 p-3 cursor-pointer transition-colors border-b border-gray-50 last:border-0 hover:bg-gray-100 ${isActive ? 'bg-cyan-50' : ''}`}
+                         >
+                            <div className="relative">
+                               <img src={partner.avatar} className="w-14 h-14 rounded-full object-cover" />
+                               <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white rounded-full"></div>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                               <div className="flex justify-between items-baseline">
+                                  <h4 className="font-bold text-gray-900 truncate">{partner.name}</h4>
+                                  <span className="text-xs text-gray-400">{new Date(chat.updatedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                               </div>
+                               <div className="flex items-center gap-1">
+                                  <p className="text-sm text-gray-500 truncate flex-1">
+                                     {decryptedLastMsg || 'Inicia la conversación'}
+                                  </p>
+                               </div>
+                            </div>
+                         </div>
+                      );
+                   })}
+                </div>
+             )}
           </div>
         </div>
 
-        {/* CHAT AREA */}
-        <div className={`w-full md:w-2/3 bg-white flex flex-col ${!activeChatId ? 'hidden md:flex' : 'flex'}`}>
-          {activeChatId ? (
-            <>
-              {/* HEADER */}
-              <div className="p-4 border-b border-stone-100 flex items-center justify-between bg-white z-10">
-                <div className="flex items-center gap-3">
-                  <button onClick={() => setActiveChatId(null)} className="md:hidden p-2 -ml-2 text-stone-500"><ChevronLeft size={24} /></button>
-                  {(() => {
-                      const partner = getChatPartner(chats.find(c => c.id === activeChatId) || {participants: activeChatId.split('_')} as Chat);
-                      return partner ? (
-                          <>
-                            <img src={partner.avatar} className="w-10 h-10 rounded-full object-cover" alt="" />
-                            <div>
-                                <h3 className="font-bold text-stone-800">{partner.name}</h3>
-                                <div className="flex items-center text-xs text-green-600 gap-1"><Lock size={10} /> Cifrado E2E</div>
-                            </div>
-                          </>
-                      ) : null;
-                  })()}
-                </div>
-                <button onClick={onClose} className="hidden md:block p-2 rounded-full hover:bg-stone-100"><X size={24} /></button>
-              </div>
+        {/* === RIGHT SIDE (Chat Window) === */}
+        <div className={`flex-1 bg-[#8e9aaf] flex flex-col relative ${!activeChatId ? 'hidden md:flex' : 'flex'}`}>
+           
+           {/* Wallpaper Background */}
+           <div className="absolute inset-0 opacity-10 pointer-events-none" style={{
+              backgroundImage: `url("https://web.telegram.org/img/bg_0.png")`, 
+              backgroundSize: '400px'
+           }} />
 
-              {/* MESSAGES */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-stone-50/50">
-                {messages.map((msg) => {
-                  const isMe = msg.senderId === currentUser.id;
-                  return (
-                    <div 
-                        key={msg.id} 
-                        className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}
-                        onTouchStart={(e) => handleSwipeStart(e, msg)}
-                        onTouchMove={handleSwipeMove}
-                        onTouchEnd={(e) => handleSwipeEnd(e, msg)}
-                    >
-                      <div className={`max-w-[80%] relative group transition-transform ${swipedMessageId === msg.id ? 'translate-x-10' : ''}`}>
-                        
-                        {/* Reply Preview inside bubble */}
-                        {msg.replyTo && (
-                            <div className={`text-xs mb-1 p-2 rounded-lg border-l-4 ${isMe ? 'bg-cyan-700/50 border-cyan-200 text-cyan-100' : 'bg-gray-100 border-cyan-600 text-gray-600'}`}>
-                                <p className="font-bold text-[10px]">{msg.replyTo.senderName}</p>
-                                <p className="truncate">{msg.replyTo.text}</p>
-                            </div>
-                        )}
+           {activeChatId && activePartner ? (
+              <>
+                 {/* Chat Header */}
+                 <div className="bg-white p-2 px-4 flex items-center justify-between shadow-sm z-20 cursor-pointer">
+                    <div className="flex items-center gap-4">
+                       <button onClick={(e) => { e.stopPropagation(); setActiveChatId(null); }} className="md:hidden text-gray-500"><ChevronLeft size={26} /></button>
+                       <img src={activePartner.avatar} className="w-10 h-10 rounded-full object-cover" />
+                       <div className="flex flex-col">
+                          <h3 className="font-bold text-gray-900 text-sm leading-tight">{activePartner.name}</h3>
+                          <div className="flex items-center text-xs text-cyan-600 gap-1"><Lock size={10} /> Cifrado E2E</div>
+                       </div>
+                    </div>
+                    <div className="flex gap-4 text-gray-400">
+                       <button onClick={(e) => { e.stopPropagation(); onClose(); }} className="hidden md:block hover:text-red-500"><X size={24} /></button>
+                    </div>
+                 </div>
 
-                        <div className={`p-3 rounded-2xl text-sm shadow-sm ${isMe ? 'bg-cyan-600 text-white rounded-br-none' : 'bg-white text-stone-800 rounded-bl-none border border-stone-100'}`}>
-                            
-                            {/* Media Content */}
-                            {msg.type === 'image' && msg.mediaUrl && (
-                                <img src={msg.mediaUrl} className="rounded-lg mb-2 max-w-full h-auto" alt="Attached" />
-                            )}
-                            {msg.type === 'video' && msg.mediaUrl && (
-                                <video src={msg.mediaUrl} controls className="rounded-lg mb-2 max-w-full h-auto" />
-                            )}
-                            {msg.type === 'audio' && msg.mediaUrl && (
-                                <audio src={msg.mediaUrl} controls className="mb-1 w-60 h-8" />
-                            )}
+                 {/* Messages List */}
+                 <div className="flex-1 overflow-y-auto p-4 space-y-2 z-10" ref={messagesEndRef}>
+                    <div className="text-center my-4">
+                       <span className="bg-black/20 text-white text-xs px-3 py-1 rounded-full backdrop-blur-sm">
+                          {new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
+                       </span>
+                    </div>
 
-                            {/* Text Content */}
-                            {msg.text && <p>{msg.text}</p>}
-                            
-                            <div className="flex items-center justify-end gap-1 mt-1">
-                                <p className={`text-[10px] ${isMe ? 'text-cyan-100' : 'text-stone-400'}`}>
-                                    {new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                                </p>
-                                {isMe && (
-                                    <span className={`text-[10px] ${msg.isRead ? 'text-blue-200' : 'text-cyan-200'}`}>
-                                        {msg.isRead ? '✓✓' : '✓'}
-                                    </span>
+                    {messages.map((msg, idx) => {
+                       const isMe = msg.senderId === currentUser.id;
+                       const showTail = idx === messages.length - 1 || messages[idx + 1]?.senderId !== msg.senderId;
+                       
+                       return (
+                          <div 
+                             key={msg.id} 
+                             className={`flex w-full ${isMe ? 'justify-end' : 'justify-start'} group relative`}
+                          >
+                             <div 
+                                className={`max-w-[75%] md:max-w-[60%] relative shadow-sm text-sm p-1
+                                   ${isMe 
+                                      ? 'bg-cyan-100 text-gray-900 rounded-2xl rounded-tr-sm' 
+                                      : 'bg-white text-gray-900 rounded-2xl rounded-tl-sm'
+                                   }
+                                   ${!showTail && isMe ? 'rounded-tr-2xl mb-1' : ''}
+                                   ${!showTail && !isMe ? 'rounded-tl-2xl mb-1' : ''}
+                                   ${showTail ? 'mb-3' : ''}
+                                `}
+                             >
+                                {/* Reply Context */}
+                                {msg.replyTo && (
+                                   <div className={`mx-2 mt-2 px-2 py-1 rounded border-l-2 mb-1 cursor-pointer bg-black/5 border-cyan-500`}>
+                                      <p className="text-cyan-700 font-bold text-xs">{msg.replyTo.senderName}</p>
+                                      <p className="text-gray-500 text-xs truncate">{msg.replyTo.text}</p>
+                                   </div>
                                 )}
-                            </div>
-                        </div>
-                        
-                        {/* Reply Action Button (Desktop hover / Mobile swipe hint) */}
-                        <button 
-                            onClick={() => setReplyTo(msg)}
-                            className={`absolute top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity p-1 bg-gray-200 rounded-full text-gray-600 ${isMe ? '-left-8' : '-right-8'}`}
-                        >
-                            <Reply size={14} />
-                        </button>
-                      </div>
+
+                                {/* Content */}
+                                <div className="px-2 pb-4 min-w-[120px]">
+                                   {msg.type === 'image' && msg.mediaUrl && (
+                                      <img src={msg.mediaUrl} className="rounded-lg mb-1 max-w-full" alt="Media" />
+                                   )}
+                                   {msg.type === 'video' && msg.mediaUrl && (
+                                      <video src={msg.mediaUrl} controls className="rounded-lg mb-1 max-w-full" />
+                                   )}
+                                   {msg.type === 'audio' && msg.mediaUrl && (
+                                      <div className="flex items-center gap-2 my-2 bg-black/5 p-2 rounded-full">
+                                         <div className="p-2 rounded-full bg-cyan-500 text-white">
+                                            <Play size={14} fill="currentColor" />
+                                         </div>
+                                         <audio src={msg.mediaUrl} controls className="h-8 w-40 opacity-80" />
+                                      </div>
+                                   )}
+                                   {msg.text && <p className="whitespace-pre-wrap leading-snug px-1 pt-1">{msg.text}</p>}
+                                </div>
+
+                                {/* Metadata (Time & Checks) */}
+                                <div className="absolute bottom-1 right-2 flex items-center gap-1 select-none">
+                                   <span className={`text-[10px] ${isMe ? 'text-cyan-800/60' : 'text-gray-400'}`}>
+                                      {new Date(msg.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
+                                   </span>
+                                   {isMe && (
+                                      msg.isRead 
+                                      ? <CheckCheck size={14} className="text-cyan-600" />
+                                      : <Check size={14} className="text-cyan-600" />
+                                   )}
+                                </div>
+                             </div>
+                          </div>
+                       );
+                    })}
+                    <div ref={messagesEndRef} />
+                 </div>
+
+                 {/* Input Area */}
+                 <div className="bg-white min-h-[60px] flex flex-col z-20">
+                    
+                    {/* Reply Preview */}
+                    {replyTo && (
+                       <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-t border-gray-200 animate-in slide-in-from-bottom-2">
+                          <div className="flex items-center gap-3 overflow-hidden">
+                             <div className="border-l-2 border-cyan-600 pl-2">
+                                <p className="text-cyan-600 font-bold text-xs">Responder a {allUsers.find(u=>u.id===replyTo.senderId)?.name}</p>
+                                <p className="text-gray-500 text-xs truncate max-w-[200px]">{replyTo.type === 'text' ? replyTo.text : 'Archivo adjunto'}</p>
+                             </div>
+                          </div>
+                          <button onClick={() => setReplyTo(null)}><X size={20} className="text-gray-400" /></button>
+                       </div>
+                    )}
+
+                    {/* Media Preview */}
+                    {mediaPreview && (
+                       <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 flex justify-between items-center animate-in slide-in-from-bottom-2">
+                          <div className="flex gap-4 items-center">
+                             {mediaPreview.type === 'video' ? <Video className="text-cyan-600" /> : mediaPreview.type === 'audio' ? <Mic className="text-red-500" /> : <ImageIcon className="text-cyan-600" />}
+                             <div>
+                                <span className="text-sm font-medium text-gray-700 block">
+                                    {mediaPreview.type === 'audio' ? 'Nota de voz' : 'Archivo multimedia'}
+                                </span>
+                                <span className="text-xs text-gray-500">Listo para enviar</span>
+                             </div>
+                          </div>
+                          <button onClick={() => setMediaPreview(null)}><Trash2 size={20} className="text-red-500" /></button>
+                       </div>
+                    )}
+
+                    {/* Controls & Input */}
+                    <div className="flex items-end gap-2 p-2 px-3">
+                       
+                       {/* Attach Button */}
+                       <button onClick={() => fileInputRef.current?.click()} className="p-3 text-gray-500 hover:text-gray-700 transition-colors">
+                          <Paperclip size={24} className="rotate-45" />
+                       </button>
+                       <input type="file" ref={fileInputRef} hidden accept="image/*,video/*" onChange={handleFileUpload} />
+
+                       {/* Text Input */}
+                       {isRecording ? (
+                          <div className={`flex-1 h-[48px] flex items-center px-4 rounded-2xl transition-colors ${cancelThresholdReached ? 'bg-red-50' : 'bg-gray-100'}`}>
+                             <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse mr-3"></div>
+                             <span className={`font-mono font-bold ${cancelThresholdReached ? 'text-red-500' : 'text-gray-700'}`}>
+                                {formatTime(recordingDuration)}
+                             </span>
+                             <span className="ml-auto text-xs text-gray-400 uppercase font-bold tracking-wide">
+                                {cancelThresholdReached ? 'Soltar para cancelar' : '< Desliza para cancelar'}
+                             </span>
+                          </div>
+                       ) : (
+                          <textarea
+                             value={inputText}
+                             onChange={(e) => setInputText(e.target.value)}
+                             placeholder="Escribe un mensaje..."
+                             className="flex-1 bg-gray-100 max-h-32 min-h-[44px] py-3 px-4 rounded-2xl outline-none text-gray-800 resize-none overflow-y-auto leading-relaxed"
+                             rows={1}
+                             onKeyDown={(e) => {
+                                if (e.key === 'Enter' && !e.shiftKey) {
+                                   e.preventDefault();
+                                   handleSendMessage();
+                                }
+                             }}
+                          />
+                       )}
+
+                       {/* DYNAMIC SEND / MIC BUTTON */}
+                       {(inputText.trim() || mediaPreview) ? (
+                          <button 
+                             onClick={() => handleSendMessage()}
+                             className="p-3 bg-cyan-500 hover:bg-cyan-600 text-white rounded-full shadow-md transition-all active:scale-95 duration-200 ease-out flex items-center justify-center"
+                          >
+                             <Send size={20} className="ml-0.5 mt-0.5" />
+                          </button>
+                       ) : (
+                          <div
+                             className={`p-3 rounded-full shadow-md transition-all duration-200 cursor-pointer touch-none select-none flex items-center justify-center ${
+                                cancelThresholdReached 
+                                ? 'bg-red-500 text-white scale-110 shake' 
+                                : isRecording 
+                                   ? 'bg-cyan-500 text-white scale-125' 
+                                   : 'bg-cyan-500 text-white hover:bg-cyan-600'
+                             }`}
+                             onMouseDown={handleRecordStart}
+                             onTouchStart={handleRecordStart}
+                             onTouchMove={handleRecordMove}
+                             onMouseUp={handleRecordEnd}
+                             onTouchEnd={handleRecordEnd}
+                          >
+                             {cancelThresholdReached ? <Trash2 size={24} /> : <Mic size={24} />}
+                          </div>
+                       )}
                     </div>
-                  );
-                })}
-                <div ref={messagesEndRef} />
+                 </div>
+              </>
+           ) : (
+              <div className="flex-1 flex flex-col items-center justify-center text-white/50 p-8 select-none">
+                 <div className="bg-black/20 p-6 rounded-full mb-4">
+                    <Send size={48} />
+                 </div>
+                 <p className="bg-black/20 px-4 py-1 rounded-full text-sm">Selecciona un chat para comenzar</p>
               </div>
-
-              {/* INPUT AREA */}
-              <div className="bg-white border-t border-stone-100">
-                {/* Reply Preview Footer */}
-                {replyTo && (
-                    <div className="bg-gray-50 px-4 py-2 flex justify-between items-center border-b border-gray-100">
-                        <div className="text-xs text-gray-500 border-l-2 border-cyan-500 pl-2">
-                            <span className="font-bold text-cyan-700">Respondiendo a {getSenderName(replyTo.senderId)}</span>
-                            <p className="truncate max-w-[200px]">{replyTo.type === 'text' ? replyTo.text : `Archivo ${replyTo.type}`}</p>
-                        </div>
-                        <button onClick={() => setReplyTo(null)}><X size={16} className="text-gray-400" /></button>
-                    </div>
-                )}
-
-                {/* Media Preview Footer */}
-                {mediaPreview && (
-                    <div className="bg-gray-50 px-4 py-2 flex justify-between items-center border-b border-gray-100">
-                        <div className="flex items-center gap-2">
-                            {mediaPreview.type === 'image' ? <ImageIcon className="text-cyan-600" size={20}/> : <Video className="text-cyan-600" size={20}/>}
-                            <span className="text-xs text-gray-600">Archivo listo para enviar</span>
-                        </div>
-                        <button onClick={() => setMediaPreview(null)}><X size={16} className="text-gray-400" /></button>
-                    </div>
-                )}
-
-                {/* Emoji Picker */}
-                {showEmoji && (
-                    <div className="px-4 py-2 flex gap-2 overflow-x-auto no-scrollbar bg-gray-50 border-b border-gray-100">
-                        {emojis.map(e => (
-                            <button key={e} onClick={() => addEmoji(e)} className="text-xl hover:scale-125 transition-transform">{e}</button>
-                        ))}
-                    </div>
-                )}
-
-                <form onSubmit={handleSendMessage} className="p-3 flex items-end gap-2">
-                  <div className="flex gap-1 pb-2">
-                     <button type="button" onClick={() => fileInputRef.current?.click()} className="text-stone-400 hover:text-cyan-600 p-2"><ImageIcon size={20} /></button>
-                     <button type="button" onClick={() => setShowEmoji(!showEmoji)} className="text-stone-400 hover:text-cyan-600 p-2"><Smile size={20} /></button>
-                     <input type="file" ref={fileInputRef} hidden accept="image/*,video/*" onChange={handleFileUpload} />
-                  </div>
-
-                  <div className="flex-1 bg-stone-100 rounded-2xl px-4 py-2 min-h-[44px] flex items-center">
-                     <textarea 
-                        placeholder="Escribe un mensaje..." 
-                        className="w-full bg-transparent border-none outline-none text-sm resize-none max-h-24 pt-1"
-                        rows={1}
-                        value={newMessage}
-                        onChange={(e) => setNewMessage(e.target.value)}
-                        onKeyDown={(e) => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }}
-                     />
-                  </div>
-
-                  {newMessage.trim() || mediaPreview ? (
-                      <button type="submit" className="bg-cyan-600 text-white p-3 rounded-full hover:bg-cyan-700 shadow-md mb-1">
-                        <Send size={18} />
-                      </button>
-                  ) : (
-                      <button 
-                        type="button" 
-                        onMouseDown={startRecording} 
-                        onMouseUp={stopRecording} 
-                        onTouchStart={startRecording}
-                        onTouchEnd={stopRecording}
-                        className={`p-3 rounded-full shadow-md mb-1 transition-all ${isRecording ? 'bg-red-500 text-white scale-110 animate-pulse' : 'bg-cyan-600 text-white'}`}
-                      >
-                        {isRecording ? <StopCircle size={18} /> : <Mic size={18} />}
-                      </button>
-                  )}
-                </form>
-              </div>
-            </>
-          ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-stone-300 p-8">
-               <div className="bg-stone-50 p-6 rounded-full mb-4">
-                  <Lock size={48} className="opacity-20" />
-               </div>
-               <p>Selecciona un chat para comenzar.</p>
-            </div>
-          )}
+           )}
         </div>
       </div>
     </div>
