@@ -4,48 +4,49 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <!-- SEO BÁSICO -->
-    <title>Ecuador Travel - Explora el País de los 4 Mundos</title>
+    <!-- SEO OPTIMIZADO -->
+    <title>Ecuador Travel - Tu Red Social y Guía Turística Inteligente</title>
     <meta
       name="description"
-      content="Descubre los mejores destinos turísticos de Ecuador. Playas, Andes, Amazonía y Galápagos. Únete a la red social de viajeros, comparte tus fotos y planifica tu viaje con IA."
+      content="La primera red social turística de Ecuador impulsada por IA. Descubre destinos en Costa, Sierra, Amazonía y Galápagos. Conecta con viajeros, comparte fotos y planifica tu ruta con nuestro guía virtual."
     />
     <meta
       name="keywords"
-      content="turismo ecuador, manabi, galapagos, cotopaxi, viaje, red social, turismo, playas ecuador"
+      content="turismo ecuador, viaje ecuador, manabi turismo, galapagos, cotopaxi, red social viajeros, guia turistica ia, mochileros ecuador, playas ecuador, turismo inteligente, los frailes, machalilla, puerto lopez, pagina de turismo, ecuador, manabi, los ciriales, mejores lugares turisticos de ecuador, lugares turisticos de manabi, lugares, red social, instagram, facebook, social manabi travel, manta, parque nacional machalilla"
     />
     <meta name="author" content="Ecuador Travel" />
     <meta name="robots" content="index, follow" />
+    <meta name="theme-color" content="#0891b2" />
 
-    <!-- OPEN GRAPH (Facebook, WhatsApp, LinkedIn) -->
+    <!-- OPEN GRAPH (Facebook, WhatsApp) -->
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://manabi-travel-app.vercel.app/" />
     <meta
       property="og:title"
-      content="Ecuador Travel - Tu Guía Turística Social"
+      content="Ecuador Travel - Explora, Comparte y Viaja"
     />
     <meta
       property="og:description"
-      content="Únete a la comunidad de viajeros. Descubre destinos ocultos, chatea con otros turistas y usa nuestra IA para planificar tu ruta."
+      content="Descubre los tesoros escondidos de Ecuador. Únete a la comunidad, sube tus historias y chatea con otros viajeros en tiempo real."
     />
     <meta
       property="og:image"
       content="https://images.unsplash.com/photo-1598384232375-a010488950d4?q=80&w=1200"
     />
+    <meta property="og:site_name" content="Ecuador Travel" />
 
     <!-- TWITTER CARD -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Ecuador Travel - Explora y Comparte" />
+    <meta name="twitter:title" content="Ecuador Travel - Tu Guía Inteligente" />
     <meta
       name="twitter:description"
-      content="La red social para amantes del turismo en Ecuador."
+      content="Explora los 4 mundos del Ecuador con la ayuda de Inteligencia Artificial y una comunidad activa."
     />
     <meta
       name="twitter:image"
       content="https://images.unsplash.com/photo-1598384232375-a010488950d4?q=80&w=1200"
     />
 
-    <!-- Favicon -->
     <link
       rel="icon"
       type="image/svg+xml"
@@ -59,7 +60,13 @@
         console.error("Error global:", error);
         const root = document.getElementById("root");
         if (root && root.innerHTML === "") {
-          root.innerHTML = `<div style="padding:20px;color:red;">Error de carga. Revisa la consola.</div>`;
+          root.innerHTML = `
+              <div style="padding: 20px; color: #ef4444; font-family: system-ui, sans-serif; max-width: 600px; margin: 0 auto; text-align: center; margin-top: 50px;">
+                <h2 style="font-size: 24px; font-weight: bold; margin-bottom: 10px;">Algo impidió que la app cargara 😔</h2>
+                <p style="background: #fee2e2; padding: 15px; border-radius: 8px; font-family: monospace;">${message}</p>
+                <p style="color: #666; font-size: 14px; margin-top: 20px;">Revisa la consola (F12) para más detalles técnicos.</p>
+              </div>
+            `;
         }
       };
       tailwind.config = {
