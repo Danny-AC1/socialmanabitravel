@@ -3,9 +3,49 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Ecuador Travel - Explora el País de los 4 Mundos</title>
 
-    <!-- Travel Themed Favicon (Compass) -->
+    <!-- SEO BÁSICO -->
+    <title>Ecuador Travel - Explora el País de los 4 Mundos</title>
+    <meta
+      name="description"
+      content="Descubre los mejores destinos turísticos de Ecuador. Playas, Andes, Amazonía y Galápagos. Únete a la red social de viajeros, comparte tus fotos y planifica tu viaje con IA."
+    />
+    <meta
+      name="keywords"
+      content="turismo ecuador, manabi, galapagos, cotopaxi, viaje, red social, turismo, playas ecuador"
+    />
+    <meta name="author" content="Ecuador Travel" />
+    <meta name="robots" content="index, follow" />
+
+    <!-- OPEN GRAPH (Facebook, WhatsApp, LinkedIn) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://manabi-travel-app.vercel.app/" />
+    <meta
+      property="og:title"
+      content="Ecuador Travel - Tu Guía Turística Social"
+    />
+    <meta
+      property="og:description"
+      content="Únete a la comunidad de viajeros. Descubre destinos ocultos, chatea con otros turistas y usa nuestra IA para planificar tu ruta."
+    />
+    <meta
+      property="og:image"
+      content="https://images.unsplash.com/photo-1598384232375-a010488950d4?q=80&w=1200"
+    />
+
+    <!-- TWITTER CARD -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Ecuador Travel - Explora y Comparte" />
+    <meta
+      name="twitter:description"
+      content="La red social para amantes del turismo en Ecuador."
+    />
+    <meta
+      name="twitter:image"
+      content="https://images.unsplash.com/photo-1598384232375-a010488950d4?q=80&w=1200"
+    />
+
+    <!-- Favicon -->
     <link
       rel="icon"
       type="image/svg+xml"
@@ -14,24 +54,14 @@
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
-      // Configuración de seguridad para evitar errores de librerías
       window.process = { env: { NODE_ENV: "development" } };
-
-      // Detector de errores: Si la pantalla se pone blanca, esto te dirá por qué.
       window.onerror = function (message, source, lineno, colno, error) {
         console.error("Error global:", error);
         const root = document.getElementById("root");
         if (root && root.innerHTML === "") {
-          root.innerHTML = `
-              <div style="padding: 20px; color: #ef4444; font-family: system-ui, sans-serif; max-width: 600px; margin: 0 auto; text-align: center; margin-top: 50px;">
-                <h2 style="font-size: 24px; font-weight: bold; margin-bottom: 10px;">Algo impidió que la app cargara 😔</h2>
-                <p style="background: #fee2e2; padding: 15px; border-radius: 8px; font-family: monospace;">${message}</p>
-                <p style="color: #666; font-size: 14px; margin-top: 20px;">Revisa la consola (F12) para más detalles técnicos.</p>
-              </div>
-            `;
+          root.innerHTML = `<div style="padding:20px;color:red;">Error de carga. Revisa la consola.</div>`;
         }
       };
-
       tailwind.config = {
         theme: {
           extend: {
@@ -43,10 +73,7 @@
                 600: "#0284c7",
                 900: "#0c4a6e",
               },
-              sand: {
-                100: "#fdf6e3",
-                200: "#eee8d5",
-              },
+              sand: { 100: "#fdf6e3", 200: "#eee8d5" },
             },
           },
         },
@@ -61,20 +88,6 @@
         scrollbar-width: none;
       }
     </style>
-    <script type="importmap">
-      {
-        "imports": {
-          "react/": "https://aistudiocdn.com/react@^19.2.1/",
-          "react": "https://aistudiocdn.com/react@^19.2.1",
-          "@google/genai": "https://aistudiocdn.com/@google/genai@^1.31.0",
-          "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
-          "vite": "https://aistudiocdn.com/vite@^7.2.6",
-          "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1",
-          "lucide-react": "https://aistudiocdn.com/lucide-react@^0.556.0",
-          "firebase/": "https://aistudiocdn.com/firebase@^12.6.0/"
-        }
-      }
-    </script>
   </head>
   <body class="bg-stone-50 text-gray-900">
     <div id="root"></div>

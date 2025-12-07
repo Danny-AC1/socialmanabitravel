@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Map as MapIcon, Compass, UserCircle, Camera, Search, Grid, LogOut, ArrowRight, UserPlus, UserCheck, ChevronLeft, PlusCircle, Globe, Filter, Edit3, X, MessageSquarePlus, Mail, MapPin, Plus, MessageCircle, Users, Bell, LayoutGrid, Award } from 'lucide-react';
+import { Map as MapIcon, Compass, UserCircle, Camera, Search, Grid, LogOut, ArrowRight, UserPlus, UserCheck, ChevronLeft, PlusCircle, Globe, Filter, Edit3, X, MessageSquarePlus, Mail, MapPin, Plus, MessageCircle, Users, Bell, LayoutGrid, Award, Home } from 'lucide-react';
 import { HeroSection } from './components/HeroSection';
 import { PostCard } from './components/PostCard';
 import { CreatePostModal } from './components/CreatePostModal';
@@ -25,6 +25,7 @@ import { AuthService } from './services/authService';
 import { resizeImage, isAdmin } from './utils';
 import { db } from './services/firebase';
 import { ref, onValue } from 'firebase/database';
+import { Helmet } from 'react-helmet-async';
 
 type Tab = 'home' | 'explore' | 'search' | 'profile';
 
@@ -72,6 +73,16 @@ function App() {
   const [chatQuery, setChatQuery] = useState('');
 
   const profileInputRef = useRef<HTMLInputElement>(null);
+
+  const getPageTitle = () => {
+      switch(activeTab) {
+          case 'home': return 'Inicio | Ecuador Travel';
+          case 'explore': return 'Explora Destinos | Ecuador Travel';
+          case 'search': return 'Buscar | Ecuador Travel';
+          case 'profile': return 'Mi Perfil | Ecuador Travel';
+          default: return 'Ecuador Travel';
+      }
+  };
 
   // --- HISTORY MANAGEMENT ---
   const pushHistory = (state: any) => {
@@ -296,9 +307,9 @@ function App() {
 
   const normalizeText = (text: string | undefined | null) => { return (text || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""); };
   const normalizedQuery = normalizeText(searchQuery).trim();
-  const filteredPosts = posts.filter(post => normalizeText(post.location).includes(normalizedQuery) || normalizeText(post.caption).includes(normalizedQuery) || normalizeText(post.userName).includes(normalizedQuery));
-  const searchDestinations = destinations.filter(dest => normalizeText(dest.name).includes(normalizedQuery) || normalizeText(dest.location).includes(normalizedQuery) || normalizeText(dest.category).includes(normalizedQuery));
-  const filteredUsers = allUsers.filter(u => normalizeText(u.name).includes(normalizedQuery) || normalizeText(u.bio).includes(normalizedQuery));
+  const filteredPosts = (posts || []).filter(post => normalizeText(post.location).includes(normalizedQuery) || normalizeText(post.caption).includes(normalizedQuery) || normalizeText(post.userName).includes(normalizedQuery));
+  const searchDestinations = (destinations || []).filter(dest => normalizeText(dest.name).includes(normalizedQuery) || normalizeText(dest.location).includes(normalizedQuery) || normalizeText(dest.category).includes(normalizedQuery));
+  const filteredUsers = (allUsers || []).filter(u => normalizeText(u.name).includes(normalizedQuery) || normalizeText(u.bio).includes(normalizedQuery));
   
   const isAdminUser = user ? isAdmin(user.email) : false;
 
@@ -322,69 +333,67 @@ function App() {
   const availableProvinces = getProvincesForRegion(selectedRegion);
 
   return (
-    <div className="min-h-screen bg-stone-50 pb-20 md:pb-10 font-sans">
-      <nav className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-stone-200 px-4 py-3 shadow-sm">
+    <div className="min-h-screen bg-stone-50 pb-20 md:pb-24 font-sans">
+      
+      <Helmet>
+        <title>{getPageTitle()}</title>
+        <meta name="description" content="Descubre Ecuador con nuestra guía turística inteligente." />
+      </Helmet>
+
+      {/* TOP NAVBAR (Mobile: Logo + Actions / Desktop: Full Nav) */}
+      <nav className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-stone-200 px-4 py-3 shadow-sm">
         <div className="max-w-4xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigateToTab('home')}>
             <span className="text-2xl font-black text-cyan-700 tracking-tight">ECUADOR</span>
             <span className="text-2xl font-light text-stone-600">TRAVEL</span>
           </div>
           
+          {/* Desktop Search Bar */}
           <div className="hidden md:flex flex-1 max-w-md mx-8 relative">
-            <input type="text" placeholder="Busca personas, lugares..." className="w-full bg-stone-100 border-transparent focus:bg-white border focus:border-cyan-300 rounded-full py-2 pl-10 pr-4 outline-none transition-all text-sm" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+            <input type="text" placeholder="Buscar..." className="w-full bg-stone-100 border-transparent focus:bg-white border focus:border-cyan-300 rounded-full py-2 pl-10 pr-4 outline-none transition-all text-sm" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
             <Search className="absolute left-3 top-2.5 text-stone-400" size={16} />
-            {searchQuery && ( <button onClick={() => setSearchQuery('')} className="absolute right-3 top-2.5 text-stone-400 hover:text-stone-600"> <LogOut size={14} className="rotate-45" /> </button> )}
           </div>
 
-          <div className="flex space-x-6 text-stone-500 font-medium items-center">
+          {/* Desktop Icons */}
+          <div className="hidden md:flex space-x-6 text-stone-500 font-medium items-center">
              <button onClick={() => navigateToTab('home')} className={`hover:text-cyan-700 transition-colors ${activeTab === 'home' ? 'text-cyan-700' : ''}`}><MapIcon size={24} /></button>
              <button onClick={() => navigateToTab('explore')} className={`hover:text-cyan-700 transition-colors ${activeTab === 'explore' ? 'text-cyan-700' : ''}`}><Compass size={24} /></button>
-             
-             {/* CHAT ICON */}
              <button onClick={() => handleOpenChat()} className="hover:text-cyan-700 transition-colors relative">
                 <MessageCircle size={24} />
-                {unreadMessagesCount > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-4 h-4 flex items-center justify-center rounded-full font-bold border-2 border-white">
-                        {unreadMessagesCount}
-                    </span>
-                )}
+                {unreadMessagesCount > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-4 h-4 flex items-center justify-center rounded-full font-bold border-2 border-white">{unreadMessagesCount}</span>}
              </button>
-
-             {/* NOTIFICATIONS ICON */}
              <button onClick={() => openModal(setIsNotificationsOpen)} className="hover:text-cyan-700 transition-colors relative">
                 <Bell size={24} />
-                {unreadNotifsCount > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-4 h-4 flex items-center justify-center rounded-full font-bold border-2 border-white">
-                        {unreadNotifsCount}
-                    </span>
-                )}
+                {unreadNotifsCount > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-4 h-4 flex items-center justify-center rounded-full font-bold border-2 border-white">{unreadNotifsCount}</span>}
              </button>
-
              {isAdminUser && (
                 <>
-                   <button 
-                      onClick={() => openModal(setIsAdminUsersModalOpen)} 
-                      className="hover:text-cyan-700 transition-colors"
-                   >
-                      <Users size={24} />
-                   </button>
-                   <button 
-                      onClick={() => openModal(setIsSuggestionsModalOpen)} 
-                      className="relative hover:text-cyan-700 transition-colors"
-                   >
-                      <Mail size={24} />
-                      {suggestions.length > 0 && <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white"></span>}
-                   </button>
+                   <button onClick={() => openModal(setIsAdminUsersModalOpen)} className="hover:text-cyan-700 transition-colors"><Users size={24} /></button>
+                   <button onClick={() => openModal(setIsSuggestionsModalOpen)} className="relative hover:text-cyan-700 transition-colors"><Mail size={24} /></button>
                </>
              )}
-
              <button onClick={() => openModal(setIsCreateModalOpen)} className="flex items-center gap-2 bg-cyan-600 text-white px-4 py-2 rounded-full hover:bg-cyan-700 transition-colors shadow-md hover:shadow-lg font-semibold text-sm"> <Camera size={18} /> <span>Publicar</span> </button>
              <button onClick={() => { navigateToTab('profile'); }} className={`rounded-full overflow-hidden ring-2 ring-transparent hover:ring-cyan-400 transition-all ${activeTab === 'profile' && !viewingProfileId ? 'ring-cyan-600' : ''}`}> <img src={user.avatar} alt="Profile" className="w-9 h-9 object-cover" /> </button>
+          </div>
+
+          {/* Mobile Right Icons (Chat & Bell) */}
+          <div className="flex md:hidden items-center gap-4 text-stone-600">
+             {isAdminUser && (
+                 <button onClick={() => openModal(setIsSuggestionsModalOpen)} className="text-cyan-600"><Mail size={22} /></button>
+             )}
+             <button onClick={() => handleOpenChat()} className="relative">
+                <MessageCircle size={24} />
+                {unreadMessagesCount > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-3 h-3 rounded-full border border-white"></span>}
+             </button>
+             <button onClick={() => openModal(setIsNotificationsOpen)} className="relative">
+                <Bell size={24} />
+                {unreadNotifsCount > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-3 h-3 rounded-full border border-white"></span>}
+             </button>
           </div>
         </div>
       </nav>
 
-      <div className="max-w-4xl mx-auto pt-6 px-4 md:px-0">
+      <div className="max-w-4xl mx-auto pt-4 px-4 md:px-0">
         
         {/* MODALES GLOBALES */}
         <OnboardingModal isOpen={isOnboardingOpen} onClose={handleTutorialClose} userName={user.name} />
@@ -410,24 +419,23 @@ function App() {
         {activeTab === 'home' && (
             <div>
                {/* Stories ... */}
-               <div className="mb-6 flex space-x-3 overflow-x-auto no-scrollbar pb-4">
-                   <div className="relative w-24 h-40 shrink-0 rounded-xl overflow-hidden cursor-pointer group shadow-sm transition-transform active:scale-95" onClick={() => openModal(setIsCreateModalOpen)}>
+               <div className="mb-6 flex space-x-3 overflow-x-auto no-scrollbar pb-4 pt-2">
+                   <div className="relative w-20 h-32 md:w-24 md:h-40 shrink-0 rounded-xl overflow-hidden cursor-pointer group shadow-sm transition-transform active:scale-95" onClick={() => openModal(setIsCreateModalOpen)}>
                      <img src={user.avatar} alt="You" className="w-full h-full object-cover opacity-60" />
                      <div className="absolute inset-0 bg-stone-900/20" />
                      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-white text-cyan-600 rounded-full p-1"><Plus size={16} strokeWidth={3} /></div>
-                     <div className="absolute bottom-9 left-0 w-full text-center text-white text-[10px] font-bold">Crear</div>
+                     <div className="absolute bottom-8 md:bottom-9 left-0 w-full text-center text-white text-[10px] font-bold">Crear</div>
                    </div>
                    {activeStories.map((story, idx) => (
-                      <div key={story.id} className={`relative w-24 h-40 shrink-0 rounded-xl overflow-hidden cursor-pointer ring-2 ${story.isViewed ? 'ring-stone-200' : 'ring-cyan-500'}`} onClick={() => openStories(idx, activeStories)}>
+                      <div key={story.id} className={`relative w-20 h-32 md:w-24 md:h-40 shrink-0 rounded-xl overflow-hidden cursor-pointer ring-2 ${story.isViewed ? 'ring-stone-200' : 'ring-cyan-500'}`} onClick={() => openStories(idx, activeStories)}>
                          <img src={story.imageUrl} className="w-full h-full object-cover" />
-                         <span className="absolute bottom-2 left-2 text-white text-[10px] font-bold">{story.userName}</span>
+                         <span className="absolute bottom-2 left-2 text-white text-[10px] font-bold truncate w-16">{story.userName}</span>
                       </div>
                    ))}
                </div>
                
                <div className="grid md:grid-cols-3 gap-8">
                   <div className="md:col-span-2 space-y-6">
-                     {/* RESTORED HERO SECTION IF NO SEARCH */}
                      {!searchQuery && (
                         <HeroSection onGuideClick={() => handleOpenGuide('Parque Nacional Machalilla')} />
                      )}
@@ -443,7 +451,7 @@ function App() {
                      )}
                   </div>
                   
-                  {/* RESTORED SIDEBAR */}
+                  {/* SIDEBAR (Desktop Only) */}
                   <div className="hidden md:block col-span-1 space-y-6">
                      <div className="sticky top-24">
                         <div className="bg-white rounded-2xl shadow-sm border border-stone-100 p-5 mb-6">
@@ -468,10 +476,9 @@ function App() {
             </div>
         )}
 
-        {/* --- EXPLORE TAB RESTORED --- */}
+        {/* --- EXPLORE TAB --- */}
         {activeTab === 'explore' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Filter UI */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-20">
                 <div className="md:col-span-2 flex flex-col gap-4 mb-2">
                     <div className="flex items-center justify-between">
                         <h2 className="text-xl font-bold text-stone-800 flex items-center gap-2"> <Globe size={24} className="text-cyan-600" /> Explora Ecuador </h2>
@@ -503,7 +510,7 @@ function App() {
         )}
 
         {activeTab === 'search' && (
-             <div className="space-y-6">
+             <div className="space-y-6 pb-20">
                 <div className="relative">
                   <input type="text" autoFocus placeholder="Buscar personas, lugares o posts..." className="w-full p-4 pl-12 rounded-xl shadow-sm border border-stone-200 outline-none focus:ring-2 focus:ring-cyan-500" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
                   <Search className="absolute left-4 top-4 text-stone-400" size={20} />
@@ -564,13 +571,11 @@ function App() {
                 if (!targetUser) targetUser = user;
                 
                 const userPosts = posts.filter(p => p.userId === targetUser!.id);
-                // Safe check for followers array which might be undefined in new users
                 const isFollowing = (user.following || []).includes(targetUser!.id);
-                // Get user contributions (Destinations created by user)
                 const userContributions = destinations.filter(d => d.createdBy === targetUser!.id);
 
                 return (
-                  <div className="bg-white rounded-3xl overflow-hidden shadow-sm border border-stone-100 min-h-[500px]">
+                  <div className="bg-white rounded-3xl overflow-hidden shadow-sm border border-stone-100 min-h-[500px] pb-20">
                     <div className="h-32 bg-gradient-to-r from-cyan-500 to-blue-600 relative">
                        {!isMe && <button onClick={() => { setViewingProfileId(null); setActiveTab('home'); }} className="absolute top-4 left-4 bg-white/20 p-2 rounded-full text-white"> <ChevronLeft size={24} /> </button>}
                     </div>
@@ -664,16 +669,38 @@ function App() {
           )}
       </div>
 
-      {/* MODALS */}
+      {/* MOBILE BOTTOM NAVIGATION (Fixed) */}
+      <div className="fixed bottom-0 w-full bg-white border-t border-stone-200 flex justify-around items-center p-3 md:hidden z-50 pb-safe">
+        <button onClick={() => navigateToTab('home')} className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'home' ? 'text-cyan-600' : 'text-stone-400'}`}>
+           <Home size={24} strokeWidth={activeTab === 'home' ? 2.5 : 2} />
+        </button>
+        <button onClick={() => navigateToTab('explore')} className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'explore' ? 'text-cyan-600' : 'text-stone-400'}`}>
+           <Compass size={24} strokeWidth={activeTab === 'explore' ? 2.5 : 2} />
+        </button>
+        
+        {/* Floating Create Button */}
+        <button 
+           onClick={() => openModal(setIsCreateModalOpen)} 
+           className="relative -top-5 bg-gradient-to-r from-cyan-500 to-blue-500 text-white rounded-full p-4 shadow-lg shadow-cyan-200 border-4 border-stone-50 active:scale-95 transition-transform"
+        >
+           <Plus size={28} strokeWidth={3} />
+        </button>
+
+        <button onClick={() => navigateToTab('search')} className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'search' ? 'text-cyan-600' : 'text-stone-400'}`}>
+           <Search size={24} strokeWidth={activeTab === 'search' ? 2.5 : 2} />
+        </button>
+        <button onClick={() => { navigateToTab('profile'); }} className={`relative rounded-full overflow-hidden w-7 h-7 ring-2 transition-all ${activeTab === 'profile' && !viewingProfileId ? 'ring-cyan-600 ring-offset-2' : 'ring-transparent'}`}>
+           <img src={user.avatar} alt="Perfil" className="w-full h-full object-cover" />
+        </button>
+      </div>
+
+      {/* OTHER MODALS */}
       {viewingProfileImage && <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4" onClick={() => setViewingProfileImage(null)}> <img src={viewingProfileImage} className="max-w-full max-h-full rounded-full shadow-2xl" /> <button className="absolute top-4 right-4 text-white p-2"> <X size={32} /> </button> </div>}
       
       <CreatePostModal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} onSubmit={handleCreateContent} />
       <AddDestinationModal isOpen={isAddDestinationModalOpen} onClose={() => setIsAddDestinationModalOpen(false)} onSubmit={handleAddDestination} existingDestinations={destinations} />
       <EditPostModal isOpen={!!editingPost} post={editingPost} onClose={() => setEditingPost(null)} onSave={handleUpdatePost} />
       <EditStoryModal isOpen={!!editingStory} story={editingStory} onClose={() => setEditingStory(null)} onSave={handleUpdateStory} />
-      <SuggestionsModal isOpen={isSuggestionsModalOpen} onClose={() => setIsSuggestionsModalOpen(false)} currentUser={user} isAdmin={isAdminUser} suggestions={suggestions} />
-      <AdminUsersModal isOpen={isAdminUsersModalOpen} onClose={() => setIsAdminUsersModalOpen(false)} users={allUsers} />
-      <ChatModal isOpen={isChatModalOpen} onClose={() => setIsChatModalOpen(false)} currentUser={user} allUsers={allUsers} initialChatId={initialChatId} />
       {viewingPost && <PostViewer post={viewingPost} currentUserId={user.id} onClose={() => setViewingPost(null)} onLike={handleLike} onComment={handleComment} onShare={handleShare} onEdit={handleEditPost} onDelete={handleDeletePost} />}
       <ChatBot externalIsOpen={chatOpen} externalQuery={chatQuery} onCloseExternal={() => setChatOpen(false)} />
       {viewingStoryIndex !== null && <StoryViewer stories={viewingStoryList} initialStoryIndex={viewingStoryIndex} currentUserId={user.id} onClose={() => setViewingStoryIndex(null)} onMarkViewed={handleMarkStoryViewed} onDelete={handleDeleteStory} onEdit={handleEditStory} onLike={handleLikeStory} onShare={handleShare} />}
