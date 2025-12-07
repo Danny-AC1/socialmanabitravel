@@ -304,6 +304,23 @@ function App() {
 
   if (!user) return <AuthScreen onLoginSuccess={setUser} />;
 
+  // --- FILTROS DE EXPLORAR ---
+  const getProvincesForRegion = (region: EcuadorRegion | 'Todas') => {
+    if (region === 'Todas') return [];
+    // PROTECCIÓN CONTRA UNDEFINED EN DESTINATIONS
+    const destsInRegion = (destinations || []).filter(d => d.region === region);
+    const provinces = new Set(destsInRegion.map(d => d.province || ''));
+    return Array.from(provinces).filter(p => p !== '');
+  };
+
+  const filteredExploreDestinations = (destinations || []).filter(dest => {
+    if (selectedRegion !== 'Todas' && dest.region !== selectedRegion) return false;
+    if (selectedProvince !== 'Todas' && dest.province !== selectedProvince) return false;
+    return true;
+  });
+
+  const availableProvinces = getProvincesForRegion(selectedRegion);
+
   return (
     <div className="min-h-screen bg-stone-50 pb-20 md:pb-10 font-sans">
       <nav className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-stone-200 px-4 py-3 shadow-sm">
@@ -320,10 +337,9 @@ function App() {
           </div>
 
           <div className="flex space-x-6 text-stone-500 font-medium items-center">
-             
              <button onClick={() => navigateToTab('home')} className={`hover:text-cyan-700 transition-colors ${activeTab === 'home' ? 'text-cyan-700' : ''}`}><MapIcon size={24} /></button>
              <button onClick={() => navigateToTab('explore')} className={`hover:text-cyan-700 transition-colors ${activeTab === 'explore' ? 'text-cyan-700' : ''}`}><Compass size={24} /></button>
-
+             
              {/* CHAT ICON */}
              <button onClick={() => handleOpenChat()} className="hover:text-cyan-700 transition-colors relative">
                 <MessageCircle size={24} />
@@ -373,6 +389,9 @@ function App() {
         {/* MODALES GLOBALES */}
         <OnboardingModal isOpen={isOnboardingOpen} onClose={handleTutorialClose} userName={user.name} />
         <NotificationsModal isOpen={isNotificationsOpen} onClose={() => setIsNotificationsOpen(false)} notifications={notifications} currentUserId={user.id} />
+        <SuggestionsModal isOpen={isSuggestionsModalOpen} onClose={() => setIsSuggestionsModalOpen(false)} currentUser={user} isAdmin={isAdminUser} suggestions={suggestions} />
+        <AdminUsersModal isOpen={isAdminUsersModalOpen} onClose={() => setIsAdminUsersModalOpen(false)} users={allUsers} />
+        <ChatModal isOpen={isChatModalOpen} onClose={() => setIsChatModalOpen(false)} currentUser={user} allUsers={allUsers} initialChatId={initialChatId} />
         
         {followListType && (
             <FollowListModal 
