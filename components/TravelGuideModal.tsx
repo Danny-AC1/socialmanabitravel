@@ -29,11 +29,22 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
   const [userRating, setUserRating] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
   const [viewingImage, setViewingImage] = useState<string | null>(null);
+  
+  // Estados locales para reflejar cambios al instante
+  const [currentCover, setCurrentCover] = useState(destination.imageUrl);
+  const [currentGallery, setCurrentGallery] = useState<string[]>(destination.gallery || []);
+
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
+
+  // Sincronizar si cambian las props externas
+  useEffect(() => {
+    setCurrentCover(destination.imageUrl);
+    setCurrentGallery(destination.gallery || []);
+  }, [destination]);
 
   if (!destination) return null;
 
@@ -48,11 +59,17 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
       setIsUploading(true);
       try {
         const resized = await resizeImage(file, 1024);
+        
         if (isCover && onChangeCover) {
+            // Actualizar portada
             onChangeCover(resized);
-            alert("Portada actualizada.");
+            setCurrentCover(resized);
+            alert("Portada actualizada con éxito.");
         } else {
+            // Actualizar galería
             onAddPhoto(resized);
+            // Actualización optimista local: Agregamos la foto al principio
+            setCurrentGallery(prev => [resized, ...prev]);
             alert("¡Foto agregada a la galería exitosamente!");
         }
       } catch (err) {
@@ -60,7 +77,17 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
         alert("Error al subir imagen");
       }
       setIsUploading(false);
+      // Limpiar input
+      e.target.value = '';
     }
+  };
+
+  const handleDeletePhoto = (photoUrl: string) => {
+     if (confirm("¿Eliminar esta foto?")) {
+        if (onDeletePhoto) onDeletePhoto(photoUrl);
+        // Actualización optimista local
+        setCurrentGallery(prev => prev.filter(img => img !== photoUrl));
+     }
   };
 
   const handleDeleteDestination = () => {
@@ -71,22 +98,21 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
 
   // --- GALLERY NAVIGATION LOGIC ---
   
-  const gallery = destination.gallery || [];
-  const currentImageIndex = viewingImage ? gallery.indexOf(viewingImage) : -1;
-  const hasMultipleImages = gallery.length > 1;
+  const currentImageIndex = viewingImage ? currentGallery.indexOf(viewingImage) : -1;
+  const hasMultipleImages = currentGallery.length > 1;
 
   const handleNextImage = (e?: React.MouseEvent) => {
     e?.stopPropagation();
     if (currentImageIndex === -1) return;
-    const nextIndex = (currentImageIndex + 1) % gallery.length;
-    setViewingImage(gallery[nextIndex]);
+    const nextIndex = (currentImageIndex + 1) % currentGallery.length;
+    setViewingImage(currentGallery[nextIndex]);
   };
 
   const handlePrevImage = (e?: React.MouseEvent) => {
     e?.stopPropagation();
     if (currentImageIndex === -1) return;
-    const prevIndex = (currentImageIndex - 1 + gallery.length) % gallery.length;
-    setViewingImage(gallery[prevIndex]);
+    const prevIndex = (currentImageIndex - 1 + currentGallery.length) % currentGallery.length;
+    setViewingImage(currentGallery[prevIndex]);
   };
 
   // Touch handlers for Swipe
@@ -126,11 +152,12 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
       <div className="bg-white w-full h-full md:h-[90vh] md:max-w-4xl md:rounded-3xl overflow-hidden shadow-2xl flex flex-col">
         
         <div className="relative h-64 md:h-80 shrink-0 group">
+          {/* Usamos currentCover para reflejar cambios inmediatos */}
           <img 
-            src={destination.imageUrl} 
+            src={currentCover} 
             alt={destination.name} 
             className="w-full h-full object-cover transition-transform duration-700 cursor-pointer"
-            onClick={() => setViewingImage(destination.imageUrl)}
+            onClick={() => setViewingImage(currentCover)}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30 pointer-events-none" />
           
@@ -141,14 +168,14 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
             <X size={24} />
           </button>
 
-          {/* ADMIN CONTROLS: Solo Admins ven esto */}
           {isAdminUser && (
              <div className="absolute top-4 left-4 z-10 flex gap-2">
                 <button 
                   onClick={() => coverInputRef.current?.click()}
-                  className="bg-white/20 hover:bg-white text-white hover:text-cyan-900 px-3 py-1.5 rounded-full backdrop-blur-md transition-all text-xs font-bold flex items-center gap-1"
+                  disabled={isUploading}
+                  className="bg-white/20 hover:bg-white text-white hover:text-cyan-900 px-3 py-1.5 rounded-full backdrop-blur-md transition-all text-xs font-bold flex items-center gap-1 disabled:opacity-50"
                 >
-                   <Edit2 size={12} /> Portada
+                   {isUploading ? <><div className="animate-spin h-3 w-3 border-2 border-current rounded-full border-t-transparent"/> Subiendo...</> : <><Edit2 size={12} /> Portada</>}
                 </button>
                 <button 
                   onClick={handleDeleteDestination}
@@ -229,7 +256,7 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
                     <button 
                         onClick={() => fileInputRef.current?.click()}
                         disabled={isUploading}
-                        className="text-xs bg-cyan-100 hover:bg-cyan-200 text-cyan-800 px-3 py-1.5 rounded-full font-bold flex items-center gap-1 transition-colors"
+                        className="text-xs bg-cyan-100 hover:bg-cyan-200 text-cyan-800 px-3 py-1.5 rounded-full font-bold flex items-center gap-1 transition-colors disabled:opacity-50"
                     >
                         {isUploading ? "Subiendo..." : <><Plus size={14}/> Agregar Foto</>}
                     </button>
@@ -237,7 +264,8 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
                 </div>
                 
                 <div className="grid grid-cols-2 gap-2 md:gap-4">
-                  {destination.gallery && destination.gallery.map((img, idx) => (
+                  {/* Usamos currentGallery para mostrar las fotos actualizadas */}
+                  {currentGallery.map((img, idx) => (
                     <div 
                         key={idx} 
                         onClick={() => setViewingImage(img)}
@@ -248,15 +276,15 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
                       {/* BOTÓN ELIMINAR (Solo Admins) */}
                       {isAdminUser && (
                          <button 
-                           onClick={(e) => { e.stopPropagation(); onDeletePhoto && onDeletePhoto(img); }}
-                           className="absolute top-2 right-2 bg-red-600 text-white p-1.5 rounded-full opacity-0 group-hover/img:opacity-100 transition-opacity"
+                           onClick={(e) => { e.stopPropagation(); handleDeletePhoto(img); }}
+                           className="absolute top-2 right-2 bg-red-600 text-white p-1.5 rounded-full opacity-0 group-hover/img:opacity-100 transition-opacity z-10"
                          >
                             <Trash2 size={14} />
                          </button>
                       )}
                     </div>
                   ))}
-                  {(!destination.gallery || destination.gallery.length === 0) && (
+                  {currentGallery.length === 0 && (
                      <div className="col-span-2 py-8 text-center text-stone-400 bg-stone-100 rounded-xl border border-dashed border-stone-200">
                         Sé el primero en agregar una foto.
                      </div>

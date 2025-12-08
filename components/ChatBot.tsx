@@ -17,7 +17,6 @@ export const ChatBot: React.FC<ChatBotProps> = ({ externalIsOpen, externalQuery,
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
-  // Ref to track if we've handled the external query to prevent double sending
   const handledQueryRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -29,7 +28,6 @@ export const ChatBot: React.FC<ChatBotProps> = ({ externalIsOpen, externalQuery,
   useEffect(() => {
     if (externalQuery && externalQuery !== handledQueryRef.current && isOpen) {
        handledQueryRef.current = externalQuery;
-       // Execute immediate search
        handleSend(undefined, externalQuery);
     }
   }, [externalQuery, isOpen]);
@@ -50,7 +48,7 @@ export const ChatBot: React.FC<ChatBotProps> = ({ externalIsOpen, externalQuery,
     
     if (!textToSend.trim()) return;
 
-    if (!overrideText) setInputValue(''); // Clear input if manual
+    if (!overrideText) setInputValue(''); 
     
     setMessages(prev => [...prev, { role: 'user', text: textToSend }]);
     setIsLoading(true);
@@ -63,16 +61,24 @@ export const ChatBot: React.FC<ChatBotProps> = ({ externalIsOpen, externalQuery,
 
   return (
     <>
+      {/* Botón Flotante Ajustado (Más alto y pequeño) */}
       <button 
         onClick={toggleChat}
-        className={`fixed bottom-6 right-6 z-40 p-4 rounded-full shadow-lg transition-all duration-300 ${isOpen ? 'rotate-90 scale-0' : 'bg-cyan-600 hover:bg-cyan-700 text-white scale-100'}`}
+        className={`fixed z-40 p-3 rounded-full shadow-lg transition-all duration-300 border-2 border-white 
+          bottom-24 right-4 md:bottom-6 md:right-6
+          ${isOpen ? 'rotate-90 scale-0' : 'bg-cyan-600 hover:bg-cyan-700 text-white scale-100'}`}
       >
-        <MessageSquare size={28} />
+        <MessageSquare size={24} />
       </button>
 
-      <div className={`fixed bottom-6 right-6 z-50 w-80 md:w-96 bg-white rounded-2xl shadow-2xl flex flex-col transition-all duration-300 origin-bottom-right overflow-hidden ${isOpen ? 'scale-100 opacity-100' : 'scale-0 opacity-0 pointer-events-none'}`} style={{ height: '500px' }}>
+      {/* Ventana de Chat */}
+      <div 
+        className={`fixed z-50 w-full md:w-96 bg-white rounded-t-3xl md:rounded-2xl shadow-2xl flex flex-col transition-all duration-300 overflow-hidden 
+          bottom-0 left-0 h-[80vh] md:h-[500px] md:bottom-24 md:right-6 md:left-auto
+          ${isOpen ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none'}`}
+      >
         
-        <div className="bg-gradient-to-r from-cyan-600 to-blue-600 p-4 text-white flex justify-between items-center">
+        <div className="bg-gradient-to-r from-cyan-600 to-blue-600 p-4 text-white flex justify-between items-center shrink-0">
           <div className="flex items-center space-x-2">
             <div className="bg-white/20 p-1 rounded-full">
               <Bot size={20} />
@@ -112,18 +118,18 @@ export const ChatBot: React.FC<ChatBotProps> = ({ externalIsOpen, externalQuery,
           <div ref={messagesEndRef} />
         </div>
 
-        <form onSubmit={handleSend} className="p-3 bg-white border-t flex items-center space-x-2">
+        <form onSubmit={handleSend} className="p-3 bg-white border-t flex items-center space-x-2 shrink-0 pb-safe">
           <input
             type="text"
             placeholder="Pregunta sobre turismo..."
-            className="flex-1 bg-gray-100 border-none rounded-full px-4 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none"
+            className="flex-1 bg-gray-100 border-none rounded-full px-4 py-3 text-sm focus:ring-2 focus:ring-cyan-500 outline-none"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
           />
           <button 
             type="submit" 
             disabled={!inputValue.trim() || isLoading}
-            className="p-2 bg-cyan-600 text-white rounded-full hover:bg-cyan-700 disabled:opacity-50 transition-colors"
+            className="p-3 bg-cyan-600 text-white rounded-full hover:bg-cyan-700 disabled:opacity-50 transition-colors shadow-md"
           >
             <Send size={18} />
           </button>

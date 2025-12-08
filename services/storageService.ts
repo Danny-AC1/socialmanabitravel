@@ -8,7 +8,6 @@ export const StorageService = {
   
   savePost: async (post: Post) => {
     await set(ref(db, 'posts/' + post.id), post);
-    // Notificar a los seguidores
     await StorageService.notifyFollowers(post.userId, post.userName, post.userAvatar, 'new_post', post.id);
   },
 
@@ -23,16 +22,47 @@ export const StorageService = {
   toggleLikePost: async (post: Post, userId: string) => {
     const isLiked = post.isLiked;
     const newLikes = isLiked ? (post.likes - 1) : (post.likes + 1);
-    await update(ref(db, `posts/${post.id}`), { likes: newLikes });
     
-    // Notificación opcional (simplificada)
+    await update(ref(db, `posts/${post.id}`), {
+      likes: newLikes
+    });
+    
     if (!isLiked && post.userId !== userId) {
-        // En una app real verificaríamos si ya se notificó
+        const sender = await AuthService.getUserById(userId);
+        if (sender) {
+            await StorageService.createNotification({
+                recipientId: post.userId,
+                senderId: userId,
+                senderName: sender.name,
+                senderAvatar: sender.avatar,
+                type: 'like_post',
+                targetId: post.id
+            });
+        }
     }
   },
 
   addComment: async (postId: string, comments: any[]) => {
-    await update(ref(db, `posts/${postId}`), { comments: comments });
+    await update(ref(db, `posts/${postId}`), {
+      comments: comments
+    });
+
+    const lastComment = comments[comments.length - 1];
+    const postSnapshot = await get(ref(db, `posts/${postId}`));
+    if (postSnapshot.exists()) {
+        const post = postSnapshot.val() as Post;
+        if (post.userId !== lastComment.userId) {
+            await StorageService.createNotification({
+                recipientId: post.userId,
+                senderId: lastComment.userId,
+                senderName: lastComment.userName,
+                senderAvatar: await AuthService.getUserById(lastComment.userId).then(u => u?.avatar || ''),
+                type: 'comment',
+                targetId: postId,
+                preview: lastComment.text
+            });
+        }
+    }
   },
 
   saveStory: async (story: Story) => {
@@ -63,7 +93,16 @@ export const StorageService = {
     await update(ref(db, `stories/${storyId}/viewers/${user.id}`), viewerData);
   },
 
-  // --- NOTIFICATIONS ---
+  createNotification: async (data: { recipientId: string, senderId: string, senderName: string, senderAvatar: string, type: Notification['type'], targetId?: string, preview?: string }) => {
+      const notifId = `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const notification: Notification = {
+          id: notifId,
+          ...data,
+          timestamp: Date.now(),
+          isRead: false
+      };
+      await set(ref(db, `notifications/${data.recipientId}/${notifId}`), notification);
+  },
 
   notifyFollowers: async (senderId: string, senderName: string, senderAvatar: string, type: Notification['type'], targetId: string) => {
     try {
@@ -71,7 +110,6 @@ export const StorageService = {
         if (!user || !user.followers) return;
 
         const notificationsUpdates: any = {};
-        
         user.followers.forEach(followerId => {
             const notifId = `notif_${Date.now()}_${followerId}`;
             const notification: Notification = {
@@ -104,8 +142,6 @@ export const StorageService = {
       await remove(ref(db, `notifications/${userId}`));
   },
 
-  // --- SUGGESTIONS ---
-
   sendSuggestion: async (suggestion: Suggestion) => {
     await set(ref(db, `suggestions/${suggestion.id}`), suggestion);
   },
@@ -113,8 +149,6 @@ export const StorageService = {
   deleteSuggestion: async (id: string) => {
     await remove(ref(db, `suggestions/${id}`));
   },
-
-  // --- DESTINATIONS ---
 
   addDestination: async (destination: Destination) => {
     await set(ref(db, `destinations/${destination.id}`), destination);
@@ -144,6 +178,12 @@ export const StorageService = {
     const updatedGallery = currentGallery.filter(url => url !== photoUrlToRemove);
     await update(ref(db, `destinations/${destinationId}`), { gallery: updatedGallery });
   },
+  
+  clearAll: async () => {
+    await set(ref(db), null);
+    localStorage.clear();
+    window.location.reload();
+  },
 
   // --- CHAT SYSTEM ---
 
@@ -166,6 +206,11 @@ export const StorageService = {
       await set(chatRef, newChat);
     }
     return chatId;
+  },
+
+  // NEW: DELETE CHAT
+  deleteChat: async (chatId: string) => {
+    await remove(ref(db, `chats/${chatId}`));
   },
 
   sendMessage: async (
@@ -197,8 +242,8 @@ export const StorageService = {
 
     let previewText = encryptedText;
     if (type === 'image') previewText = EncryptionService.encrypt('📷 Foto', chatId);
-    if (type === 'video') previewText = EncryptionService.encrypt('🎥 Video', chatId);
-    if (type === 'audio') previewText = EncryptionService.encrypt('🎤 Nota de voz', chatId);
+    else if (type === 'video') previewText = EncryptionService.encrypt('🎥 Video', chatId);
+    else if (type === 'audio') previewText = EncryptionService.encrypt('🎤 Nota de voz', chatId);
 
     await update(ref(db, `chats/${chatId}`), {
       lastMessage: previewText, 
@@ -233,11 +278,5 @@ export const StorageService = {
         await update(messagesRef, updates);
       }
     }
-  },
-  
-  clearAll: async () => {
-    await set(ref(db), null);
-    localStorage.clear();
-    window.location.reload();
   }
 };

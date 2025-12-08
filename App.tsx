@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Map as MapIcon, Compass, UserCircle, Camera, Search, Grid, LogOut, ArrowRight, UserPlus, UserCheck, ChevronLeft, PlusCircle, Globe, Filter, Edit3, X, MessageSquarePlus, Mail, MapPin, Plus, MessageCircle, Users, Bell, LayoutGrid, Award } from 'lucide-react';
+import { Map as MapIcon, Compass, UserCircle, Camera, Search, Grid, LogOut, ArrowRight, UserPlus, UserCheck, ChevronLeft, PlusCircle, Globe, Filter, Edit3, X, MessageSquarePlus, Mail, MapPin, Plus, MessageCircle, Users, Bell, LayoutGrid, Award, Home } from 'lucide-react';
 import { HeroSection } from './components/HeroSection';
 import { PostCard } from './components/PostCard';
 import { CreatePostModal } from './components/CreatePostModal';
@@ -358,20 +358,34 @@ function App() {
           <div className="hidden md:flex space-x-6 text-stone-500 font-medium items-center">
              <button onClick={() => navigateToTab('home')} className={`hover:text-cyan-700 transition-colors ${activeTab === 'home' ? 'text-cyan-700' : ''}`}><MapIcon size={24} /></button>
              <button onClick={() => navigateToTab('explore')} className={`hover:text-cyan-700 transition-colors ${activeTab === 'explore' ? 'text-cyan-700' : ''}`}><Compass size={24} /></button>
+             
+             {/* CHAT ICON */}
              <button onClick={() => handleOpenChat()} className="hover:text-cyan-700 transition-colors relative">
                 <MessageCircle size={24} />
-                {unreadMessagesCount > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-4 h-4 flex items-center justify-center rounded-full font-bold border-2 border-white">{unreadMessagesCount}</span>}
+                {unreadMessagesCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-4 h-4 flex items-center justify-center rounded-full font-bold border-2 border-white">
+                        {unreadMessagesCount}
+                    </span>
+                )}
              </button>
+
+             {/* NOTIFICATIONS ICON */}
              <button onClick={() => openModal(setIsNotificationsOpen)} className="hover:text-cyan-700 transition-colors relative">
                 <Bell size={24} />
-                {unreadNotifsCount > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-4 h-4 flex items-center justify-center rounded-full font-bold border-2 border-white">{unreadNotifsCount}</span>}
+                {unreadNotifsCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-4 h-4 flex items-center justify-center rounded-full font-bold border-2 border-white">
+                        {unreadNotifsCount}
+                    </span>
+                )}
              </button>
+
              {isAdminUser && (
                 <>
                    <button onClick={() => openModal(setIsAdminUsersModalOpen)} className="hover:text-cyan-700 transition-colors"><Users size={24} /></button>
                    <button onClick={() => openModal(setIsSuggestionsModalOpen)} className="relative hover:text-cyan-700 transition-colors"><Mail size={24} /></button>
                </>
              )}
+
              <button onClick={() => openModal(setIsCreateModalOpen)} className="flex items-center gap-2 bg-cyan-600 text-white px-4 py-2 rounded-full hover:bg-cyan-700 transition-colors shadow-md hover:shadow-lg font-semibold text-sm"> <Camera size={18} /> <span>Publicar</span> </button>
              <button onClick={() => { navigateToTab('profile'); }} className={`rounded-full overflow-hidden ring-2 ring-transparent hover:ring-cyan-400 transition-all ${activeTab === 'profile' && !viewingProfileId ? 'ring-cyan-600' : ''}`}> <img src={user.avatar} alt="Profile" className="w-9 h-9 object-cover" /> </button>
           </div>
@@ -439,6 +453,7 @@ function App() {
                
                <div className="grid md:grid-cols-3 gap-8">
                   <div className="md:col-span-2 space-y-6">
+                     {/* RESTORED HERO SECTION IF NO SEARCH */}
                      {!searchQuery && (
                         <HeroSection onGuideClick={() => handleOpenGuide('Parque Nacional Machalilla')} />
                      )}
@@ -454,7 +469,7 @@ function App() {
                      )}
                   </div>
                   
-                  {/* SIDEBAR (Desktop Only) */}
+                  {/* RESTORED SIDEBAR */}
                   <div className="hidden md:block col-span-1 space-y-6">
                      <div className="sticky top-24">
                         <div className="bg-white rounded-2xl shadow-sm border border-stone-100 p-5 mb-6">
@@ -482,6 +497,7 @@ function App() {
         {/* --- EXPLORE TAB RESTORED --- */}
         {activeTab === 'explore' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-20">
+                {/* Filter UI */}
                 <div className="md:col-span-2 flex flex-col gap-4 mb-2">
                     <div className="flex items-center justify-between">
                         <h2 className="text-xl font-bold text-stone-800 flex items-center gap-2"> <Globe size={24} className="text-cyan-600" /> Explora Ecuador </h2>
@@ -675,27 +691,33 @@ function App() {
       </div>
 
       {/* MOBILE BOTTOM NAVIGATION (Fixed) */}
-      <div className="fixed bottom-0 w-full bg-white border-t border-stone-200 flex justify-around items-center p-3 md:hidden z-50 pb-safe">
-        <button onClick={() => navigateToTab('home')} className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'home' ? 'text-cyan-600' : 'text-stone-400'}`}>
-           <MapIcon size={24} strokeWidth={activeTab === 'home' ? 2.5 : 2} />
+      <div className="fixed bottom-0 w-full bg-white border-t border-stone-200 flex justify-around items-center p-2 pb-safe md:hidden z-50">
+        <button onClick={() => navigateToTab('home')} className={`flex flex-col items-center gap-0.5 transition-colors ${activeTab === 'home' ? 'text-cyan-600' : 'text-stone-400'}`}>
+           <Home size={22} strokeWidth={activeTab === 'home' ? 2.5 : 2} />
+           <span className="text-[10px] font-medium">Inicio</span>
         </button>
-        <button onClick={() => navigateToTab('explore')} className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'explore' ? 'text-cyan-600' : 'text-stone-400'}`}>
-           <Compass size={24} strokeWidth={activeTab === 'explore' ? 2.5 : 2} />
+        <button onClick={() => navigateToTab('explore')} className={`flex flex-col items-center gap-0.5 transition-colors ${activeTab === 'explore' ? 'text-cyan-600' : 'text-stone-400'}`}>
+           <Compass size={22} strokeWidth={activeTab === 'explore' ? 2.5 : 2} />
+           <span className="text-[10px] font-medium">Explorar</span>
         </button>
         
         {/* Floating Create Button */}
         <button 
            onClick={() => openModal(setIsCreateModalOpen)} 
-           className="relative -top-5 bg-gradient-to-r from-cyan-500 to-blue-500 text-white rounded-full p-4 shadow-lg shadow-cyan-200 border-4 border-stone-50 active:scale-95 transition-transform"
+           className="relative -top-4 bg-gradient-to-r from-cyan-500 to-blue-500 text-white rounded-full p-3 shadow-lg shadow-cyan-200 border-4 border-stone-50 active:scale-95 transition-transform"
         >
-           <Plus size={28} strokeWidth={3} />
+           <Plus size={26} strokeWidth={3} />
         </button>
 
-        <button onClick={() => navigateToTab('search')} className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'search' ? 'text-cyan-600' : 'text-stone-400'}`}>
-           <Search size={24} strokeWidth={activeTab === 'search' ? 2.5 : 2} />
+        <button onClick={() => navigateToTab('search')} className={`flex flex-col items-center gap-0.5 transition-colors ${activeTab === 'search' ? 'text-cyan-600' : 'text-stone-400'}`}>
+           <Search size={22} strokeWidth={activeTab === 'search' ? 2.5 : 2} />
+           <span className="text-[10px] font-medium">Buscar</span>
         </button>
-        <button onClick={() => { navigateToTab('profile'); }} className={`relative rounded-full overflow-hidden w-7 h-7 ring-2 transition-all ${activeTab === 'profile' && !viewingProfileId ? 'ring-cyan-600 ring-offset-2' : 'ring-transparent'}`}>
-           <img src={user.avatar} alt="Perfil" className="w-full h-full object-cover" />
+        <button onClick={() => { navigateToTab('profile'); }} className="flex flex-col items-center gap-0.5">
+           <div className={`relative rounded-full overflow-hidden w-6 h-6 ring-2 transition-all ${activeTab === 'profile' && !viewingProfileId ? 'ring-cyan-600 ring-offset-1' : 'ring-transparent'}`}>
+              <img src={user.avatar} alt="Perfil" className="w-full h-full object-cover" />
+           </div>
+           <span className={`text-[10px] font-medium ${activeTab === 'profile' ? 'text-cyan-600' : 'text-stone-400'}`}>Perfil</span>
         </button>
       </div>
 
