@@ -3,6 +3,7 @@ import { db } from "./firebase";
 import { Post, Story, Destination, Suggestion, User, Chat, Message, Notification } from '../types';
 import { EncryptionService } from "./encryptionService";
 import { AuthService } from "./authService";
+import { ALL_DESTINATIONS } from '../constants'; // Importar datos estáticos para migración
 
 export const StorageService = {
   
@@ -22,11 +23,7 @@ export const StorageService = {
   toggleLikePost: async (post: Post, userId: string) => {
     const isLiked = post.isLiked;
     const newLikes = isLiked ? (post.likes - 1) : (post.likes + 1);
-    
-    await update(ref(db, `posts/${post.id}`), {
-      likes: newLikes
-    });
-    
+    await update(ref(db, `posts/${post.id}`), { likes: newLikes });
     if (!isLiked && post.userId !== userId) {
         const sender = await AuthService.getUserById(userId);
         if (sender) {
@@ -43,10 +40,7 @@ export const StorageService = {
   },
 
   addComment: async (postId: string, comments: any[]) => {
-    await update(ref(db, `posts/${postId}`), {
-      comments: comments
-    });
-
+    await update(ref(db, `posts/${postId}`), { comments: comments });
     const lastComment = comments[comments.length - 1];
     const postSnapshot = await get(ref(db, `posts/${postId}`));
     if (postSnapshot.exists()) {
@@ -159,30 +153,69 @@ export const StorageService = {
   },
 
   rateDestination: async (destinationId: string, userId: string, rating: number, currentRating: number, reviewCount: number = 0) => {
+    // Para rating, también necesitamos asegurar que el destino exista en Firebase
+    const destRef = ref(db, `destinations/${destinationId}`);
+    const snapshot = await get(destRef);
+
+    if (!snapshot.exists()) {
+         const originalDest = ALL_DESTINATIONS.find(d => d.id === destinationId);
+         if (originalDest) {
+             // Crear copia inicial
+             await set(destRef, originalDest);
+         }
+    }
+
     await set(ref(db, `destinations/${destinationId}/ratings/${userId}`), rating);
     const newCount = (reviewCount || 0) + 1;
     const newAvg = ((currentRating * (reviewCount || 0)) + rating) / newCount;
-    await update(ref(db, `destinations/${destinationId}`), { rating: newAvg, reviewsCount: newCount });
+    await update(destRef, { rating: newAvg, reviewsCount: newCount });
   },
 
-  addPhotoToDestinationGallery: async (destinationId: string, currentGallery: string[], newImageUrl: string) => {
+  // --- ACTUALIZACIÓN DE DESTINOS (FIXED) ---
+
+  updateDestinationCover: async (destinationId: string, newImageUrl: string, fullDestination?: Destination) => {
+    const destRef = ref(db, `destinations/${destinationId}`);
+    const snapshot = await get(destRef);
+    
+    if (snapshot.exists()) {
+        await update(destRef, { imageUrl: newImageUrl });
+    } else {
+        // Migrar de estático a Firebase
+        const destToSave = fullDestination || ALL_DESTINATIONS.find(d => d.id === destinationId);
+        if (destToSave) {
+            await set(destRef, { ...destToSave, imageUrl: newImageUrl });
+        }
+    }
+  },
+
+  addPhotoToDestinationGallery: async (destinationId: string, currentGallery: string[], newImageUrl: string, fullDestination?: Destination) => {
+    const destRef = ref(db, `destinations/${destinationId}`);
+    const snapshot = await get(destRef);
     const updatedGallery = [newImageUrl, ...(currentGallery || [])];
-    await update(ref(db, `destinations/${destinationId}`), { gallery: updatedGallery });
+
+    if (snapshot.exists()) {
+        await update(destRef, { gallery: updatedGallery });
+    } else {
+        const destToSave = fullDestination || ALL_DESTINATIONS.find(d => d.id === destinationId);
+        if (destToSave) {
+            await set(destRef, { ...destToSave, gallery: updatedGallery });
+        }
+    }
   },
 
-  updateDestinationCover: async (destinationId: string, newImageUrl: string) => {
-    await update(ref(db, `destinations/${destinationId}`), { imageUrl: newImageUrl });
-  },
-
-  removeDestinationPhoto: async (destinationId: string, currentGallery: string[], photoUrlToRemove: string) => {
+  removeDestinationPhoto: async (destinationId: string, currentGallery: string[], photoUrlToRemove: string, fullDestination?: Destination) => {
     const updatedGallery = currentGallery.filter(url => url !== photoUrlToRemove);
-    await update(ref(db, `destinations/${destinationId}`), { gallery: updatedGallery });
-  },
-  
-  clearAll: async () => {
-    await set(ref(db), null);
-    localStorage.clear();
-    window.location.reload();
+    const destRef = ref(db, `destinations/${destinationId}`);
+    const snapshot = await get(destRef);
+
+    if (snapshot.exists()) {
+        await update(destRef, { gallery: updatedGallery });
+    } else {
+        const destToSave = fullDestination || ALL_DESTINATIONS.find(d => d.id === destinationId);
+        if (destToSave) {
+            await set(destRef, { ...destToSave, gallery: updatedGallery });
+        }
+    }
   },
 
   // --- CHAT SYSTEM ---
@@ -208,7 +241,6 @@ export const StorageService = {
     return chatId;
   },
 
-  // NEW: DELETE CHAT
   deleteChat: async (chatId: string) => {
     await remove(ref(db, `chats/${chatId}`));
   },
@@ -278,5 +310,11 @@ export const StorageService = {
         await update(messagesRef, updates);
       }
     }
+  },
+  
+  clearAll: async () => {
+    await set(ref(db), null);
+    localStorage.clear();
+    window.location.reload();
   }
 };

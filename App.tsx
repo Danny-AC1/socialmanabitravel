@@ -44,7 +44,10 @@ function App() {
   const [followListType, setFollowListType] = useState<'followers' | 'following' | null>(null);
   const [profileSubTab, setProfileSubTab] = useState<'posts' | 'contributions'>('posts');
 
-  const [activeTab, setActiveTab] = useState<Tab>('home');
+  const [activeTab, setActiveTab] = useState<Tab>(() => {
+    return (sessionStorage.getItem('activeTab') as Tab) || 'home';
+  });
+
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isAddDestinationModalOpen, setIsAddDestinationModalOpen] = useState(false);
   const [isSuggestionsModalOpen, setIsSuggestionsModalOpen] = useState(false);
@@ -90,7 +93,14 @@ function App() {
   };
 
   useEffect(() => {
-    window.history.replaceState({ type: 'tab', tab: 'home' }, '');
+    sessionStorage.setItem('activeTab', activeTab);
+  }, [activeTab]);
+
+  useEffect(() => {
+    const currentTab = sessionStorage.getItem('activeTab') || 'home';
+    if (activeTab !== currentTab) {
+        window.history.replaceState({ type: 'tab', tab: currentTab }, '');
+    }
 
     const handlePopState = (event: PopStateEvent) => {
       const state = event.state;
@@ -113,7 +123,7 @@ function App() {
       else if (state && state.type === 'tab') {
          setActiveTab(state.tab);
       } else {
-         setActiveTab('home');
+         setActiveTab((sessionStorage.getItem('activeTab') as Tab) || 'home');
       }
     };
 
@@ -121,7 +131,7 @@ function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, [
     isCreateModalOpen, isAddDestinationModalOpen, isSuggestionsModalOpen, isAdminUsersModalOpen, isChatModalOpen, isNotificationsOpen, followListType, viewingPost, viewingStoryIndex, 
-    selectedDestination, viewingProfileImage, editingPost, editingStory, chatOpen, viewingProfileId, isOnboardingOpen
+    selectedDestination, viewingProfileImage, editingPost, editingStory, chatOpen, viewingProfileId, isOnboardingOpen, activeTab
   ]);
 
   const navigateToTab = (tab: Tab) => {
@@ -192,24 +202,36 @@ function App() {
       setAllUsers(loadedUsers);
     });
 
+    // --- CORRECCIÓN EN CARGA DE DESTINOS PARA PERSISTENCIA ---
     const destinationsRef = ref(db, 'destinations');
     const unsubscribeDestinations = onValue(destinationsRef, (snapshot) => {
       const data = snapshot.val();
-      const loadedDestinations: Destination[] = data ? Object.values(data) : [];
+      const firebaseDestinations: Destination[] = data ? Object.values(data) : [];
       
-      const mergedDestinations = [...STATIC_DESTINATIONS];
-      const firebaseDestMap = new Map(loadedDestinations.map(d => [d.id, d]));
+      const firebaseDestMap = new Map(firebaseDestinations.map(d => [d.id, d]));
       
-      for (let i = 0; i < mergedDestinations.length; i++) {
-         const staticDest = mergedDestinations[i];
-         if (firebaseDestMap.has(staticDest.id)) {
-            mergedDestinations[i] = firebaseDestMap.get(staticDest.id)!;
-            firebaseDestMap.delete(staticDest.id);
-         }
-      }
+      const mergedDestinations = STATIC_DESTINATIONS.map(staticDest => {
+          // Si existe en Firebase (fue editado), usamos esa versión
+          if (firebaseDestMap.has(staticDest.id)) {
+              const updatedDest = firebaseDestMap.get(staticDest.id)!;
+              firebaseDestMap.delete(staticDest.id);
+              return updatedDest;
+          }
+          return staticDest;
+      });
+
       const finalDestinations = [...mergedDestinations, ...Array.from(firebaseDestMap.values())];
       setDestinations(finalDestinations);
+      
+      // Actualizar detalle en tiempo real
+      if (selectedDestination) {
+          const updatedSelected = finalDestinations.find(d => d.id === selectedDestination.id);
+          if (updatedSelected && JSON.stringify(updatedSelected) !== JSON.stringify(selectedDestination)) {
+             setSelectedDestination(updatedSelected);
+          }
+      }
     });
+    // ---------------------------------------------------------
 
     const suggestionsRef = ref(db, 'suggestions');
     const unsubscribeSuggestions = onValue(suggestionsRef, (snapshot) => {
@@ -257,7 +279,7 @@ function App() {
       unsubscribeChats();
       unsubscribeNotifs();
     };
-  }, [user?.id]);
+  }, [user?.id, selectedDestination?.id]); 
 
   useEffect(() => {
     if (user && allUsers.length > 0) {
@@ -281,9 +303,19 @@ function App() {
   const handleCreateContent = async (image: string, caption: string, location: string, type: 'post' | 'story', mediaType: 'image' | 'video') => { if (!user) return; if (type === 'post') { const newPost: Post = { id: Date.now().toString(), userId: user.id, userName: user.name, userAvatar: user.avatar, location, imageUrl: image, mediaType: mediaType, caption, likes: 0, comments: [], timestamp: Date.now(), isLiked: false }; await StorageService.savePost(newPost); } else { const newStory: Story = { id: `s_${Date.now()}`, userId: user.id, userName: user.name, userAvatar: user.avatar, imageUrl: image, mediaType: mediaType, timestamp: Date.now(), isViewed: false, caption: caption, location: location, likes: 0, isLiked: false }; await StorageService.saveStory(newStory); } setActiveTab('home'); window.scrollTo({ top: 0, behavior: 'smooth' }); };
   const handleAddDestination = async (data: any) => { if (!user) return; const newId = `ud_${Date.now()}`; const destination: Destination = { ...data, id: newId, isUserGenerated: true, createdBy: user.id, rating: 5, reviewsCount: 1, ratings: { [user.id]: 5 } }; await StorageService.addDestination(destination); };
   const handleRateDestination = async (rating: number) => { if (!selectedDestination || !user) return; if (selectedDestination.ratings && selectedDestination.ratings[user.id]) { alert("Ya has calificado este lugar."); return; } await StorageService.rateDestination( selectedDestination.id, user.id, rating, selectedDestination.rating || 5, selectedDestination.reviewsCount || 0 ); };
-  const handleAddPhotoToDestination = async (image: string) => { if (!selectedDestination || !user) return; await StorageService.addPhotoToDestinationGallery( selectedDestination.id, selectedDestination.gallery, image ); };
-  const handleChangeDestinationCover = async (image: string) => { if (!selectedDestination || !user) return; await StorageService.updateDestinationCover(selectedDestination.id, image); };
-  const handleDeleteDestinationPhoto = async (photoUrl: string) => { if (!selectedDestination || !user) return; if (confirm("¿Eliminar esta foto de la galería?")) { await StorageService.removeDestinationPhoto( selectedDestination.id, selectedDestination.gallery, photoUrl ); } };
+  
+  // FIX: Pass full destination to service for persistence
+  const handleAddPhotoToDestination = async (image: string) => { 
+      if (!selectedDestination || !user) return; 
+      await StorageService.addPhotoToDestinationGallery( selectedDestination.id, selectedDestination.gallery, image, selectedDestination ); 
+  };
+  
+  const handleChangeDestinationCover = async (image: string) => { 
+      if (!selectedDestination || !user) return; 
+      await StorageService.updateDestinationCover(selectedDestination.id, image, selectedDestination); 
+  };
+  
+  const handleDeleteDestinationPhoto = async (photoUrl: string) => { if (!selectedDestination || !user) return; if (confirm("¿Eliminar esta foto de la galería?")) { await StorageService.removeDestinationPhoto( selectedDestination.id, selectedDestination.gallery, photoUrl, selectedDestination ); } };
   
   const handleDeleteDestination = async (id: string) => { await StorageService.deleteDestination(id); setSelectedDestination(null); };
   const handleEditPost = (post: Post) => openDetail(setEditingPost, post);
@@ -318,7 +350,6 @@ function App() {
   // --- FILTROS DE EXPLORAR ---
   const getProvincesForRegion = (region: EcuadorRegion | 'Todas') => {
     if (region === 'Todas') return [];
-    // PROTECCIÓN CONTRA UNDEFINED EN DESTINATIONS
     const destsInRegion = (destinations || []).filter(d => d.region === region);
     const provinces = new Set(destsInRegion.map(d => d.province || ''));
     return Array.from(provinces).filter(p => p !== '');
@@ -362,21 +393,13 @@ function App() {
              {/* CHAT ICON */}
              <button onClick={() => handleOpenChat()} className="hover:text-cyan-700 transition-colors relative">
                 <MessageCircle size={24} />
-                {unreadMessagesCount > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-4 h-4 flex items-center justify-center rounded-full font-bold border-2 border-white">
-                        {unreadMessagesCount}
-                    </span>
-                )}
+                {unreadMessagesCount > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-4 h-4 flex items-center justify-center rounded-full font-bold border-2 border-white">{unreadMessagesCount}</span>}
              </button>
 
              {/* NOTIFICATIONS ICON */}
              <button onClick={() => openModal(setIsNotificationsOpen)} className="hover:text-cyan-700 transition-colors relative">
                 <Bell size={24} />
-                {unreadNotifsCount > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-4 h-4 flex items-center justify-center rounded-full font-bold border-2 border-white">
-                        {unreadNotifsCount}
-                    </span>
-                )}
+                {unreadNotifsCount > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-4 h-4 flex items-center justify-center rounded-full font-bold border-2 border-white">{unreadNotifsCount}</span>}
              </button>
 
              {isAdminUser && (
@@ -728,6 +751,9 @@ function App() {
       <AddDestinationModal isOpen={isAddDestinationModalOpen} onClose={() => setIsAddDestinationModalOpen(false)} onSubmit={handleAddDestination} existingDestinations={destinations} />
       <EditPostModal isOpen={!!editingPost} post={editingPost} onClose={() => setEditingPost(null)} onSave={handleUpdatePost} />
       <EditStoryModal isOpen={!!editingStory} story={editingStory} onClose={() => setEditingStory(null)} onSave={handleUpdateStory} />
+      <SuggestionsModal isOpen={isSuggestionsModalOpen} onClose={() => setIsSuggestionsModalOpen(false)} currentUser={user} isAdmin={isAdminUser} suggestions={suggestions} />
+      <AdminUsersModal isOpen={isAdminUsersModalOpen} onClose={() => setIsAdminUsersModalOpen(false)} users={allUsers} />
+      <ChatModal isOpen={isChatModalOpen} onClose={() => setIsChatModalOpen(false)} currentUser={user} allUsers={allUsers} initialChatId={initialChatId} />
       {viewingPost && <PostViewer post={viewingPost} currentUserId={user.id} onClose={() => setViewingPost(null)} onLike={handleLike} onComment={handleComment} onShare={handleShare} onEdit={handleEditPost} onDelete={handleDeletePost} />}
       <ChatBot externalIsOpen={chatOpen} externalQuery={chatQuery} onCloseExternal={() => setChatOpen(false)} />
       {viewingStoryIndex !== null && <StoryViewer stories={viewingStoryList} initialStoryIndex={viewingStoryIndex} currentUserId={user.id} onClose={() => setViewingStoryIndex(null)} onMarkViewed={handleMarkStoryViewed} onDelete={handleDeleteStory} onEdit={handleEditStory} onLike={handleLikeStory} onShare={handleShare} />}
