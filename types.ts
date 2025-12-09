@@ -1,3 +1,13 @@
+
+
+export interface Badge {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+  unlockedAt?: number;
+}
+
 export interface User {
   id: string;
   name: string;
@@ -7,8 +17,10 @@ export interface User {
   bio?: string;
   followers: string[];
   following: string[];
-  isOnline?: boolean;
-  lastSeen?: number;
+  points?: number; // Puntos de gamificación
+  badges?: Badge[]; // Insignias ganadas
+  lastLogin?: number; // Para bono diario
+  completedChallenges?: Record<string, number>; // ID del desafío -> Timestamp
 }
 
 export interface Comment {
@@ -67,17 +79,18 @@ export interface Suggestion {
   isRead: boolean;
 }
 
+// --- CHAT TYPES ---
+
 export interface Message {
   id: string;
   senderId: string;
-  text: string; 
+  text: string; // Texto cifrado (o vacío si es solo media)
   type: 'text' | 'image' | 'video' | 'audio';
-  mediaUrl?: string; 
+  mediaUrl?: string; // URL/Base64 cifrada del archivo
   replyTo?: {
     id: string;
     text: string;
     senderName: string;
-    type?: string;
   } | null;
   timestamp: number;
   isRead: boolean;
@@ -89,18 +102,19 @@ export interface Chat {
   lastMessage: string;
   lastTimestamp: number;
   updatedAt: number;
-  unreadCount?: number; 
+  unreadCount?: number; // Calculado en cliente
 }
 
-// --- RE-ADDED NOTIFICATION TYPE ---
 export interface Notification {
   id: string;
-  recipientId: string;
-  senderId: string;
-  senderName: string;
-  senderAvatar: string;
-  type: 'follow' | 'like_post' | 'comment' | 'new_post' | 'new_story';
-  targetId?: string;
+  userId: string;
+  type: 'like' | 'comment' | 'follow' | 'system';
+  senderId?: string;
+  senderName?: string;
+  senderAvatar?: string;
+  postId?: string;
+  postImage?: string;
+  text?: string;
   timestamp: number;
   isRead: boolean;
 }
@@ -127,4 +141,40 @@ export interface Destination {
   createdBy?: string; 
   ratings?: Record<string, number>; 
   reviewsCount?: number;
+  
+  isFeatured?: boolean; // Nuevo: Para destacar en Hero
+  
+  coordinates?: {
+    latitude: number;
+    longitude: number;
+  };
+}
+
+export interface ItineraryDay {
+  morning: string;
+  afternoon: string;
+  night: string;
+}
+
+export interface Itinerary {
+  title: string;
+  duration: string;
+  budget: string;
+  days: ItineraryDay[];
+}
+
+export type ChallengeType = 'photo' | 'trivia' | 'checkin';
+
+export interface Challenge {
+  id: string;
+  title: string;
+  description: string;
+  type: ChallengeType;
+  points: number;
+  icon: string;
+  actionLabel: string;
+  // Para trivias
+  question?: string;
+  options?: string[];
+  correctAnswer?: number;
 }

@@ -1,15 +1,104 @@
-import { ref, set, remove, update, get, push } from "firebase/database";
+
+import { ref, set, remove, update, get, push, child } from "firebase/database";
 import { db } from "./firebase";
-import { Post, Story, Destination, Suggestion, User, Chat, Message, Notification } from '../types';
+import { Post, Story, Destination, Suggestion, User, Chat, Message } from '../types';
 import { EncryptionService } from "./encryptionService";
-import { AuthService } from "./authService";
-import { ALL_DESTINATIONS } from '../constants'; // Importar datos estáticos para migración
+import { POINT_VALUES, checkNewBadges } from "../utils";
+
+// NOTA: La lectura (GET) ahora se hace en App.tsx con listeners en tiempo real.
+// Este servicio se encarga principalmente de las escrituras (WRITE).
 
 export const StorageService = {
   
+  // --- GAMIFICATION SYSTEM ---
+  
+  awardPoints: async (userId: string, amount: number, actionType: 'post' | 'comment' | 'destination' | 'photo' | 'share' | 'login') => {
+    const userRef = ref(db, `users/${userId}`);
+    const snapshot = await get(userRef);
+    
+    if (snapshot.exists()) {
+        const user = snapshot.val() as User;
+        const currentPoints = user.points || 0;
+        const newPoints = currentPoints + amount;
+        
+        // Simulación de conteos para badges (en producción se usarían contadores reales en DB)
+        // Aquí usamos una lógica simplificada basada en puntos para algunos casos o eventos directos
+        let actionCount = 0;
+        if (actionType === 'post') actionCount = Math.floor(newPoints / POINT_VALUES.POST); // Estimación
+        if (actionType === 'comment') actionCount = Math.floor(newPoints / POINT_VALUES.COMMENT);
+        
+        // Verificar nuevas insignias
+        const newBadges = checkNewBadges({ ...user, points: newPoints }, actionType as any, actionCount);
+        const updatedBadges = [...(user.badges || []), ...newBadges];
+
+        await update(userRef, {
+            points: newPoints,
+            badges: updatedBadges
+        });
+
+        // Si se ganaron badges, podrías retornar info para una notificación UI
+        return { newPoints, newBadges };
+    }
+  },
+
+  checkDailyLogin: async (userId: string) => {
+    const userRef = ref(db, `users/${userId}`);
+    const snapshot = await get(userRef);
+    
+    if (snapshot.exists()) {
+        const user = snapshot.val() as User;
+        const lastLogin = user.lastLogin || 0;
+        const now = Date.now();
+        const oneDay = 24 * 60 * 60 * 1000;
+
+        // Verificar si es un nuevo día (simple check)
+        const lastDate = new Date(lastLogin).toDateString();
+        const currentDate = new Date(now).toDateString();
+
+        if (lastDate !== currentDate) {
+            await StorageService.awardPoints(userId, POINT_VALUES.LOGIN_DAILY, 'login');
+            await update(userRef, { lastLogin: now });
+            return true; // Se dieron puntos
+        }
+    }
+    return false;
+  },
+
+  completeChallenge: async (userId: string, challengeId: string, points: number) => {
+    const userRef = ref(db, `users/${userId}`);
+    const snapshot = await get(userRef);
+    
+    if (snapshot.exists()) {
+        const user = snapshot.val() as User;
+        const completed = user.completedChallenges || {};
+        
+        // Verificar si ya completó este desafío HOY
+        // (Para simplificar, usamos ID del challenge. Si el challenge rota diariamente, 
+        // el ID debe ser único o limpiamos históricos. Aquí asumimos que no se puede repetir el mismo challenge ID nunca)
+        // MEJORA: Validar fecha del timestamp si queremos repetir challenges
+        
+        if (completed[challengeId]) {
+            return false; // Ya completado
+        }
+
+        const newCompleted = { ...completed, [challengeId]: Date.now() };
+        const currentPoints = user.points || 0;
+        const newPoints = currentPoints + points;
+
+        await update(userRef, {
+            points: newPoints,
+            completedChallenges: newCompleted
+        });
+        return true;
+    }
+    return false;
+  },
+
+  // --- CONTENT ---
+
   savePost: async (post: Post) => {
     await set(ref(db, 'posts/' + post.id), post);
-    await StorageService.notifyFollowers(post.userId, post.userName, post.userAvatar, 'new_post', post.id);
+    await StorageService.awardPoints(post.userId, POINT_VALUES.POST, 'post');
   },
 
   updatePost: async (postId: string, updates: Partial<Post>) => {
@@ -23,45 +112,26 @@ export const StorageService = {
   toggleLikePost: async (post: Post, userId: string) => {
     const isLiked = post.isLiked;
     const newLikes = isLiked ? (post.likes - 1) : (post.likes + 1);
-    await update(ref(db, `posts/${post.id}`), { likes: newLikes });
-    if (!isLiked && post.userId !== userId) {
-        const sender = await AuthService.getUserById(userId);
-        if (sender) {
-            await StorageService.createNotification({
-                recipientId: post.userId,
-                senderId: userId,
-                senderName: sender.name,
-                senderAvatar: sender.avatar,
-                type: 'like_post',
-                targetId: post.id
-            });
-        }
-    }
+    
+    await update(ref(db, `posts/${post.id}`), {
+      likes: newLikes
+    });
   },
 
   addComment: async (postId: string, comments: any[]) => {
-    await update(ref(db, `posts/${postId}`), { comments: comments });
-    const lastComment = comments[comments.length - 1];
-    const postSnapshot = await get(ref(db, `posts/${postId}`));
-    if (postSnapshot.exists()) {
-        const post = postSnapshot.val() as Post;
-        if (post.userId !== lastComment.userId) {
-            await StorageService.createNotification({
-                recipientId: post.userId,
-                senderId: lastComment.userId,
-                senderName: lastComment.userName,
-                senderAvatar: await AuthService.getUserById(lastComment.userId).then(u => u?.avatar || ''),
-                type: 'comment',
-                targetId: postId,
-                preview: lastComment.text
-            });
-        }
+    await update(ref(db, `posts/${postId}`), {
+      comments: comments
+    });
+    // El último comentario es el nuevo, premiar al autor
+    const newComment = comments[comments.length - 1];
+    if (newComment) {
+        await StorageService.awardPoints(newComment.userId, POINT_VALUES.COMMENT, 'comment');
     }
   },
 
   saveStory: async (story: Story) => {
     await set(ref(db, 'stories/' + story.id), story);
-    await StorageService.notifyFollowers(story.userId, story.userName, story.userAvatar, 'new_story', story.id);
+    await StorageService.awardPoints(story.userId, POINT_VALUES.STORY, 'post'); // Tratamos story como post para badges
   },
 
   updateStory: async (storyId: string, updates: Partial<Story>) => {
@@ -74,7 +144,9 @@ export const StorageService = {
 
   toggleLikeStory: async (story: Story) => {
     const currentLikes = story.likes || 0;
-    await update(ref(db, `stories/${story.id}`), { likes: currentLikes + 1 });
+    await update(ref(db, `stories/${story.id}`), {
+      likes: currentLikes + 1
+    });
   },
 
   markStoryViewed: async (storyId: string, user: User) => {
@@ -87,54 +159,7 @@ export const StorageService = {
     await update(ref(db, `stories/${storyId}/viewers/${user.id}`), viewerData);
   },
 
-  createNotification: async (data: { recipientId: string, senderId: string, senderName: string, senderAvatar: string, type: Notification['type'], targetId?: string, preview?: string }) => {
-      const notifId = `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      const notification: Notification = {
-          id: notifId,
-          ...data,
-          timestamp: Date.now(),
-          isRead: false
-      };
-      await set(ref(db, `notifications/${data.recipientId}/${notifId}`), notification);
-  },
-
-  notifyFollowers: async (senderId: string, senderName: string, senderAvatar: string, type: Notification['type'], targetId: string) => {
-    try {
-        const user = await AuthService.getUserById(senderId);
-        if (!user || !user.followers) return;
-
-        const notificationsUpdates: any = {};
-        user.followers.forEach(followerId => {
-            const notifId = `notif_${Date.now()}_${followerId}`;
-            const notification: Notification = {
-                id: notifId,
-                recipientId: followerId,
-                senderId,
-                senderName,
-                senderAvatar,
-                type,
-                targetId,
-                timestamp: Date.now(),
-                isRead: false
-            };
-            notificationsUpdates[`/notifications/${followerId}/${notifId}`] = notification;
-        });
-
-        if (Object.keys(notificationsUpdates).length > 0) {
-            await update(ref(db), notificationsUpdates);
-        }
-    } catch (e) {
-        console.error("Error sending notifications", e);
-    }
-  },
-
-  markNotificationRead: async (userId: string, notificationId: string) => {
-      await update(ref(db, `notifications/${userId}/${notificationId}`), { isRead: true });
-  },
-
-  clearNotifications: async (userId: string) => {
-      await remove(ref(db, `notifications/${userId}`));
-  },
+  // --- SUGGESTIONS ---
 
   sendSuggestion: async (suggestion: Suggestion) => {
     await set(ref(db, `suggestions/${suggestion.id}`), suggestion);
@@ -144,77 +169,42 @@ export const StorageService = {
     await remove(ref(db, `suggestions/${id}`));
   },
 
+  // --- DESTINATIONS ---
+
   addDestination: async (destination: Destination) => {
     await set(ref(db, `destinations/${destination.id}`), destination);
+    if (destination.createdBy) {
+        await StorageService.awardPoints(destination.createdBy, POINT_VALUES.ADD_DESTINATION, 'destination');
+    }
   },
 
   deleteDestination: async (destinationId: string) => {
     await remove(ref(db, `destinations/${destinationId}`));
   },
 
+  updateDestinationStatus: async (destinationId: string, updates: Partial<Destination>) => {
+    await update(ref(db, `destinations/${destinationId}`), updates);
+  },
+
   rateDestination: async (destinationId: string, userId: string, rating: number, currentRating: number, reviewCount: number = 0) => {
-    // Para rating, también necesitamos asegurar que el destino exista en Firebase
-    const destRef = ref(db, `destinations/${destinationId}`);
-    const snapshot = await get(destRef);
-
-    if (!snapshot.exists()) {
-         const originalDest = ALL_DESTINATIONS.find(d => d.id === destinationId);
-         if (originalDest) {
-             // Crear copia inicial
-             await set(destRef, originalDest);
-         }
-    }
-
     await set(ref(db, `destinations/${destinationId}/ratings/${userId}`), rating);
+    
     const newCount = (reviewCount || 0) + 1;
     const newAvg = ((currentRating * (reviewCount || 0)) + rating) / newCount;
-    await update(destRef, { rating: newAvg, reviewsCount: newCount });
+
+    await update(ref(db, `destinations/${destinationId}`), {
+      rating: newAvg,
+      reviewsCount: newCount
+    });
   },
 
-  // --- ACTUALIZACIÓN DE DESTINOS (FIXED) ---
-
-  updateDestinationCover: async (destinationId: string, newImageUrl: string, fullDestination?: Destination) => {
-    const destRef = ref(db, `destinations/${destinationId}`);
-    const snapshot = await get(destRef);
-    
-    if (snapshot.exists()) {
-        await update(destRef, { imageUrl: newImageUrl });
-    } else {
-        // Migrar de estático a Firebase
-        const destToSave = fullDestination || ALL_DESTINATIONS.find(d => d.id === destinationId);
-        if (destToSave) {
-            await set(destRef, { ...destToSave, imageUrl: newImageUrl });
-        }
-    }
-  },
-
-  addPhotoToDestinationGallery: async (destinationId: string, currentGallery: string[], newImageUrl: string, fullDestination?: Destination) => {
-    const destRef = ref(db, `destinations/${destinationId}`);
-    const snapshot = await get(destRef);
+  addPhotoToDestinationGallery: async (destinationId: string, currentGallery: string[], newImageUrl: string, userId?: string) => {
     const updatedGallery = [newImageUrl, ...(currentGallery || [])];
-
-    if (snapshot.exists()) {
-        await update(destRef, { gallery: updatedGallery });
-    } else {
-        const destToSave = fullDestination || ALL_DESTINATIONS.find(d => d.id === destinationId);
-        if (destToSave) {
-            await set(destRef, { ...destToSave, gallery: updatedGallery });
-        }
-    }
-  },
-
-  removeDestinationPhoto: async (destinationId: string, currentGallery: string[], photoUrlToRemove: string, fullDestination?: Destination) => {
-    const updatedGallery = currentGallery.filter(url => url !== photoUrlToRemove);
-    const destRef = ref(db, `destinations/${destinationId}`);
-    const snapshot = await get(destRef);
-
-    if (snapshot.exists()) {
-        await update(destRef, { gallery: updatedGallery });
-    } else {
-        const destToSave = fullDestination || ALL_DESTINATIONS.find(d => d.id === destinationId);
-        if (destToSave) {
-            await set(destRef, { ...destToSave, gallery: updatedGallery });
-        }
+    await update(ref(db, `destinations/${destinationId}`), {
+      gallery: updatedGallery
+    });
+    if (userId) {
+        await StorageService.awardPoints(userId, POINT_VALUES.ADD_PHOTO, 'photo');
     }
   },
 
@@ -227,6 +217,7 @@ export const StorageService = {
   initiateChat: async (currentUserId: string, targetUserId: string) => {
     const chatId = StorageService.getChatId(currentUserId, targetUserId);
     const chatRef = ref(db, `chats/${chatId}`);
+    
     const snapshot = await get(chatRef);
     if (!snapshot.exists()) {
       const newChat: Chat = {
@@ -241,23 +232,22 @@ export const StorageService = {
     return chatId;
   },
 
-  deleteChat: async (chatId: string) => {
-    await remove(ref(db, `chats/${chatId}`));
-  },
-
   sendMessage: async (
     chatId: string, 
     senderId: string, 
     text: string, 
     type: 'text' | 'image' | 'video' | 'audio' = 'text',
     mediaUrl?: string | null,
-    replyTo?: any
+    replyTo?: Message['replyTo']
   ) => {
+    // 1. Encriptar contenido
     const encryptedText = text ? EncryptionService.encrypt(text, chatId) : '';
     const encryptedMedia = mediaUrl ? EncryptionService.encrypt(mediaUrl, chatId) : null;
 
+    // 2. Crear referencia
     const messageRef = push(ref(db, `chats/${chatId}/messages`));
     
+    // 3. Construir objeto LIMPIO (sin undefined)
     const messagePayload: any = {
       id: messageRef.key!,
       senderId,
@@ -270,12 +260,14 @@ export const StorageService = {
     if (encryptedMedia) messagePayload.mediaUrl = encryptedMedia;
     if (replyTo) messagePayload.replyTo = replyTo;
 
+    // 4. Guardar
     await set(messageRef, messagePayload);
 
+    // 5. Actualizar último mensaje
     let previewText = encryptedText;
     if (type === 'image') previewText = EncryptionService.encrypt('📷 Foto', chatId);
-    else if (type === 'video') previewText = EncryptionService.encrypt('🎥 Video', chatId);
-    else if (type === 'audio') previewText = EncryptionService.encrypt('🎤 Nota de voz', chatId);
+    if (type === 'video') previewText = EncryptionService.encrypt('🎥 Video', chatId);
+    if (type === 'audio') previewText = EncryptionService.encrypt('🎤 Nota de voz', chatId);
 
     await update(ref(db, `chats/${chatId}`), {
       lastMessage: previewText, 
@@ -283,6 +275,8 @@ export const StorageService = {
       updatedAt: Date.now()
     });
   },
+
+  // --- NEW: EDIT & DELETE MESSAGES ---
 
   deleteMessage: async (chatId: string, messageId: string) => {
     await remove(ref(db, `chats/${chatId}/messages/${messageId}`));
@@ -310,6 +304,21 @@ export const StorageService = {
         await update(messagesRef, updates);
       }
     }
+  },
+
+  // --- ADMIN FUNCTIONS ---
+
+  updateDestinationCover: async (destinationId: string, newImageUrl: string) => {
+    await update(ref(db, `destinations/${destinationId}`), {
+      imageUrl: newImageUrl
+    });
+  },
+
+  removeDestinationPhoto: async (destinationId: string, currentGallery: string[], photoUrlToRemove: string) => {
+    const updatedGallery = currentGallery.filter(url => url !== photoUrlToRemove);
+    await update(ref(db, `destinations/${destinationId}`), {
+      gallery: updatedGallery
+    });
   },
   
   clearAll: async () => {

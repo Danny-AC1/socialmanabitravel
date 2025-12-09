@@ -1,5 +1,6 @@
+
 import React, { useState, useRef, useEffect } from 'react';
-import { X, MapPin, Star, Info, Camera, Compass, Wallet, MessageSquare, Plus, Upload, Trash2, Edit2, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react';
+import { X, MapPin, Star, Info, Camera, Compass, Wallet, MessageSquare, Plus, Upload, Trash2, Edit2, ChevronLeft, ChevronRight, AlertCircle, Navigation, Map, Award } from 'lucide-react';
 import { Destination } from '../types';
 import { resizeImage } from '../utils';
 
@@ -13,6 +14,7 @@ interface TravelGuideModalProps {
   onChangeCover?: (image: string) => void;
   onDeletePhoto?: (photoUrl: string) => void;
   onDeleteDestination?: (id: string) => void;
+  onToggleFeatured?: (id: string, isFeatured: boolean) => void;
 }
 
 export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({ 
@@ -24,29 +26,24 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
   isAdminUser,
   onChangeCover,
   onDeletePhoto,
-  onDeleteDestination
+  onDeleteDestination,
+  onToggleFeatured
 }) => {
   const [userRating, setUserRating] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
   const [viewingImage, setViewingImage] = useState<string | null>(null);
-  
-  // Estados locales para reflejar cambios al instante
-  const [currentCover, setCurrentCover] = useState(destination.imageUrl);
-  const [currentGallery, setCurrentGallery] = useState<string[]>(destination.gallery || []);
-
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
 
-  // Sincronizar si cambian las props externas
-  useEffect(() => {
-    setCurrentCover(destination.imageUrl);
-    setCurrentGallery(destination.gallery || []);
-  }, [destination]);
-
   if (!destination) return null;
+
+  // Generar URL de búsqueda para el mapa
+  const mapQuery = encodeURIComponent(`${destination.name} ${destination.location} Ecuador`);
+  const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${mapQuery}`;
+  const embedMapUrl = `https://maps.google.com/maps?q=${mapQuery}&t=&z=13&ie=UTF8&iwloc=&output=embed`;
 
   const handleRating = (stars: number) => {
     setUserRating(stars);
@@ -59,17 +56,11 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
       setIsUploading(true);
       try {
         const resized = await resizeImage(file, 1024);
-        
         if (isCover && onChangeCover) {
-            // Actualizar portada
             onChangeCover(resized);
-            setCurrentCover(resized);
-            alert("Portada actualizada con éxito.");
+            alert("Portada actualizada.");
         } else {
-            // Actualizar galería
             onAddPhoto(resized);
-            // Actualización optimista local: Agregamos la foto al principio
-            setCurrentGallery(prev => [resized, ...prev]);
             alert("¡Foto agregada a la galería exitosamente!");
         }
       } catch (err) {
@@ -77,17 +68,7 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
         alert("Error al subir imagen");
       }
       setIsUploading(false);
-      // Limpiar input
-      e.target.value = '';
     }
-  };
-
-  const handleDeletePhoto = (photoUrl: string) => {
-     if (confirm("¿Eliminar esta foto?")) {
-        if (onDeletePhoto) onDeletePhoto(photoUrl);
-        // Actualización optimista local
-        setCurrentGallery(prev => prev.filter(img => img !== photoUrl));
-     }
   };
 
   const handleDeleteDestination = () => {
@@ -96,23 +77,32 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
     }
   };
 
+  const handleToggleFeature = () => {
+      if(onToggleFeatured) {
+          onToggleFeatured(destination.id, !destination.isFeatured);
+          // Opcional: Cerrar modal o mostrar feedback
+          alert(destination.isFeatured ? "Quitado de destacados." : "¡Marcado como Destino Destacado en Inicio!");
+      }
+  };
+
   // --- GALLERY NAVIGATION LOGIC ---
   
-  const currentImageIndex = viewingImage ? currentGallery.indexOf(viewingImage) : -1;
-  const hasMultipleImages = currentGallery.length > 1;
+  const gallery = destination.gallery || [];
+  const currentImageIndex = viewingImage ? gallery.indexOf(viewingImage) : -1;
+  const hasMultipleImages = gallery.length > 1;
 
   const handleNextImage = (e?: React.MouseEvent) => {
     e?.stopPropagation();
     if (currentImageIndex === -1) return;
-    const nextIndex = (currentImageIndex + 1) % currentGallery.length;
-    setViewingImage(currentGallery[nextIndex]);
+    const nextIndex = (currentImageIndex + 1) % gallery.length;
+    setViewingImage(gallery[nextIndex]);
   };
 
   const handlePrevImage = (e?: React.MouseEvent) => {
     e?.stopPropagation();
     if (currentImageIndex === -1) return;
-    const prevIndex = (currentImageIndex - 1 + currentGallery.length) % currentGallery.length;
-    setViewingImage(currentGallery[prevIndex]);
+    const prevIndex = (currentImageIndex - 1 + gallery.length) % gallery.length;
+    setViewingImage(gallery[prevIndex]);
   };
 
   // Touch handlers for Swipe
@@ -152,12 +142,11 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
       <div className="bg-white w-full h-full md:h-[90vh] md:max-w-4xl md:rounded-3xl overflow-hidden shadow-2xl flex flex-col">
         
         <div className="relative h-64 md:h-80 shrink-0 group">
-          {/* Usamos currentCover para reflejar cambios inmediatos */}
           <img 
-            src={currentCover} 
+            src={destination.imageUrl} 
             alt={destination.name} 
             className="w-full h-full object-cover transition-transform duration-700 cursor-pointer"
-            onClick={() => setViewingImage(currentCover)}
+            onClick={() => setViewingImage(destination.imageUrl)}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30 pointer-events-none" />
           
@@ -169,22 +158,29 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
           </button>
 
           {isAdminUser && (
-             <div className="absolute top-4 left-4 z-10 flex gap-2">
-                <button 
-                  onClick={() => coverInputRef.current?.click()}
-                  disabled={isUploading}
-                  className="bg-white/20 hover:bg-white text-white hover:text-cyan-900 px-3 py-1.5 rounded-full backdrop-blur-md transition-all text-xs font-bold flex items-center gap-1 disabled:opacity-50"
-                >
-                   {isUploading ? <><div className="animate-spin h-3 w-3 border-2 border-current rounded-full border-t-transparent"/> Subiendo...</> : <><Edit2 size={12} /> Portada</>}
-                </button>
-                <button 
-                  onClick={handleDeleteDestination}
-                  className="bg-red-600/80 hover:bg-red-600 text-white px-3 py-1.5 rounded-full backdrop-blur-md transition-all text-xs font-bold flex items-center gap-1 border border-red-400"
-                >
-                   <Trash2 size={12} /> Eliminar Lugar
-                </button>
-                <input type="file" ref={coverInputRef} hidden accept="image/*" onChange={(e) => handlePhotoUpload(e, true)} />
-             </div>
+             <>
+               <div className="absolute top-4 left-4 z-10 flex gap-2 flex-wrap">
+                  <button 
+                    onClick={() => coverInputRef.current?.click()}
+                    className="bg-white/20 hover:bg-white text-white hover:text-cyan-900 px-3 py-1.5 rounded-full backdrop-blur-md transition-all text-xs font-bold flex items-center gap-1"
+                  >
+                     <Edit2 size={12} /> Portada
+                  </button>
+                  <button 
+                    onClick={handleToggleFeature}
+                    className={`px-3 py-1.5 rounded-full backdrop-blur-md transition-all text-xs font-bold flex items-center gap-1 border ${destination.isFeatured ? 'bg-yellow-400 text-yellow-900 border-yellow-500' : 'bg-black/40 text-white border-white/30 hover:bg-yellow-400 hover:text-yellow-900'}`}
+                  >
+                     <Award size={12} /> {destination.isFeatured ? 'Destacado' : 'Destacar'}
+                  </button>
+                  <button 
+                    onClick={handleDeleteDestination}
+                    className="bg-red-600/80 hover:bg-red-600 text-white px-3 py-1.5 rounded-full backdrop-blur-md transition-all text-xs font-bold flex items-center gap-1 border border-red-400"
+                  >
+                     <Trash2 size={12} /> Eliminar
+                  </button>
+                  <input type="file" ref={coverInputRef} hidden accept="image/*" onChange={(e) => handlePhotoUpload(e, true)} />
+               </div>
+             </>
           )}
 
           <div className="absolute bottom-0 left-0 p-6 md:p-8 text-white w-full">
@@ -215,6 +211,7 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
         <div className="flex-1 overflow-y-auto bg-stone-50">
           <div className="p-6 md:p-10 grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12">
             
+            {/* COLUMNA IZQUIERDA (Principal) */}
             <div className="md:col-span-2 space-y-8">
               {/* Rating Section */}
               <div className="bg-white p-4 rounded-2xl shadow-sm border border-stone-100 flex items-center justify-between">
@@ -252,48 +249,83 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
                     Galería de la Comunidad
                     </h3>
                     
-                    {/* BOTÓN "AGREGAR FOTO" (Disponible para TODOS) */}
-                    <button 
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={isUploading}
-                        className="text-xs bg-cyan-100 hover:bg-cyan-200 text-cyan-800 px-3 py-1.5 rounded-full font-bold flex items-center gap-1 transition-colors disabled:opacity-50"
-                    >
-                        {isUploading ? "Subiendo..." : <><Plus size={14}/> Agregar Foto</>}
-                    </button>
+                    {isAdminUser && (
+                        <button 
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={isUploading}
+                            className="text-xs bg-cyan-100 hover:bg-cyan-200 text-cyan-800 px-3 py-1.5 rounded-full font-bold flex items-center gap-1 transition-colors"
+                        >
+                            {isUploading ? "Subiendo..." : <><Plus size={14}/> Gestionar Fotos</>}
+                        </button>
+                    )}
                     <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={(e) => handlePhotoUpload(e)} />
                 </div>
                 
                 <div className="grid grid-cols-2 gap-2 md:gap-4">
-                  {/* Usamos currentGallery para mostrar las fotos actualizadas */}
-                  {currentGallery.map((img, idx) => (
+                  {destination.gallery && destination.gallery.map((img, idx) => (
                     <div 
                         key={idx} 
                         onClick={() => setViewingImage(img)}
                         className={`rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-pointer relative group/img ${idx === 0 ? 'col-span-2 h-48 md:h-64' : 'h-32 md:h-40'}`}
                     >
                       <img src={img} alt={`Gallery ${idx}`} className="w-full h-full object-cover hover:scale-105 transition-transform duration-700" />
-                      
-                      {/* BOTÓN ELIMINAR (Solo Admins) */}
                       {isAdminUser && (
                          <button 
-                           onClick={(e) => { e.stopPropagation(); handleDeletePhoto(img); }}
-                           className="absolute top-2 right-2 bg-red-600 text-white p-1.5 rounded-full opacity-0 group-hover/img:opacity-100 transition-opacity z-10"
+                           onClick={(e) => { e.stopPropagation(); onDeletePhoto && onDeletePhoto(img); }}
+                           className="absolute top-2 right-2 bg-red-600 text-white p-1.5 rounded-full opacity-0 group-hover/img:opacity-100 transition-opacity"
                          >
                             <Trash2 size={14} />
                          </button>
                       )}
                     </div>
                   ))}
-                  {currentGallery.length === 0 && (
+                  {(!destination.gallery || destination.gallery.length === 0) && (
                      <div className="col-span-2 py-8 text-center text-stone-400 bg-stone-100 rounded-xl border border-dashed border-stone-200">
-                        Sé el primero en agregar una foto.
+                        No hay fotos en la galería aún.
                      </div>
                   )}
                 </div>
               </section>
             </div>
 
+            {/* COLUMNA DERECHA (Sticky/Detalles) */}
             <div className="space-y-6">
+              
+              {/* MAPA ACTIVO Y NAVEGACIÓN */}
+              <section className="bg-white p-1 rounded-2xl shadow-sm border border-stone-200 overflow-hidden">
+                <div className="p-3 pb-0 flex items-center justify-between mb-3">
+                    <h3 className="font-bold text-stone-800 flex items-center gap-2 text-sm uppercase">
+                        <Map size={16} className="text-cyan-600" /> Ubicación
+                    </h3>
+                </div>
+                <div className="relative w-full h-48 bg-stone-100 rounded-xl overflow-hidden mb-2 mx-auto w-[calc(100%-16px)]">
+                    <iframe 
+                        title="Mapa del destino"
+                        width="100%" 
+                        height="100%" 
+                        frameBorder="0" 
+                        scrolling="no" 
+                        marginHeight={0} 
+                        marginWidth={0} 
+                        src={embedMapUrl}
+                        className="opacity-90 hover:opacity-100 transition-opacity"
+                    ></iframe>
+                    {/* Overlay para evitar scroll accidental en movil, requiere click para activar */}
+                    <div className="absolute inset-0 pointer-events-none border-2 border-transparent hover:border-cyan-200 transition-colors rounded-xl"></div>
+                </div>
+                <div className="px-2 pb-2">
+                    <a 
+                        href={googleMapsUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full bg-stone-800 hover:bg-stone-900 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors active:scale-95 text-sm shadow-md"
+                    >
+                        <Navigation size={16} />
+                        Cómo llegar (GPS)
+                    </a>
+                </div>
+              </section>
+
               <section>
                 <h3 className="text-xl font-bold text-stone-800 mb-4 flex items-center gap-2">
                   <Compass className="text-cyan-600" size={20} />
@@ -346,7 +378,6 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
         </div>
       </div>
 
-      {/* LIGHTBOX FOR GALLERY */}
       {viewingImage && (
         <div 
           className="fixed inset-0 z-[60] bg-black/95 flex items-center justify-center animate-in fade-in duration-200 select-none"

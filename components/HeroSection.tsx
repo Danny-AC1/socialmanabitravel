@@ -1,40 +1,60 @@
+
 import React from 'react';
-import { MapPin, BookOpen } from 'lucide-react';
+import { MapPin, BookOpen, Star, Compass } from 'lucide-react';
+import { Destination } from '../types';
 
 interface HeroSectionProps {
-  onGuideClick: () => void;
+  destination: Destination | null;
+  onGuideClick: (name: string) => void;
 }
 
-export const HeroSection: React.FC<HeroSectionProps> = ({ onGuideClick }) => {
+export const HeroSection: React.FC<HeroSectionProps> = ({ destination, onGuideClick }) => {
+  if (!destination) {
+    return (
+      <div className="relative w-full h-96 bg-gray-900 overflow-hidden mb-6 rounded-3xl shadow-lg flex items-center justify-center">
+         <div className="text-center text-white/50 p-6">
+            <Compass size={48} className="mx-auto mb-2 opacity-50" />
+            <h2 className="text-xl font-bold">Explora Ecuador</h2>
+            <p className="text-sm">Descubre destinos increíbles</p>
+         </div>
+      </div>
+    );
+  }
+
   return (
     <div className="relative w-full h-96 bg-gray-900 overflow-hidden mb-6 rounded-3xl shadow-lg group">
-      {/* Real Unsplash Image: Los Frailes / Coast of Ecuador vibe */}
+      
+      {/* Background with subtle animation */}
       <img 
-        src="https://images.unsplash.com/photo-1620668045956-6511b8b21245?q=80&w=1200&auto=format&fit=crop" 
-        alt="Los Frailes Beach" 
+        src={destination.imageUrl} 
+        alt={destination.name} 
         className="absolute w-full h-full object-cover opacity-60 group-hover:scale-105 transition-transform duration-1000"
       />
       <div className="absolute inset-0 bg-gradient-to-t from-cyan-950/90 via-transparent to-transparent" />
       
+      {/* Badge Featured */}
+      <div className="absolute top-6 right-6 bg-yellow-500/20 backdrop-blur-md border border-yellow-500/50 text-yellow-100 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 shadow-sm">
+         <Star size={12} fill="currentColor" /> Destino de la Semana
+      </div>
+
       <div className="absolute bottom-0 left-0 p-6 md:p-10 text-white max-w-2xl">
         <div className="flex items-center space-x-2 text-cyan-300 mb-3 bg-black/30 w-fit px-3 py-1 rounded-full backdrop-blur-sm border border-white/10">
           <MapPin size={16} />
-          <span className="uppercase tracking-widest text-xs font-bold">Joya de Manabí</span>
+          <span className="uppercase tracking-widest text-xs font-bold">{destination.location}</span>
         </div>
-        <h1 className="text-3xl md:text-5xl font-black mb-3 leading-tight tracking-tight">
-          Parque Nacional Machalilla
+        <h1 className="text-3xl md:text-5xl font-black mb-3 leading-tight tracking-tight text-shadow-lg">
+          {destination.name}
         </h1>
-        <p className="text-gray-100 text-base md:text-lg mb-6 line-clamp-2 md:line-clamp-none font-medium text-shadow-sm">
-          Descubre la playa virgen de Los Frailes y la biodiversidad única de Puerto López. 
-          ¡Tu aventura en la costa ecuatoriana comienza aquí!
+        <p className="text-gray-100 text-base md:text-lg mb-6 line-clamp-2 md:line-clamp-3 font-medium text-shadow-sm">
+          {destination.description}
         </p>
         <div className="flex space-x-4">
           <button 
-            onClick={onGuideClick}
+            onClick={() => onGuideClick(destination.name)}
             className="bg-white text-cyan-900 hover:bg-cyan-50 px-6 py-3 rounded-xl font-bold transition-colors flex items-center shadow-lg active:scale-95 transform"
           >
             <BookOpen size={18} className="mr-2" />
-            Guía de Viaje
+            Abrir Guía
           </button>
         </div>
       </div>

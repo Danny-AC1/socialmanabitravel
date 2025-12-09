@@ -1,6 +1,5 @@
-
 import React, { useState } from 'react';
-import { X, ArrowRight, Map, Compass, Camera, MessageCircle, Heart, Globe, Sparkles, CheckCircle } from 'lucide-react';
+import { ArrowRight, Map as MapIcon, Trophy, Sparkles, CheckCircle, Navigation } from 'lucide-react';
 
 interface OnboardingModalProps {
   isOpen: boolean;
@@ -15,32 +14,36 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClos
 
   const steps = [
     {
-      icon: <Globe size={64} className="text-cyan-600" />,
+      icon: <MapIcon size={64} className="text-cyan-600" />,
       title: `¡Hola, ${userName.split(' ')[0]}!`,
-      subtitle: "Bienvenido a Ecuador Travel",
-      description: "La primera red social turística inteligente diseñada para conectar a viajeros con los tesoros escondidos de los 4 mundos del Ecuador.",
-      color: "bg-cyan-50"
+      subtitle: "Tu Pasaporte a la Aventura",
+      description: "Bienvenido a Ecuador Travel. Aquí no solo ves fotos, vives experiencias. Descubre los tesoros escondidos de la Costa, Sierra, Amazonía y Galápagos.",
+      color: "bg-cyan-50",
+      accent: "text-cyan-700"
     },
     {
-      icon: <Compass size={64} className="text-purple-600" />,
-      title: "Tu Guía Inteligente",
-      subtitle: "Descubre y Planifica",
-      description: "Usa la pestaña 'Explorar' para encontrar destinos por región. Si tienes dudas, nuestro Guía Virtual con IA te responderá al instante sobre qué comer, cómo llegar y dónde dormir.",
-      color: "bg-purple-50"
+      icon: <Sparkles size={64} className="text-purple-600" />,
+      title: "Planifica con IA",
+      subtitle: "Itinerarios en Segundos",
+      description: "¿No sabes qué hacer? Usa el nuevo generador de itinerarios. Dinos tu presupuesto y días libres, y nuestra IA creará el plan de viaje perfecto para ti al instante.",
+      color: "bg-purple-50",
+      accent: "text-purple-700"
     },
     {
-      icon: <Camera size={64} className="text-orange-600" />,
-      title: "Comparte tu Aventura",
-      subtitle: "Historias y Posts",
-      description: "Sube historias que duran 24 horas para momentos rápidos o publicaciones permanentes para tus mejores fotos. ¡No olvides que puedes subir videos cortos también!",
-      color: "bg-orange-50"
+      icon: <Navigation size={64} className="text-emerald-600" />,
+      title: "Radar Turístico",
+      subtitle: "¿Qué hay cerca?",
+      description: "Usa nuestra herramienta de geolocalización en tiempo real para encontrar atracciones, restaurantes y sitios turísticos justo donde estás parado ahora mismo.",
+      color: "bg-emerald-50",
+      accent: "text-emerald-700"
     },
     {
-      icon: <MessageCircle size={64} className="text-green-600" />,
-      title: "Conecta Seguro",
-      subtitle: "Chat Cifrado",
-      description: "Chatea con otros viajeros con total privacidad. Nuestro chat estilo Telegram está cifrado de extremo a extremo e incluye notas de voz y multimedia.",
-      color: "bg-green-50"
+      icon: <Trophy size={64} className="text-amber-600" />,
+      title: "Juega y Gana",
+      subtitle: "Sube de Nivel",
+      description: "Completa desafíos diarios, sube fotos y recibe 'Likes' para ganar puntos (XP). Empiezas como 'Turista Curioso'... ¿Podrás convertirte en una 'Leyenda de Ecuador'?",
+      color: "bg-amber-50",
+      accent: "text-amber-700"
     }
   ];
 
@@ -53,8 +56,8 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClos
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-stone-900/80 backdrop-blur-sm p-4 animate-in fade-in duration-300">
-      <div className="bg-white w-full max-w-md rounded-3xl overflow-hidden shadow-2xl flex flex-col relative">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-stone-900/90 backdrop-blur-sm p-4 animate-in fade-in duration-300">
+      <div className="bg-white w-full max-w-md rounded-3xl overflow-hidden shadow-2xl flex flex-col relative min-h-[500px]">
         
         {/* Progress Bar */}
         <div className="flex gap-1 p-1">
@@ -68,24 +71,24 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClos
 
         {/* Content */}
         <div className={`p-8 flex flex-col items-center text-center flex-1 transition-all duration-500 ${steps[currentStep].color}`}>
-            <div className="mb-6 p-6 bg-white rounded-full shadow-sm animate-in zoom-in duration-300 border border-white/50">
+            <div className="mt-4 mb-8 p-6 bg-white rounded-full shadow-lg shadow-black/5 animate-in zoom-in duration-300 border-4 border-white">
                 {steps[currentStep].icon}
             </div>
             
-            <h2 className="text-2xl font-black text-gray-800 mb-1 tracking-tight">
+            <h2 className="text-3xl font-black text-gray-800 mb-2 tracking-tight leading-tight">
                 {steps[currentStep].title}
             </h2>
-            <h3 className="text-sm font-bold text-cyan-700 uppercase tracking-widest mb-4">
+            <h3 className={`text-sm font-bold uppercase tracking-widest mb-6 ${steps[currentStep].accent}`}>
                 {steps[currentStep].subtitle}
             </h3>
             
-            <p className="text-gray-600 leading-relaxed text-sm mb-6">
+            <p className="text-gray-600 leading-relaxed text-base font-medium">
                 {steps[currentStep].description}
             </p>
         </div>
 
         {/* Footer Actions */}
-        <div className="p-6 bg-white border-t border-gray-100 flex justify-between items-center">
+        <div className="p-6 bg-white border-t border-gray-100 flex justify-between items-center z-10 relative">
             <button 
                 onClick={onClose}
                 className="text-gray-400 text-sm font-bold hover:text-gray-600 transition-colors px-4 py-2"
@@ -95,12 +98,12 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClos
 
             <button 
                 onClick={handleNext}
-                className="bg-cyan-600 hover:bg-cyan-700 text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-cyan-200 transition-all active:scale-95 flex items-center gap-2"
+                className="bg-cyan-600 hover:bg-cyan-700 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-cyan-200 transition-all active:scale-95 flex items-center gap-2"
             >
                 {currentStep === steps.length - 1 ? (
-                    <>¡Empezar! <CheckCircle size={18} /></>
+                    <>¡Empezar! <CheckCircle size={20} /></>
                 ) : (
-                    <>Siguiente <ArrowRight size={18} /></>
+                    <>Siguiente <ArrowRight size={20} /></>
                 )}
             </button>
         </div>
