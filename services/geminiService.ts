@@ -1,5 +1,3 @@
-
-
 import { GoogleGenAI, Type } from "@google/genai";
 
 // Guideline: Always use const ai = new GoogleGenAI({apiKey: process.env.API_KEY});

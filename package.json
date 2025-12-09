@@ -1,7 +1,7 @@
 {
   "name": "manabi-travel-social",
   "private": true,
-  "version": "1.1.0",
+  "version": "1.1.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,9 +11,10 @@
   "dependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "lucide-react": "^0.344.0",
-    "@google/genai": "*",
-    "firebase": "^10.8.1"
+    "lucide-react": "^0.350.0",
+    "@google/genai": "^0.2.1",
+    "firebase": "^10.9.0",
+    "react-helmet-async": "^2.0.4"
   },
   "devDependencies": {
     "@types/react": "^18.2.64",
