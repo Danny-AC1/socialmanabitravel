@@ -1,5 +1,3 @@
-
-
 export interface Badge {
   id: string;
   name: string;
@@ -108,6 +106,7 @@ export interface Chat {
 export interface Notification {
   id: string;
   userId: string;
+  // Se agregan todos los tipos posibles para evitar errores de TypeScript en comparaciones
   type: 'like' | 'comment' | 'follow' | 'system' | 'like_post' | 'new_post' | 'new_story';
   senderId?: string;
   senderName?: string;

@@ -1,4 +1,3 @@
-
 import { ref, set, remove, update, get, push, child } from "firebase/database";
 import { db } from "./firebase";
 import { Post, Story, Destination, Suggestion, User, Chat, Message } from '../types';
@@ -21,10 +20,8 @@ export const StorageService = {
         const currentPoints = user.points || 0;
         const newPoints = currentPoints + amount;
         
-        // Simulación de conteos para badges (en producción se usarían contadores reales en DB)
-        // Aquí usamos una lógica simplificada basada en puntos para algunos casos o eventos directos
         let actionCount = 0;
-        if (actionType === 'post') actionCount = Math.floor(newPoints / POINT_VALUES.POST); // Estimación
+        if (actionType === 'post') actionCount = Math.floor(newPoints / POINT_VALUES.POST);
         if (actionType === 'comment') actionCount = Math.floor(newPoints / POINT_VALUES.COMMENT);
         
         // Verificar nuevas insignias
@@ -36,7 +33,6 @@ export const StorageService = {
             badges: updatedBadges
         });
 
-        // Si se ganaron badges, podrías retornar info para una notificación UI
         return { newPoints, newBadges };
     }
   },
@@ -49,16 +45,14 @@ export const StorageService = {
         const user = snapshot.val() as User;
         const lastLogin = user.lastLogin || 0;
         const now = Date.now();
-        const oneDay = 24 * 60 * 60 * 1000;
 
-        // Verificar si es un nuevo día (simple check)
         const lastDate = new Date(lastLogin).toDateString();
         const currentDate = new Date(now).toDateString();
 
         if (lastDate !== currentDate) {
             await StorageService.awardPoints(userId, POINT_VALUES.LOGIN_DAILY, 'login');
             await update(userRef, { lastLogin: now });
-            return true; // Se dieron puntos
+            return true;
         }
     }
     return false;
@@ -72,13 +66,8 @@ export const StorageService = {
         const user = snapshot.val() as User;
         const completed = user.completedChallenges || {};
         
-        // Verificar si ya completó este desafío HOY
-        // (Para simplificar, usamos ID del challenge. Si el challenge rota diariamente, 
-        // el ID debe ser único o limpiamos históricos. Aquí asumimos que no se puede repetir el mismo challenge ID nunca)
-        // MEJORA: Validar fecha del timestamp si queremos repetir challenges
-        
         if (completed[challengeId]) {
-            return false; // Ya completado
+            return false;
         }
 
         const newCompleted = { ...completed, [challengeId]: Date.now() };
@@ -122,7 +111,6 @@ export const StorageService = {
     await update(ref(db, `posts/${postId}`), {
       comments: comments
     });
-    // El último comentario es el nuevo, premiar al autor
     const newComment = comments[comments.length - 1];
     if (newComment) {
         await StorageService.awardPoints(newComment.userId, POINT_VALUES.COMMENT, 'comment');
@@ -131,7 +119,7 @@ export const StorageService = {
 
   saveStory: async (story: Story) => {
     await set(ref(db, 'stories/' + story.id), story);
-    await StorageService.awardPoints(story.userId, POINT_VALUES.STORY, 'post'); // Tratamos story como post para badges
+    await StorageService.awardPoints(story.userId, POINT_VALUES.STORY, 'post');
   },
 
   updateStory: async (storyId: string, updates: Partial<Story>) => {
@@ -157,6 +145,18 @@ export const StorageService = {
       timestamp: Date.now()
     };
     await update(ref(db, `stories/${storyId}/viewers/${user.id}`), viewerData);
+  },
+
+  // --- NOTIFICATIONS ---
+
+  markNotificationRead: async (userId: string, notificationId: string) => {
+    await update(ref(db, `notifications/${userId}/${notificationId}`), {
+      isRead: true
+    });
+  },
+
+  clearNotifications: async (userId: string) => {
+    await remove(ref(db, `notifications/${userId}`));
   },
 
   // --- SUGGESTIONS ---
@@ -247,7 +247,7 @@ export const StorageService = {
     // 2. Crear referencia
     const messageRef = push(ref(db, `chats/${chatId}/messages`));
     
-    // 3. Construir objeto LIMPIO (sin undefined)
+    // 3. Construir objeto LIMPIO
     const messagePayload: any = {
       id: messageRef.key!,
       senderId,
@@ -275,8 +275,6 @@ export const StorageService = {
       updatedAt: Date.now()
     });
   },
-
-  // --- NEW: EDIT & DELETE MESSAGES ---
 
   deleteMessage: async (chatId: string, messageId: string) => {
     await remove(ref(db, `chats/${chatId}/messages/${messageId}`));

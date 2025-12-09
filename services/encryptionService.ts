@@ -1,4 +1,4 @@
-import CryptoJS from 'crypto-js';
+import * as CryptoJS from 'crypto-js';
 
 const APP_SECRET = "ECUADOR_TRAVEL_SECURE_CHAT_2024"; 
 
@@ -25,8 +25,8 @@ export const EncryptionService = {
       const originalText = bytes.toString(CryptoJS.enc.Utf8);
       return originalText || "⚠️ Mensaje ilegible";
     } catch (e) {
-      // Si falla, retornamos el texto original por si no estaba cifrado
-      return cipherText || "⚠️ Error";
+      // Ignorar errores de log para evitar spam si es un mensaje antiguo no cifrado
+      return "⚠️ Error de descifrado";
     }
   }
 };
