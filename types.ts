@@ -108,7 +108,7 @@ export interface Chat {
 export interface Notification {
   id: string;
   userId: string;
-  type: 'like' | 'comment' | 'follow' | 'system';
+  type: 'like' | 'comment' | 'follow' | 'system' | 'like_post' | 'new_post' | 'new_story';
   senderId?: string;
   senderName?: string;
   senderAvatar?: string;

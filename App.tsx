@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Map as MapIcon, Compass, Camera, Search, LogOut, ChevronLeft, PlusCircle, Globe, Filter, Edit3, X, Mail, MapPin, Plus, MessageCircle, Users, Bell, LayoutGrid, Award, Home, Sparkles, Trophy, CheckCircle, Navigation } from 'lucide-react';
 import { HeroSection } from './components/HeroSection';
@@ -26,6 +27,7 @@ import { Post, Story, Destination, User, EcuadorRegion, Suggestion, Chat, Notifi
 import { StorageService } from './services/storageService';
 import { AuthService } from './services/authService';
 import { resizeImage, isAdmin, getUserLevel, getNextLevel, BADGES, POINT_VALUES, getDailyChallenge, calculateDistance } from './utils';
+// Importación explícita de la función
 import { findNearbyPlaces } from './services/geminiService';
 import { db } from './services/firebase';
 import { ref, onValue } from 'firebase/database';
@@ -234,6 +236,7 @@ function App() {
     navigator.geolocation.getCurrentPosition(async (position) => {
         const { latitude, longitude } = position.coords;
         try {
+            // USO EXPLÍCITO DE LA FUNCIÓN IMPORTADA
             const result = await findNearbyPlaces(latitude, longitude);
             setNearbyData(result);
         } catch (error: any) {
@@ -377,8 +380,6 @@ function App() {
         if (challenge && challenge.id === activeChallengeId && challenge.type === 'photo') {
              await StorageService.completeChallenge(user.id, challenge.id, challenge.points);
              setActiveChallengeId(null);
-             // Optionally prepend hashtag or info to caption
-             // caption = `${caption} #${challenge.title.replace(/\s/g,'')}`;
         }
     }
 
@@ -678,9 +679,9 @@ function App() {
                               <Navigation size={16} /> ¿Qué hay cerca?
                           </button>
                           <button onClick={() => openModal(setIsItineraryModalOpen)} className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-xs font-bold py-2 px-3 rounded-full flex items-center gap-2 shadow-md transition-colors w-fit animate-in fade-in slide-in-from-right-4">
-                              <Sparkles size={16} /> Planificar Viaje con IA
+                              <Sparkles size={16} /> Planificar Viaje
                           </button>
-                          <button onClick={() => openModal(setIsAddDestinationModalOpen)} className="bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold py-2 px-3 rounded-full flex items-center gap-2 shadow-md transition-colors w-fit"> <PlusCircle size={16} /> Agregar </button>
+                          <button onClick={() => openModal(setIsAddDestinationModalOpen)} className="bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold py-2 px-3 rounded-full flex items-center gap-2 shadow-md transition-colors w-fit"> <PlusCircle size={16} /> Agregar Destino </button>
                         </div>
                     </div>
                     <div className="flex space-x-2 overflow-x-auto no-scrollbar pb-2">

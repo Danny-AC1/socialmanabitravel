@@ -24,22 +24,7 @@ export const getTravelAdvice = async (query: string): Promise<string> => {
     return response.text || "Lo siento, me quedé sin palabras. Intenta de nuevo.";
   } catch (error: any) {
     console.error("Error detallado de Gemini:", error);
-    
-    // MENSAJES DE DIAGNÓSTICO REALES
     const errorMsg = error.message || JSON.stringify(error);
-
-    if (errorMsg.includes('API key not valid')) {
-       return `🔑 Error: Google dice que la clave no es válida. \n(Detalle: ${errorMsg})`;
-    }
-    
-    if (errorMsg.includes('not enabled')) {
-       return `🛑 Error: La API 'Generative Language' no está activada en tu cuenta de Google Cloud. \n(Ve a console.cloud.google.com y actívala).`;
-    }
-
-    if (errorMsg.includes('403')) {
-       return `🚫 Error 403: Permiso denegado. Posiblemente tu clave tiene restricciones de IP que bloquean a Vercel. Crea una clave SIN restricciones.`;
-    }
-    
     return `⚠️ Ocurrió un error técnico: ${errorMsg.substring(0, 100)}...`;
   }
 };
@@ -65,7 +50,7 @@ export const generateDestinationDetails = async (name: string, location: string,
     fullDescription: `Disfruta de la experiencia única que ofrece ${name}. Este destino ubicado en ${location} es ideal para los amantes de ${category}.`,
     highlights: ["Paisajes increíbles", "Gastronomía local", "Fotos únicas"],
     travelTips: ["Lleva ropa cómoda", "No olvides tu cámara", "Hidrátate bien"],
-    coordinates: { latitude: -1.8312, longitude: -78.1834 } // Centro de Ecuador aprox
+    coordinates: { latitude: -1.8312, longitude: -78.1834 }
   };
 
   const prompt = `
@@ -76,7 +61,6 @@ export const generateDestinationDetails = async (name: string, location: string,
     1. La 'fullDescription' debe ser EXTENSA (Mínimo 15 líneas de texto o 4 párrafos completos).
     2. Incluye datos históricos reales, geografía exacta, biodiversidad específica (flora/fauna) y datos culturales precisos.
     3. Incluye las COORDENADAS GEOGRÁFICAS (latitude, longitude) más precisas posibles del lugar.
-    4. NO inventes información. Si es un lugar histórico, menciona fechas. Si es natural, menciona especies reales.
     
     El JSON debe tener EXACTAMENTE esta estructura:
     {
@@ -98,10 +82,8 @@ export const generateDestinationDetails = async (name: string, location: string,
     });
 
     let text = response.text || "{}";
-    // Limpieza CRÍTICA para evitar errores de Markdown
     text = text.replace(/```json/g, '').replace(/```/g, '').trim();
     
-    // Verificación extra para evitar JSONs vacíos
     if (!text || text === '{}') return fallbackData;
 
     return JSON.parse(text);
@@ -147,7 +129,6 @@ export const generateItinerary = async (destination: string, days: number, budge
     });
     
     let text = response.text || "{}";
-    // Limpieza CRÍTICA: Eliminar bloques de código markdown que Gemini a veces añade
     text = text.replace(/```json/g, '').replace(/```/g, '').trim();
 
     return JSON.parse(text);
@@ -180,7 +161,7 @@ export const findNearbyPlaces = async (lat: number, lng: number): Promise<{text:
         // Extraer Grounding Chunks (Enlaces a mapas)
         const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
         const places = chunks
-            .filter((c: any) => c.web?.uri || c.web?.title) // A veces viene como web o maps
+            .filter((c: any) => c.web?.uri || c.web?.title)
             .map((c: any) => ({
                 title: c.web?.title || "Ver en Mapa",
                 uri: c.web?.uri
