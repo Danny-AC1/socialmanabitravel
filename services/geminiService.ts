@@ -5,13 +5,40 @@ import { GoogleGenAI, Type } from "@google/genai";
 // Guideline: The API key must be obtained exclusively from the environment variable process.env.API_KEY.
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
+// --- SISTEMA DE CACHÉ SIMPLE ---
+// Esto evita llamar a la IA repetidamente por la misma información.
+const memoryCache: Record<string, any> = {};
+
+const getFromCache = (key: string) => {
+    return memoryCache[key];
+};
+
+const saveToCache = (key: string, data: any) => {
+    memoryCache[key] = data;
+};
+
 const ECUADOR_SYSTEM_INSTRUCTION = `Eres el guía turístico oficial de 'Ecuador Travel'.
 Tu misión es promocionar el turismo en las 4 regiones del Ecuador: Costa, Sierra, Amazonía e Insular (Galápagos).
 Tu tono es amigable, entusiasta y experto. Usas emojis de banderas de Ecuador, plantas y animales.
 Si te preguntan por un lugar específico, da datos reales sobre ubicación, comida típica y qué hacer.
 Responde siempre en español. Sé conciso pero útil.`;
 
+const handleGeminiError = (error: any, context: string): string => {
+    console.error(`Error en Gemini (${context}):`, error);
+    const msg = error.message || JSON.stringify(error);
+    
+    if (msg.includes('429') || msg.includes('quota') || msg.includes('limit') || msg.includes('resource_exhausted')) {
+        return "limit_reached";
+    }
+    return "unknown_error";
+};
+
 export const getTravelAdvice = async (query: string): Promise<string> => {
+  // Check Cache
+  const cacheKey = `advice_${query.trim().toLowerCase()}`;
+  const cached = getFromCache(cacheKey);
+  if (cached) return cached;
+
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
@@ -21,15 +48,28 @@ export const getTravelAdvice = async (query: string): Promise<string> => {
       },
     });
     
-    return response.text || "Lo siento, me quedé sin palabras. Intenta de nuevo.";
+    const text = response.text || "Lo siento, me quedé sin palabras. Intenta de nuevo.";
+    
+    // Save to Cache
+    saveToCache(cacheKey, text);
+    
+    return text;
   } catch (error: any) {
-    console.error("Error detallado de Gemini:", error);
-    const errorMsg = error.message || JSON.stringify(error);
-    return `⚠️ Ocurrió un error técnico: ${errorMsg.substring(0, 100)}...`;
+    const errorType = handleGeminiError(error, "getTravelAdvice");
+    
+    if (errorType === "limit_reached") {
+        return "🐢 ¡Vaya! He recibido demasiadas consultas hoy y mi energía de IA se está recargando. Por favor, intenta de nuevo en unos minutos.";
+    }
+    
+    return "Lo siento, estoy teniendo problemas de conexión con el servidor de turismo. Intenta más tarde. 🔌";
   }
 };
 
 export const generateCaptionForImage = async (location: string, details: string): Promise<string> => {
+  const cacheKey = `caption_${location}_${details}`;
+  const cached = getFromCache(cacheKey);
+  if (cached) return cached;
+
   try {
     const prompt = `Escribe un pie de foto (caption) corto, inspirador y atractivo para Instagram sobre una foto en ${location}, Ecuador. Contexto: ${details}. Usa emojis y hashtags.`;
     
@@ -37,17 +77,27 @@ export const generateCaptionForImage = async (location: string, details: string)
       model: 'gemini-2.5-flash',
       contents: prompt,
     });
-    return response.text || "";
+    
+    const text = response.text || "";
+    if (text) saveToCache(cacheKey, text);
+    
+    return text;
   } catch (error) {
-    console.error("Error generating caption:", error);
-    return "";
+    handleGeminiError(error, "generateCaption");
+    // Fallback simple
+    return `Disfrutando de las maravillas de ${location} 🇪🇨✨ #EcuadorTravel #Viajes`;
   }
 };
 
 export const generateDestinationDetails = async (name: string, location: string, category: string): Promise<any> => {
+  // Check Cache para destinos completos (Esto ahorra mucha cuota)
+  const cacheKey = `dest_${name}_${location}`.toLowerCase().replace(/\s/g, '');
+  const cached = getFromCache(cacheKey);
+  if (cached) return cached;
+
   const fallbackData = {
     description: `Un hermoso lugar para visitar en ${location}.`,
-    fullDescription: `Disfruta de la experiencia única que ofrece ${name}. Este destino ubicado en ${location} es ideal para los amantes de ${category}.`,
+    fullDescription: `Disfruta de la experiencia única que ofrece ${name}. Este destino ubicado en ${location} es ideal para los amantes de ${category}. (Información generada automáticamente por falta de conexión a IA).`,
     highlights: ["Paisajes increíbles", "Gastronomía local", "Fotos únicas"],
     travelTips: ["Lleva ropa cómoda", "No olvides tu cámara", "Hidrátate bien"],
     coordinates: { latitude: -1.8312, longitude: -78.1834 }
@@ -86,14 +136,21 @@ export const generateDestinationDetails = async (name: string, location: string,
     
     if (!text || text === '{}') return fallbackData;
 
-    return JSON.parse(text);
+    const data = JSON.parse(text);
+    saveToCache(cacheKey, data); // Guardar en caché si fue exitoso
+    return data;
+
   } catch (error) {
-    console.error("Error generating destination details:", error);
+    handleGeminiError(error, "generateDestinationDetails");
     return fallbackData;
   }
 };
 
 export const generateItinerary = async (destination: string, days: number, budget: string): Promise<any> => {
+  const cacheKey = `itinerary_${destination}_${days}_${budget}`;
+  const cached = getFromCache(cacheKey);
+  if (cached) return cached;
+
   try {
     const prompt = `
       Crea un itinerario turístico detallado para ${days} días en ${destination}, Ecuador.
@@ -130,10 +187,16 @@ export const generateItinerary = async (destination: string, days: number, budge
     
     let text = response.text || "{}";
     text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    const data = JSON.parse(text);
+    
+    saveToCache(cacheKey, data);
+    return data;
 
-    return JSON.parse(text);
-  } catch (error) {
-    console.error("Error generating itinerary:", error);
+  } catch (error: any) {
+    const errorType = handleGeminiError(error, "generateItinerary");
+    if (errorType === "limit_reached") {
+        throw new Error("El servicio de IA está saturado en este momento. Intenta más tarde.");
+    }
     throw new Error("No pudimos generar el itinerario. Intenta de nuevo.");
   }
 };
@@ -141,6 +204,14 @@ export const generateItinerary = async (destination: string, days: number, budge
 // --- NEW FUNCTION: GOOGLE MAPS GROUNDING ---
 
 export const findNearbyPlaces = async (lat: number, lng: number): Promise<{text: string, places: any[]}> => {
+    // Round coords to avoid cache missing on micro-movements (approx 100m radius)
+    const roundedLat = lat.toFixed(3);
+    const roundedLng = lng.toFixed(3);
+    const cacheKey = `nearby_${roundedLat}_${roundedLng}`;
+    
+    const cached = getFromCache(cacheKey);
+    if (cached) return cached;
+
     try {
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
@@ -167,12 +238,27 @@ export const findNearbyPlaces = async (lat: number, lng: number): Promise<{text:
                 uri: c.web?.uri
             }));
 
-        return {
+        const result = {
             text: response.text || "No encontré información cercana.",
             places: places
         };
+        
+        saveToCache(cacheKey, result);
+        return result;
+
     } catch (error: any) {
-        console.error("Error finding nearby places:", error);
-        throw new Error("Error al consultar ubicación: " + (error.message || "Desconocido"));
+        const errorType = handleGeminiError(error, "findNearbyPlaces");
+        
+        if (errorType === "limit_reached") {
+             return {
+                text: "⚠️ El radar turístico está recargando energía (Límite de cuota alcanzado). Por favor intenta en unos minutos.",
+                places: []
+            };
+        }
+
+        return {
+            text: "No pudimos conectar con el servicio de mapas en este momento.",
+            places: []
+        };
     }
 };
