@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, Send, Lock, ChevronLeft, Search, Image as ImageIcon, 
@@ -285,6 +286,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
     setSwipedMessageId(msg.id);
   };
 
+  // Se eliminó la variable 'e' que no se usaba
   const handleSwipeMove = () => {
     if (swipeStartX === null) return;
   };

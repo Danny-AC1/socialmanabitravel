@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 
 // Guideline: Always use const ai = new GoogleGenAI({apiKey: process.env.API_KEY});
@@ -100,6 +101,9 @@ export const generateDestinationDetails = async (name: string, location: string,
     // Limpieza CRÍTICA para evitar errores de Markdown
     text = text.replace(/```json/g, '').replace(/```/g, '').trim();
     
+    // Verificación extra para evitar JSONs vacíos
+    if (!text || text === '{}') return fallbackData;
+
     return JSON.parse(text);
   } catch (error) {
     console.error("Error generating destination details:", error);
