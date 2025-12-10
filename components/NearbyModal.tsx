@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { X, MapPin, Navigation, Loader2, Utensils, Camera, ShoppingBag, Clock, Star, AlertCircle, Bed } from 'lucide-react';
+import { X, MapPin, Navigation, Loader2, Utensils, Camera, ShoppingBag, Clock, Star, AlertCircle, Bed, Award } from 'lucide-react';
 
 interface NearbyPlace {
   name: string;
@@ -10,6 +10,7 @@ interface NearbyPlace {
   address: string;
   description: string;
   mapLink: string;
+  isInternal?: boolean; // Propiedad nueva para identificar destinos de la app
 }
 
 interface NearbyModalProps {
@@ -79,9 +80,9 @@ export const NearbyModal: React.FC<NearbyModalProps> = ({ isOpen, onClose, isLoa
               <div className="flex space-x-2 overflow-x-auto no-scrollbar pb-1">
                   {[
                       { id: 'ALL', label: 'Todo' },
+                      { id: 'TURISMO', label: 'Turismo' },
                       { id: 'COMIDA', label: 'Comida' },
                       { id: 'HOSPEDAJE', label: 'Hospedaje' },
-                      { id: 'TURISMO', label: 'Turismo' },
                       { id: 'SERVICIO', label: 'Servicios' }
                   ].map((filter) => (
                       <button
@@ -120,16 +121,22 @@ export const NearbyModal: React.FC<NearbyModalProps> = ({ isOpen, onClose, isLoa
           ) : filteredPlaces.length > 0 ? (
             <div className="space-y-3">
                 {filteredPlaces.map((place, idx) => (
-                    <div key={idx} className="bg-white rounded-2xl p-4 shadow-sm border border-stone-100 flex flex-col gap-3 hover:shadow-md hover:border-emerald-200 transition-all group">
+                    <div key={idx} className={`rounded-2xl p-4 shadow-sm border flex flex-col gap-3 hover:shadow-md transition-all group ${place.isInternal ? 'bg-amber-50 border-amber-200' : 'bg-white border-stone-100 hover:border-emerald-200'}`}>
                         
                         {/* Top Row: Name & Rating */}
                         <div className="flex justify-between items-start">
-                            <div>
-                                <h3 className="font-bold text-stone-800 text-base leading-tight group-hover:text-emerald-700 transition-colors">
+                            <div className="flex-1 min-w-0 pr-2">
+                                <h3 className="font-bold text-stone-800 text-base leading-tight group-hover:text-emerald-700 transition-colors flex items-center gap-1">
                                     {place.name}
+                                    {place.isInternal && <Award size={14} className="text-amber-500 fill-amber-500" />}
                                 </h3>
                                 <div className="flex items-center gap-2 mt-1">
-                                    <span className="bg-stone-100 text-stone-500 text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1">
+                                    {place.isInternal && (
+                                        <span className="bg-amber-100 text-amber-700 text-[9px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 border border-amber-200">
+                                           Destino Destacado
+                                        </span>
+                                    )}
+                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 ${place.isInternal ? 'bg-white text-stone-500 border border-amber-100' : 'bg-stone-100 text-stone-500'}`}>
                                         {getCategoryIcon(place.category)}
                                         {getCategoryLabel(place.category)}
                                     </span>
@@ -143,7 +150,7 @@ export const NearbyModal: React.FC<NearbyModalProps> = ({ isOpen, onClose, isLoa
                             </div>
                             
                             {/* Status Badge */}
-                            <div className={`px-2 py-1 rounded-lg text-[10px] font-bold border flex items-center gap-1 ${
+                            <div className={`px-2 py-1 rounded-lg text-[10px] font-bold border flex items-center gap-1 shrink-0 ${
                                 place.isOpen 
                                     ? 'bg-green-50 text-green-700 border-green-100' 
                                     : 'bg-red-50 text-red-700 border-red-100'
@@ -168,7 +175,7 @@ export const NearbyModal: React.FC<NearbyModalProps> = ({ isOpen, onClose, isLoa
                             href={place.mapLink}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="bg-stone-100 hover:bg-emerald-600 hover:text-white text-stone-600 font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-2 transition-colors active:scale-95"
+                            className={`font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-2 transition-colors active:scale-95 ${place.isInternal ? 'bg-amber-100 hover:bg-amber-200 text-amber-800' : 'bg-stone-100 hover:bg-emerald-600 hover:text-white text-stone-600'}`}
                         >
                             <Navigation size={14} />
                             Cómo llegar

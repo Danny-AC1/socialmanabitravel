@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Users, Plus, Search, Map, Calendar, DollarSign, ArrowRight, ArrowLeft, Share2, Trash2, FileText, Loader2, Image as ImageIcon, Lock, Shield, UserPlus, Unlock, Globe, Sun, Sunset, Moon, PlusCircle, Camera, Edit2 } from 'lucide-react';
 import { User, TravelGroup, TravelTemplate } from '../types';
@@ -232,62 +231,75 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
 
   // --- RENDER FUNCTIONS ---
 
-  const renderList = () => (
-      <div className="space-y-4 p-6">
-          <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-gray-800 text-lg">Explorar Grupos</h3>
-              <button onClick={() => setView('create')} className="bg-cyan-600 text-white px-4 py-2 rounded-full text-xs font-bold flex items-center gap-2 hover:bg-cyan-700 transition-colors shadow-md">
-                  <Plus size={16} /> Crear Grupo
-              </button>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {groups.map(group => {
-                  const memberCount = group.members ? Object.keys(group.members).length : 0;
-                  const isMember = group.members && group.members[currentUser.id];
-                  
-                  return (
-                      <div key={group.id} onClick={() => { setSelectedGroup(group); setView('detail'); }} className="bg-white rounded-xl shadow-sm border border-stone-100 overflow-hidden cursor-pointer hover:shadow-md transition-all group-card relative">
-                          <div className="h-32 bg-gray-200 relative">
-                              <img src={group.imageUrl} className="w-full h-full object-cover" />
-                              <div className="absolute inset-0 bg-black/30 group-hover:bg-black/10 transition-colors"></div>
-                              {isMember && <span className="absolute top-2 right-2 bg-green-500 text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-sm">MIEMBRO</span>}
-                              <span className="absolute top-2 left-2 bg-black/40 backdrop-blur-md text-white p-1 rounded-full">
-                                  {group.isPrivate ? <Lock size={12}/> : <Globe size={12}/>}
-                              </span>
-                          </div>
-                          <div className="p-4">
-                              <h4 className="font-bold text-gray-800 text-lg mb-1 flex items-center gap-2">
-                                  {group.name}
-                              </h4>
-                              <p className="text-gray-500 text-xs line-clamp-2 mb-3">{group.description}</p>
-                              <div className="flex items-center gap-4 text-xs text-gray-400 font-medium">
-                                  <span className="flex items-center gap-1"><Users size={14} /> {memberCount} viajeros</span>
-                                  <span className="flex items-center gap-1"><FileText size={14} /> {(group.templates ? Object.keys(group.templates).length : 0)} plantillas</span>
-                              </div>
-                              
-                              {!isMember && !group.isPrivate && (
-                                  <div className="mt-3">
-                                      <button 
-                                        onClick={(e) => { e.stopPropagation(); handleJoin(group); }} 
-                                        className="w-full bg-cyan-50 text-cyan-700 text-xs font-bold py-2 rounded-lg hover:bg-cyan-100 transition-colors"
-                                      >
-                                          Unirme
-                                      </button>
-                                  </div>
-                              )}
-                          </div>
-                      </div>
-                  );
-              })}
-              {groups.length === 0 && (
-                  <div className="col-span-2 text-center py-10 text-gray-400">
-                      <Users size={48} className="mx-auto mb-2 opacity-20" />
-                      <p>No hay grupos aún. ¡Crea el primero!</p>
-                  </div>
-              )}
-          </div>
-      </div>
-  );
+  const renderList = () => {
+      // Filtrar grupos para mostrar:
+      // 1. Grupos Públicos
+      // 2. Grupos Privados donde soy Admin
+      // 3. Grupos Privados donde soy Miembro
+      // OCULTAR: Grupos Privados donde no soy nada
+      const visibleGroups = groups.filter(g => 
+          !g.isPrivate || 
+          g.adminId === currentUser.id || 
+          (g.members && g.members[currentUser.id])
+      );
+
+      return (
+        <div className="space-y-4 p-6">
+            <div className="flex justify-between items-center mb-4">
+                <h3 className="font-bold text-gray-800 text-lg">Explorar Grupos</h3>
+                <button onClick={() => setView('create')} className="bg-cyan-600 text-white px-4 py-2 rounded-full text-xs font-bold flex items-center gap-2 hover:bg-cyan-700 transition-colors shadow-md">
+                    <Plus size={16} /> Crear Grupo
+                </button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {visibleGroups.map(group => {
+                    const memberCount = group.members ? Object.keys(group.members).length : 0;
+                    const isMember = group.members && group.members[currentUser.id];
+                    
+                    return (
+                        <div key={group.id} onClick={() => { setSelectedGroup(group); setView('detail'); }} className="bg-white rounded-xl shadow-sm border border-stone-100 overflow-hidden cursor-pointer hover:shadow-md transition-all group-card relative">
+                            <div className="h-32 bg-gray-200 relative">
+                                <img src={group.imageUrl} className="w-full h-full object-cover" />
+                                <div className="absolute inset-0 bg-black/30 group-hover:bg-black/10 transition-colors"></div>
+                                {isMember && <span className="absolute top-2 right-2 bg-green-500 text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-sm">MIEMBRO</span>}
+                                <span className="absolute top-2 left-2 bg-black/40 backdrop-blur-md text-white p-1 rounded-full">
+                                    {group.isPrivate ? <Lock size={12}/> : <Globe size={12}/>}
+                                </span>
+                            </div>
+                            <div className="p-4">
+                                <h4 className="font-bold text-gray-800 text-lg mb-1 flex items-center gap-2">
+                                    {group.name}
+                                </h4>
+                                <p className="text-gray-500 text-xs line-clamp-2 mb-3">{group.description}</p>
+                                <div className="flex items-center gap-4 text-xs text-gray-400 font-medium">
+                                    <span className="flex items-center gap-1"><Users size={14} /> {memberCount} viajeros</span>
+                                    <span className="flex items-center gap-1"><FileText size={14} /> {(group.templates ? Object.keys(group.templates).length : 0)} plantillas</span>
+                                </div>
+                                
+                                {!isMember && !group.isPrivate && (
+                                    <div className="mt-3">
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); handleJoin(group); }} 
+                                            className="w-full bg-cyan-50 text-cyan-700 text-xs font-bold py-2 rounded-lg hover:bg-cyan-100 transition-colors"
+                                        >
+                                            Unirme
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    );
+                })}
+                {visibleGroups.length === 0 && (
+                    <div className="col-span-2 text-center py-10 text-gray-400">
+                        <Users size={48} className="mx-auto mb-2 opacity-20" />
+                        <p>No hay grupos disponibles. ¡Crea el primero!</p>
+                    </div>
+                )}
+            </div>
+        </div>
+      );
+  };
 
   const renderCreateGroup = () => (
       <div className="p-6 space-y-4">

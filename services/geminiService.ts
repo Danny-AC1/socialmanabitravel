@@ -215,41 +215,71 @@ export const generateItinerary = async (destination: string, days: number, budge
 
 // --- GOOGLE MAPS GROUNDING OPTIMIZADO PARA UI SEGMENTADA ---
 
-export const findNearbyPlaces = async (lat: number, lng: number): Promise<{ places: any[] }> => {
+export const findNearbyPlaces = async (lat: number, lng: number, specificQuery?: string): Promise<{ places: any[] }> => {
     // Redondear para caché eficiente
     const roundedLat = lat.toFixed(3);
     const roundedLng = lng.toFixed(3);
+    const queryKey = specificQuery ? specificQuery.trim().toLowerCase().replace(/\s/g, '_') : 'general';
     const currentTime = new Date().toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' });
-    const cacheKey = `nearby_v3_${roundedLat}_${roundedLng}_${currentTime.split(':')[0]}`; // Cache por hora (v3 updated)
+    const cacheKey = `nearby_v5_${queryKey}_${roundedLat}_${roundedLng}_${currentTime.split(':')[0]}`;
     
     const cached = getFromCache(cacheKey);
     if (cached) return cached;
 
     try {
-        const prompt = `
-            Actúa como un radar local. Busca lugares REALES alrededor de las coordenadas Lat: ${lat}, Lng: ${lng}.
-            La hora actual local es: ${currentTime}.
-            
-            Debes encontrar 2 opciones para CADA una de estas categorías (Total 8-10 lugares):
-            1. RESTAURANTES (Comida típica, cafeterías)
-            2. TURISMO (Parques, museos, playas, atracciones)
-            3. SERVICIOS (Farmacias, tiendas, supermercados)
-            4. HOSPEDAJE (Hoteles, hostales, alojamientos)
+        let prompt = "";
 
-            Devuelve un JSON con esta estructura exacta para cada lugar:
-            {
-              "places": [
+        if (specificQuery) {
+            // PROMPT PARA BÚSQUEDA ESPECÍFICA (Hospitales, Farmacias, etc.)
+            prompt = `
+                Actúa como un radar local. Busca lugares REALES relacionados con "${specificQuery}" alrededor de las coordenadas Lat: ${lat}, Lng: ${lng}.
+                La hora actual local es: ${currentTime}.
+                
+                Encuentra al menos 5 opciones relevantes para la búsqueda "${specificQuery}".
+                
+                Devuelve un JSON con esta estructura exacta para cada lugar:
                 {
-                   "name": "Nombre real del lugar",
-                   "category": "COMIDA" | "TURISMO" | "SERVICIO" | "HOSPEDAJE",
-                   "isOpen": boolean, (Calcula si está abierto según la hora actual ${currentTime})
-                   "rating": number, (Ej: 4.5)
-                   "address": "Dirección corta o referencia",
-                   "description": "Qué venden o qué se hace ahí (Máx 5 palabras)"
+                  "places": [
+                    {
+                       "name": "Nombre real del lugar",
+                       "category": "SERVICIO" | "COMIDA" | "HOSPEDAJE" | "TURISMO", (Clasifica según corresponda, ej: Hospital -> SERVICIO)
+                       "isOpen": boolean, (Calcula si está abierto según la hora actual ${currentTime})
+                       "rating": number, (Ej: 4.5)
+                       "address": "Dirección corta o referencia",
+                       "description": "Breve descripción relacionada con la búsqueda"
+                    }
+                  ]
                 }
-              ]
-            }
-        `;
+            `;
+        } else {
+            // PROMPT GENERAL (TURISMO)
+            prompt = `
+                Actúa como un radar local. Busca lugares REALES alrededor de las coordenadas Lat: ${lat}, Lng: ${lng}.
+                La hora actual local es: ${currentTime}.
+                
+                PRIORIDAD: Encuentra los MEJORES atractivos turísticos cercanos primero.
+                
+                Debes encontrar lugares en estas categorías:
+                1. TURISMO (Playas, miradores, parques, museos, plazas principales) - Mínimo 4 opciones.
+                2. COMIDA (Restaurantes típicos, cafeterías populares) - Mínimo 3 opciones.
+                3. HOSPEDAJE (Hoteles recomendados, hostales) - Mínimo 2 opciones.
+                4. SERVICIOS (Farmacias, supermercados) - Máximo 2 opciones.
+
+                Devuelve un JSON con esta estructura exacta para cada lugar:
+                {
+                  "places": [
+                    {
+                       "name": "Nombre real del lugar",
+                       "category": "TURISMO" | "COMIDA" | "HOSPEDAJE" | "SERVICIO",
+                       "isOpen": boolean, (Calcula si está abierto según la hora actual ${currentTime})
+                       "rating": number, (Ej: 4.5)
+                       "address": "Dirección corta o referencia",
+                       "description": "Qué es (Ej: 'Playa famosa', 'Comida Manabita')"
+                    }
+                  ]
+                }
+            `;
+        }
 
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",

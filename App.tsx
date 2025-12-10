@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Map as MapIcon, Compass, Camera, Search, LogOut, ChevronLeft, PlusCircle, Globe, Filter, Edit3, X, Lightbulb, MapPin, Plus, MessageCircle, Users, Bell, LayoutGrid, Award, Home, Sparkles, Trophy, CheckCircle, Navigation, Lock, Unlock } from 'lucide-react';
+import { Map as MapIcon, Compass, Camera, Search, LogOut, ChevronLeft, PlusCircle, Globe, Filter, Edit3, X, Lightbulb, MapPin, Plus, MessageCircle, Users, Bell, LayoutGrid, Award, Home, Sparkles, Trophy, CheckCircle, Navigation, Lock, Unlock, Hotel, Stethoscope, ShoppingBag, Utensils } from 'lucide-react';
 import { HeroSection } from './components/HeroSection';
 import { PostCard } from './components/PostCard';
 import { CreatePostModal } from './components/CreatePostModal';
@@ -64,6 +64,10 @@ function App() {
   const [isNearbyModalOpen, setIsNearbyModalOpen] = useState(false);
   const [nearbyLoading, setNearbyLoading] = useState(false);
   const [nearbyData, setNearbyData] = useState<{text: string, places: any[]} | null>(null);
+
+  // EXTERNAL SEARCH STATE (Search Tab)
+  const [externalSearchResults, setExternalSearchResults] = useState<any[]>([]);
+  const [isSearchingExternal, setIsSearchingExternal] = useState(false);
 
   // PERSISTENCIA DE PESTAÑA: Inicializar leyendo localStorage
   const [activeTab, setActiveTab] = useState<Tab>(() => {
@@ -239,6 +243,28 @@ function App() {
     openModal(setIsChatModalOpen);
   };
 
+  const performNearbySearch = async (query: string) => {
+      if (!userLocation) {
+          alert("Necesitas activar la ubicación para buscar lugares cercanos.");
+          return;
+      }
+      setIsSearchingExternal(true);
+      setExternalSearchResults([]);
+      try {
+          const result = await findNearbyPlaces(userLocation.lat, userLocation.lng, query);
+          setExternalSearchResults(result.places || []);
+      } catch (error) {
+          console.error("Error searching external", error);
+      } finally {
+          setIsSearchingExternal(false);
+      }
+  };
+
+  const handleQuickSearch = (term: string) => {
+      setSearchQuery(term);
+      performNearbySearch(term);
+  };
+
   const handleNearbySearch = () => {
     if (!navigator.geolocation) {
         alert("Tu navegador no soporta geolocalización.");
@@ -251,11 +277,44 @@ function App() {
 
     navigator.geolocation.getCurrentPosition(async (position) => {
         const { latitude, longitude } = position.coords;
+        
+        // 1. Buscar destinos internos cercanos primero
+        const internalNearby = destinations
+            .filter(d => d.coordinates)
+            .map(d => {
+                const dist = calculateDistance(latitude, longitude, d.coordinates!.latitude, d.coordinates!.longitude);
+                return { ...d, dist };
+            })
+            .filter(d => d.dist <= 50) // Radio de 50km
+            .sort((a, b) => a.dist - b.dist)
+            .map(d => ({
+                name: d.name,
+                category: 'TURISMO',
+                isOpen: true, // Asumimos abierto
+                rating: d.rating,
+                address: d.location,
+                description: `A ${d.dist.toFixed(1)} km - ${d.category}`,
+                mapLink: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(d.name + " " + d.location)}`,
+                isInternal: true // Flag para resaltar en UI
+            }));
+
         try {
-            const result = await findNearbyPlaces(latitude, longitude);
-            setNearbyData({ ...result, text: "Resultados encontrados" });
+            // 2. Buscar lugares externos con IA
+            const aiResult = await findNearbyPlaces(latitude, longitude);
+            
+            // 3. Fusionar resultados (Internos primero)
+            const combinedPlaces = [...internalNearby, ...(aiResult.places || [])];
+            
+            setNearbyData({ 
+                text: combinedPlaces.length > 0 ? "Resultados encontrados" : "No se encontraron lugares cercanos", 
+                places: combinedPlaces 
+            });
         } catch (error: any) {
-            setNearbyData({ text: "Error: " + error.message, places: [] });
+            // Si falla la IA, al menos mostramos los internos
+            setNearbyData({ 
+                text: "Mostrando destinos de la app (Error de conexión externa)", 
+                places: internalNearby 
+            });
         } finally {
             setNearbyLoading(false);
         }
@@ -1009,12 +1068,86 @@ function App() {
           
           {activeTab === 'search' && (
              <div className="space-y-6 pb-20">
-                <div className="relative">
-                  <input type="text" autoFocus placeholder="Buscar personas, lugares o posts..." className="w-full p-4 pl-12 rounded-xl shadow-sm border border-stone-200 outline-none focus:ring-2 focus:ring-cyan-500" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-                  <Search className="absolute left-4 top-4 text-stone-400" size={20} />
+                <div className="space-y-3">
+                    <div className="relative">
+                      <input 
+                        type="text" 
+                        autoFocus 
+                        placeholder="Buscar personas, lugares, hoteles, comida..." 
+                        className="w-full p-4 pl-12 rounded-xl shadow-sm border border-stone-200 outline-none focus:ring-2 focus:ring-cyan-500" 
+                        value={searchQuery} 
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onKeyDown={(e) => {
+                            if(e.key === 'Enter') handleQuickSearch(searchQuery);
+                        }}
+                      />
+                      <Search className="absolute left-4 top-4 text-stone-400" size={20} />
+                      {searchQuery && (
+                          <button onClick={() => handleQuickSearch(searchQuery)} className="absolute right-3 top-2.5 bg-cyan-600 text-white p-1.5 rounded-lg text-xs font-bold shadow-sm hover:bg-cyan-700 transition-colors">
+                              Buscar
+                          </button>
+                      )}
+                    </div>
+
+                    {/* Quick Filters / Categorías Cercanas */}
+                    <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
+                        <button onClick={() => handleQuickSearch('Hoteles')} className="flex items-center gap-1.5 px-3 py-2 bg-white border border-stone-200 rounded-full text-xs font-bold text-stone-600 hover:bg-cyan-50 hover:text-cyan-700 hover:border-cyan-200 transition-colors whitespace-nowrap shadow-sm">
+                            <Hotel size={14} className="text-indigo-500"/> Hoteles
+                        </button>
+                        <button onClick={() => handleQuickSearch('Restaurantes')} className="flex items-center gap-1.5 px-3 py-2 bg-white border border-stone-200 rounded-full text-xs font-bold text-stone-600 hover:bg-cyan-50 hover:text-cyan-700 hover:border-cyan-200 transition-colors whitespace-nowrap shadow-sm">
+                            <Utensils size={14} className="text-orange-500"/> Restaurantes
+                        </button>
+                        <button onClick={() => handleQuickSearch('Hospitales')} className="flex items-center gap-1.5 px-3 py-2 bg-white border border-stone-200 rounded-full text-xs font-bold text-stone-600 hover:bg-cyan-50 hover:text-cyan-700 hover:border-cyan-200 transition-colors whitespace-nowrap shadow-sm">
+                            <Stethoscope size={14} className="text-red-500"/> Salud
+                        </button>
+                        <button onClick={() => handleQuickSearch('Tiendas')} className="flex items-center gap-1.5 px-3 py-2 bg-white border border-stone-200 rounded-full text-xs font-bold text-stone-600 hover:bg-cyan-50 hover:text-cyan-700 hover:border-cyan-200 transition-colors whitespace-nowrap shadow-sm">
+                            <ShoppingBag size={14} className="text-purple-500"/> Tiendas
+                        </button>
+                        <button onClick={() => handleQuickSearch('Farmacias')} className="flex items-center gap-1.5 px-3 py-2 bg-white border border-stone-200 rounded-full text-xs font-bold text-stone-600 hover:bg-cyan-50 hover:text-cyan-700 hover:border-cyan-200 transition-colors whitespace-nowrap shadow-sm">
+                            <Plus size={14} className="text-green-500"/> Farmacias
+                        </button>
+                    </div>
                 </div>
+
                 {searchQuery ? (
-                  <div className="space-y-8">
+                  <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2">
+                     
+                     {/* External Search Results (Google Maps Grounding) */}
+                     {isSearchingExternal ? (
+                         <div className="bg-white p-6 rounded-2xl shadow-sm border border-stone-100 text-center">
+                             <div className="animate-spin text-cyan-600 mx-auto mb-2 w-fit"><Compass size={24}/></div>
+                             <p className="text-stone-500 text-sm font-bold">Buscando "{searchQuery}" cerca de ti...</p>
+                         </div>
+                     ) : externalSearchResults.length > 0 && (
+                         <div>
+                             <div className="flex items-center justify-between mb-3 px-1">
+                                 <h3 className="font-bold text-stone-600 text-sm uppercase flex items-center gap-2">
+                                     <MapPin size={16} className="text-emerald-600"/> Resultados Cercanos
+                                 </h3>
+                                 <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full font-bold">Google Maps</span>
+                             </div>
+                             <div className="grid gap-3">
+                                 {externalSearchResults.map((place, idx) => (
+                                     <div key={idx} className="bg-white p-4 rounded-xl border border-stone-100 hover:border-emerald-300 shadow-sm transition-all group relative">
+                                         <div className="flex justify-between items-start">
+                                             <div>
+                                                 <h4 className="font-bold text-stone-800 text-sm group-hover:text-emerald-700">{place.name}</h4>
+                                                 <p className="text-xs text-stone-500 mt-1">{place.address}</p>
+                                                 <div className="flex items-center gap-2 mt-2">
+                                                     {place.isOpen && <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-bold">ABIERTO</span>}
+                                                     {place.rating && <span className="text-[10px] flex items-center gap-0.5 font-bold text-amber-500"><Award size={10}/> {place.rating}</span>}
+                                                 </div>
+                                             </div>
+                                             <a href={place.mapLink} target="_blank" rel="noopener noreferrer" className="bg-stone-100 hover:bg-emerald-600 hover:text-white text-stone-600 p-2 rounded-full transition-colors">
+                                                 <Navigation size={16} />
+                                             </a>
+                                         </div>
+                                     </div>
+                                 ))}
+                             </div>
+                         </div>
+                     )}
+
                      {filteredUsers.length > 0 && (
                        <div>
                           <h3 className="font-bold text-stone-600 text-sm uppercase mb-3 px-1">Personas</h3>
@@ -1077,7 +1210,7 @@ function App() {
                      )}
                   </div>
                 ) : (
-                   <div className="text-center py-20 text-stone-300"> <Search size={64} className="mx-auto mb-4 opacity-20" /> <p>Escribe algo para comenzar a buscar.</p> </div>
+                   <div className="text-center py-20 text-stone-300"> <Search size={64} className="mx-auto mb-4 opacity-20" /> <p>Escribe algo o usa los filtros rápidos.</p> </div>
                 )}
              </div>
           )}
