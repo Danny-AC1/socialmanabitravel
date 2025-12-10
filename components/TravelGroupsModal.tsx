@@ -515,7 +515,7 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
                      <h3 className="font-bold text-gray-800 flex items-center gap-2">
                          <FileText className="text-cyan-600" size={20} /> Plantillas de Viaje
                      </h3>
-                     {isMember && (
+                     {isAdminOfGroup && (
                          <button onClick={() => setView('create_template')} className="text-cyan-600 text-xs font-bold bg-cyan-50 px-3 py-1.5 rounded-full hover:bg-cyan-100 transition-colors flex items-center gap-1">
                              <Plus size={14} /> Compartir Plantilla
                          </button>
@@ -559,7 +559,7 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
                      <div className="text-center py-10 text-stone-400 border-2 border-dashed border-stone-200 rounded-xl">
                          <Map size={32} className="mx-auto mb-2 opacity-30" />
                          <p className="text-sm">Aún no hay plantillas.</p>
-                         {isMember && <p className="text-xs">¡Comparte tu itinerario favorito!</p>}
+                         {isAdminOfGroup && <p className="text-xs">¡Comparte tu itinerario favorito!</p>}
                      </div>
                  )}
              </div>
