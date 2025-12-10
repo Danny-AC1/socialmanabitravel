@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Map as MapIcon, Compass, Camera, Search, LogOut, ChevronLeft, PlusCircle, Globe, Filter, Edit3, X, Mail, MapPin, Plus, MessageCircle, Users, Bell, LayoutGrid, Award, Home, Sparkles, Trophy, CheckCircle, Navigation } from 'lucide-react';
+import { Map as MapIcon, Compass, Camera, Search, LogOut, ChevronLeft, PlusCircle, Globe, Filter, Edit3, X, Lightbulb, MapPin, Plus, MessageCircle, Users, Bell, LayoutGrid, Award, Home, Sparkles, Trophy, CheckCircle, Navigation, Lock, Unlock } from 'lucide-react';
 import { HeroSection } from './components/HeroSection';
 import { PostCard } from './components/PostCard';
 import { CreatePostModal } from './components/CreatePostModal';
@@ -22,12 +22,14 @@ import { FollowListModal } from './components/FollowListModal';
 import { ItineraryGeneratorModal } from './components/ItineraryGeneratorModal';
 import { ChallengeCard } from './components/ChallengeCard';
 import { NearbyModal } from './components/NearbyModal';
-import { ALL_DESTINATIONS as STATIC_DESTINATIONS } from './constants';
-import { Post, Story, Destination, User, EcuadorRegion, Suggestion, Chat, Notification, Challenge } from './types';
+import { LifeMap } from './components/LifeMap';
+import { WhatsNewModal } from './components/WhatsNewModal'; 
+import { TravelGroupsModal } from './components/TravelGroupsModal';
+import { ALL_DESTINATIONS as STATIC_DESTINATIONS, APP_VERSION } from './constants';
+import { Post, Story, Destination, User, EcuadorRegion, Suggestion, Chat, Notification, Challenge, TravelGroup } from './types';
 import { StorageService } from './services/storageService';
 import { AuthService } from './services/authService';
 import { resizeImage, isAdmin, getUserLevel, getNextLevel, BADGES, POINT_VALUES, getDailyChallenge, calculateDistance } from './utils';
-// Importación explícita de la función
 import { findNearbyPlaces } from './services/geminiService';
 import { db } from './services/firebase';
 import { ref, onValue } from 'firebase/database';
@@ -42,6 +44,7 @@ function App() {
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [destinations, setDestinations] = useState<Destination[]>(STATIC_DESTINATIONS);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [travelGroups, setTravelGroups] = useState<TravelGroup[]>([]);
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
   
   // LOCATION & NEARBY
@@ -51,7 +54,7 @@ function App() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [followListType, setFollowListType] = useState<'followers' | 'following' | null>(null);
-  const [profileSubTab, setProfileSubTab] = useState<'posts' | 'contributions' | 'badges'>('posts');
+  const [profileSubTab, setProfileSubTab] = useState<'posts' | 'contributions' | 'badges' | 'map' | 'groups'>('posts');
 
   // CHALLENGE STATE
   const [dailyChallenge, setDailyChallenge] = useState<Challenge | null>(null);
@@ -86,8 +89,11 @@ function App() {
   const [isAdminUsersModalOpen, setIsAdminUsersModalOpen] = useState(false);
   const [isChatModalOpen, setIsChatModalOpen] = useState(false);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
+  const [isWhatsNewOpen, setIsWhatsNewOpen] = useState(false);
   const [isItineraryModalOpen, setIsItineraryModalOpen] = useState(false);
+  const [isTravelGroupsOpen, setIsTravelGroupsOpen] = useState(false); 
   const [initialChatId, setInitialChatId] = useState<string | null>(null);
+  const [initialGroupId, setInitialGroupId] = useState<string | null>(null);
   
   const [editingPost, setEditingPost] = useState<Post | null>(null);
   const [editingStory, setEditingStory] = useState<Story | null>(null);
@@ -137,7 +143,9 @@ function App() {
       else if (isChatModalOpen) setIsChatModalOpen(false);
       else if (isNotificationsOpen) setIsNotificationsOpen(false);
       else if (isItineraryModalOpen) setIsItineraryModalOpen(false);
+      else if (isTravelGroupsOpen) setIsTravelGroupsOpen(false); 
       else if (isNearbyModalOpen) setIsNearbyModalOpen(false);
+      else if (isWhatsNewOpen) setIsWhatsNewOpen(false);
       else if (followListType) setFollowListType(null);
       else if (viewingPost) setViewingPost(null);
       else if (viewingStoryIndex !== null) setViewingStoryIndex(null);
@@ -158,7 +166,7 @@ function App() {
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, [
-    isCreateModalOpen, isAddDestinationModalOpen, isSuggestionsModalOpen, isAdminUsersModalOpen, isChatModalOpen, isNotificationsOpen, isItineraryModalOpen, isNearbyModalOpen, followListType, viewingPost, viewingStoryIndex, 
+    isCreateModalOpen, isAddDestinationModalOpen, isSuggestionsModalOpen, isAdminUsersModalOpen, isChatModalOpen, isNotificationsOpen, isItineraryModalOpen, isNearbyModalOpen, isWhatsNewOpen, isTravelGroupsOpen, followListType, viewingPost, viewingStoryIndex, 
     selectedDestination, viewingProfileImage, editingPost, editingStory, chatOpen, viewingProfileId, isOnboardingOpen
   ]);
 
@@ -186,23 +194,31 @@ function App() {
     }
   };
 
+  const handleWhatsNewClose = () => {
+    setIsWhatsNewOpen(false);
+    localStorage.setItem('app_version', APP_VERSION);
+  };
+
   // CHECK DAILY LOGIN AND SESSION AND CHALLENGE
   useEffect(() => {
     const session = AuthService.getSession();
     if (session) {
       setUser(session);
+      
       const hasSeenTutorial = localStorage.getItem(`tutorial_seen_${session.id}`);
+      const lastVersion = localStorage.getItem('app_version');
+      
       if (!hasSeenTutorial) {
           setTimeout(() => setIsOnboardingOpen(true), 1000);
+      } else if (lastVersion !== APP_VERSION) {
+          setTimeout(() => setIsWhatsNewOpen(true), 1500);
       }
-      // Check Daily Login Points
+
       StorageService.checkDailyLogin(session.id).then(received => {
          if (received) console.log("Daily Login Points Awarded!");
       });
-      // Set Daily Challenge
       setDailyChallenge(getDailyChallenge());
 
-      // GET USER LOCATION FOR SORTING
       if (navigator.geolocation) {
          navigator.geolocation.getCurrentPosition(
             (pos) => setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
@@ -236,9 +252,8 @@ function App() {
     navigator.geolocation.getCurrentPosition(async (position) => {
         const { latitude, longitude } = position.coords;
         try {
-            // USO EXPLÍCITO DE LA FUNCIÓN IMPORTADA
             const result = await findNearbyPlaces(latitude, longitude);
-            setNearbyData(result);
+            setNearbyData({ ...result, text: "Resultados encontrados" });
         } catch (error: any) {
             setNearbyData({ text: "Error: " + error.message, places: [] });
         } finally {
@@ -272,6 +287,13 @@ function App() {
       const data = snapshot.val();
       const loadedUsers: User[] = data ? Object.values(data) : [];
       setAllUsers(loadedUsers);
+    });
+
+    const groupsRef = ref(db, 'travelGroups');
+    const unsubscribeGroups = onValue(groupsRef, (snapshot) => {
+      const data = snapshot.val();
+      const loadedGroups: TravelGroup[] = data ? Object.values(data) : [];
+      setTravelGroups(loadedGroups.sort((a, b) => b.createdAt - a.createdAt));
     });
 
     const destinationsRef = ref(db, 'destinations');
@@ -319,7 +341,6 @@ function App() {
         setUnreadMessagesCount(totalUnread);
     });
 
-    // --- NOTIFICATIONS LISTENER ---
     let unsubscribeNotifs = () => {};
     if (user) {
         const notifRef = ref(db, `notifications/${user.id}`);
@@ -334,6 +355,7 @@ function App() {
       unsubscribePosts();
       unsubscribeStories();
       unsubscribeUsers();
+      unsubscribeGroups();
       unsubscribeDestinations();
       unsubscribeSuggestions();
       unsubscribeChats();
@@ -367,14 +389,12 @@ function App() {
       
       alert(`Compartiendo: "${content}"\n\n(Enlace copiado al portapapeles)`); 
       
-      // Award Points for Sharing
       if(user) await StorageService.awardPoints(user.id, POINT_VALUES.SHARE, 'share');
   };
 
   const handleCreateContent = async (image: string, caption: string, location: string, type: 'post' | 'story', mediaType: 'image' | 'video') => { 
     if (!user) return; 
     
-    // Check if fulfilling a challenge
     if (activeChallengeId && type === 'post') {
         const challenge = dailyChallenge;
         if (challenge && challenge.id === activeChallengeId && challenge.type === 'photo') {
@@ -396,9 +416,41 @@ function App() {
   
   const handleAddDestination = async (data: any) => { if (!user) return; const newId = `ud_${Date.now()}`; const destination: Destination = { ...data, id: newId, isUserGenerated: true, createdBy: user.id, rating: 5, reviewsCount: 1, ratings: { [user.id]: 5 } }; await StorageService.addDestination(destination); };
   const handleRateDestination = async (rating: number) => { if (!selectedDestination || !user) return; if (selectedDestination.ratings && selectedDestination.ratings[user.id]) { alert("Ya has calificado este lugar."); return; } await StorageService.rateDestination( selectedDestination.id, user.id, rating, selectedDestination.rating || 5, selectedDestination.reviewsCount || 0 ); };
-  const handleAddPhotoToDestination = async (image: string) => { if (!selectedDestination || !user) return; await StorageService.addPhotoToDestinationGallery( selectedDestination.id, selectedDestination.gallery, image, user.id ); };
+  
+  const handleAddPhotoToDestination = async (image: string) => { 
+      if (!selectedDestination || !user) return; 
+      
+      // Actualización Optimista: Actualizar UI inmediatamente
+      const newGallery = [image, ...(selectedDestination.gallery || [])];
+      const updatedDest = { ...selectedDestination, gallery: newGallery };
+      
+      setSelectedDestination(updatedDest);
+      setDestinations(prev => prev.map(d => d.id === updatedDest.id ? updatedDest : d));
+
+      // Guardar en Backend
+      await StorageService.addPhotoToDestinationGallery(
+          selectedDestination.id,
+          selectedDestination.gallery,
+          image,
+          user.id
+      ); 
+  };
+  
   const handleChangeDestinationCover = async (image: string) => { if (!selectedDestination || !user) return; await StorageService.updateDestinationCover(selectedDestination.id, image); };
-  const handleDeleteDestinationPhoto = async (photoUrl: string) => { if (!selectedDestination || !user) return; if (confirm("¿Eliminar esta foto de la galería?")) { await StorageService.removeDestinationPhoto( selectedDestination.id, selectedDestination.gallery, photoUrl ); } };
+  
+  const handleDeleteDestinationPhoto = async (photoUrl: string) => { 
+      if (!selectedDestination || !user) return; 
+      if (confirm("¿Eliminar esta foto de la galería?")) { 
+          // Actualización Optimista para eliminar
+          const newGallery = (selectedDestination.gallery || []).filter(img => img !== photoUrl);
+          const updatedDest = { ...selectedDestination, gallery: newGallery };
+          
+          setSelectedDestination(updatedDest);
+          setDestinations(prev => prev.map(d => d.id === updatedDest.id ? updatedDest : d));
+
+          await StorageService.removeDestinationPhoto( selectedDestination.id, selectedDestination.gallery, photoUrl ); 
+      } 
+  };
   
   const handleDeleteDestination = async (id: string) => { await StorageService.deleteDestination(id); setSelectedDestination(null); };
 
@@ -434,7 +486,6 @@ function App() {
     if (challenge.type === 'photo') {
         setIsCreateModalOpen(true);
     } 
-    // Trivia handled inside ChallengeCard component but triggers onTriviaAnswer
   };
 
   const handleTriviaAnswer = (challenge: Challenge, answerIdx: number) => {
@@ -443,6 +494,11 @@ function App() {
         return true;
     }
     return false;
+  };
+
+  const handleOpenGroup = (groupId: string) => {
+    setInitialGroupId(groupId);
+    openModal(setIsTravelGroupsOpen);
   };
 
   const handleAskAIFromGuide = (query: string) => { setChatQuery(query); openModal(setChatOpen); };
@@ -458,16 +514,20 @@ function App() {
 
   const normalizeText = (text: string | undefined | null) => { return (text || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""); };
   const normalizedQuery = normalizeText(searchQuery).trim();
+  
   const filteredPosts = (posts || []).filter(post => normalizeText(post.location).includes(normalizedQuery) || normalizeText(post.caption).includes(normalizedQuery) || normalizeText(post.userName).includes(normalizedQuery));
   const searchDestinations = (destinations || []).filter(dest => normalizeText(dest.name).includes(normalizedQuery) || normalizeText(dest.location).includes(normalizedQuery) || normalizeText(dest.category).includes(normalizedQuery));
   const filteredUsers = (allUsers || []).filter(u => normalizeText(u.name).includes(normalizedQuery) || normalizeText(u.bio).includes(normalizedQuery));
+  const searchGroups = (travelGroups || []).filter(g => (normalizeText(g.name).includes(normalizedQuery) || normalizeText(g.description).includes(normalizedQuery)) && (!g.isPrivate || (g.members && g.members[user?.id || ''])));
   
   const isAdminUser = user ? isAdmin(user.email) : false;
   const featuredDestination = destinations.find(d => d.isFeatured) || (destinations.length > 0 ? destinations[0] : null);
 
+  // Unread Suggestions Count (Admin Only)
+  const unreadSuggestionsCount = suggestions.filter(s => !s.isRead).length;
+
   if (!user) return <AuthScreen onLoginSuccess={setUser} />;
 
-  // --- FILTROS DE EXPLORAR ---
   const getProvincesForRegion = (region: EcuadorRegion | 'Todas') => {
     if (region === 'Todas') return [];
     const destsInRegion = (destinations || []).filter(d => d.region === region);
@@ -483,9 +543,7 @@ function App() {
 
   const availableProvinces = getProvincesForRegion(selectedRegion);
 
-  // --- SUGERENCIAS ORDENADAS POR CERCANÍA ---
   const getRecommendedDestinations = () => {
-      // Si tenemos ubicación, ordenamos por distancia
       if (userLocation) {
           return [...destinations]
               .sort((a, b) => {
@@ -499,7 +557,6 @@ function App() {
               })
               .slice(0, 3);
       }
-      // Fallback: los primeros 3
       return destinations.slice(0, 3);
   };
 
@@ -542,7 +599,14 @@ function App() {
                    <button onClick={() => openModal(setIsAdminUsersModalOpen)} className="hover:text-cyan-700 transition-colors"><Users size={24} /></button>
                </>
              )}
-             <button onClick={() => openModal(setIsSuggestionsModalOpen)} className="relative hover:text-cyan-700 transition-colors"><Mail size={24} /></button>
+             <button onClick={() => openModal(setIsSuggestionsModalOpen)} className="relative hover:text-cyan-700 transition-colors">
+                 <Lightbulb size={24} />
+                 {isAdminUser && unreadSuggestionsCount > 0 && (
+                     <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-4 h-4 flex items-center justify-center rounded-full font-bold border-2 border-white">
+                         {unreadSuggestionsCount}
+                     </span>
+                 )}
+             </button>
              <button onClick={() => openModal(setIsCreateModalOpen)} className="flex items-center gap-2 bg-cyan-600 text-white px-4 py-2 rounded-full hover:bg-cyan-700 transition-colors shadow-md hover:shadow-lg font-semibold text-sm"> <Camera size={18} /> <span>Publicar</span> </button>
              <button onClick={() => { navigateToTab('profile'); }} className={`rounded-full overflow-hidden ring-2 ring-transparent hover:ring-cyan-400 transition-all ${activeTab === 'profile' && !viewingProfileId ? 'ring-cyan-600' : ''}`}> <img src={user.avatar} alt="Profile" className="w-9 h-9 object-cover" /> </button>
           </div>
@@ -553,7 +617,12 @@ function App() {
                     <button onClick={() => openModal(setIsAdminUsersModalOpen)} className="text-cyan-600"><Users size={22} /></button>
                  </>
              )}
-             <button onClick={() => openModal(setIsSuggestionsModalOpen)} className="text-cyan-600"><Mail size={22} /></button>
+             <button onClick={() => openModal(setIsSuggestionsModalOpen)} className="text-cyan-600 relative">
+                 <Lightbulb size={22} />
+                 {isAdminUser && unreadSuggestionsCount > 0 && (
+                     <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-3 h-3 rounded-full border border-white"></span>
+                 )}
+             </button>
              <button onClick={() => handleOpenChat()} className="relative">
                 <MessageCircle size={24} />
                 {unreadMessagesCount > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-3 h-3 rounded-full border border-white"></span>}
@@ -569,12 +638,14 @@ function App() {
       <div className="max-w-4xl mx-auto pt-4 px-4 md:px-0">
         
         <OnboardingModal isOpen={isOnboardingOpen} onClose={handleTutorialClose} userName={user.name} />
+        <WhatsNewModal isOpen={isWhatsNewOpen} onClose={handleWhatsNewClose} />
         <NotificationsModal isOpen={isNotificationsOpen} onClose={() => setIsNotificationsOpen(false)} notifications={notifications} currentUserId={user.id} />
         <SuggestionsModal isOpen={isSuggestionsModalOpen} onClose={() => setIsSuggestionsModalOpen(false)} currentUser={user} isAdmin={isAdminUser} suggestions={suggestions} />
         <AdminUsersModal isOpen={isAdminUsersModalOpen} onClose={() => setIsAdminUsersModalOpen(false)} users={allUsers} />
         <ChatModal isOpen={isChatModalOpen} onClose={() => setIsChatModalOpen(false)} currentUser={user} allUsers={allUsers} initialChatId={initialChatId} />
         <ItineraryGeneratorModal isOpen={isItineraryModalOpen} onClose={() => setIsItineraryModalOpen(false)} />
         <NearbyModal isOpen={isNearbyModalOpen} onClose={() => setIsNearbyModalOpen(false)} isLoading={nearbyLoading} data={nearbyData} />
+        <TravelGroupsModal isOpen={isTravelGroupsOpen} onClose={() => setIsTravelGroupsOpen(false)} currentUser={user} allUsers={allUsers} initialGroupId={initialGroupId} />
         
         {followListType && (
             <FollowListModal 
@@ -720,9 +791,14 @@ function App() {
                 const userPosts = posts.filter(p => p.userId === targetUser!.id);
                 const isFollowing = (user.following || []).includes(targetUser!.id);
                 const userContributions = destinations.filter(d => d.createdBy === targetUser!.id);
+                
+                // Grupos creados por el usuario
+                const userCreatedGroups = travelGroups.filter(g => g.adminId === targetUser!.id);
+                // Si visito perfil ajeno, solo veo los grupos PÚBLICOS
+                const visibleGroups = isMe 
+                    ? userCreatedGroups 
+                    : userCreatedGroups.filter(g => !g.isPrivate);
 
-                // --- GAMIFICATION CALCULATION ---
-                // Se usa el valor almacenado en BD, si no existe se calcula un fallback
                 const totalPoints = targetUser.points || 0;
                 const currentLevel = getUserLevel(totalPoints);
                 const nextLevel = getNextLevel(totalPoints);
@@ -768,7 +844,6 @@ function App() {
                         )}
                         <p className="text-stone-500 mb-2">{targetUser!.bio}</p>
 
-                        {/* LEVEL BADGE */}
                         <div className="bg-stone-50 rounded-xl p-3 border border-stone-100 mb-2">
                             <div className="flex justify-between items-center mb-1">
                                 <span className={`text-xs font-black uppercase tracking-wider flex items-center gap-1 ${currentLevel.color}`}>
@@ -787,6 +862,16 @@ function App() {
                                 <p className="text-[10px] text-amber-500 mt-1 text-right font-bold">¡Nivel Máximo!</p>
                             )}
                         </div>
+
+                        {/* Botón para abrir modal de gestión de grupos */}
+                        {isMe && (
+                             <button 
+                                onClick={() => openModal(setIsTravelGroupsOpen)}
+                                className="w-full mt-3 bg-orange-500 hover:bg-orange-600 text-white py-2.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-md transition-colors animate-in fade-in slide-in-from-top-2"
+                             >
+                                <Users size={18} /> Mis Grupos de Viaje
+                             </button>
+                        )}
                       </div>
                       
                       <div className="flex gap-6 mb-6 border-y border-stone-100 py-4 text-center">
@@ -795,13 +880,18 @@ function App() {
                         <div onClick={() => { setFollowListType('following'); openModal(() => {}); }} className="cursor-pointer hover:opacity-70"><div className="font-bold text-lg">{(targetUser!.following || []).length}</div><div className="text-xs text-stone-400">Siguiendo</div></div>
                       </div>
                       
-                      {/* PROFILE TABS */}
                       <div className="flex gap-4 border-b border-stone-100 mb-4 overflow-x-auto no-scrollbar">
                           <button 
                             onClick={() => setProfileSubTab('posts')}
                             className={`pb-2 text-sm font-bold flex items-center gap-2 whitespace-nowrap ${profileSubTab === 'posts' ? 'border-b-2 border-cyan-600 text-cyan-700' : 'text-stone-400'}`}
                           >
                               <LayoutGrid size={16} /> Mis Fotos
+                          </button>
+                          <button 
+                            onClick={() => setProfileSubTab('groups')}
+                            className={`pb-2 text-sm font-bold flex items-center gap-2 whitespace-nowrap ${profileSubTab === 'groups' ? 'border-b-2 border-cyan-600 text-cyan-700' : 'text-stone-400'}`}
+                          >
+                              <Users size={16} /> Grupos ({visibleGroups.length})
                           </button>
                           <button 
                             onClick={() => setProfileSubTab('contributions')}
@@ -815,6 +905,14 @@ function App() {
                           >
                               <Trophy size={16} /> Insignias
                           </button>
+                          {isMe && (
+                            <button 
+                                onClick={() => setProfileSubTab('map')}
+                                className={`pb-2 text-sm font-bold flex items-center gap-2 whitespace-nowrap ${profileSubTab === 'map' ? 'border-b-2 border-cyan-600 text-cyan-700' : 'text-stone-400'}`}
+                            >
+                                <MapIcon size={16} /> Mapa de Vida
+                            </button>
+                          )}
                       </div>
                       
                       {profileSubTab === 'posts' && (
@@ -828,6 +926,32 @@ function App() {
                             ) : (
                                 <div className="col-span-3 py-10 text-center text-stone-400 text-sm">No hay publicaciones.</div>
                             )}
+                          </div>
+                      )}
+
+                      {profileSubTab === 'groups' && (
+                          <div className="space-y-3">
+                              {visibleGroups.length > 0 ? (
+                                  visibleGroups.map(group => (
+                                      <div key={group.id} onClick={() => handleOpenGroup(group.id)} className="flex items-center gap-3 p-3 border rounded-xl cursor-pointer hover:bg-stone-50 bg-white">
+                                          <img src={group.imageUrl} className="w-16 h-16 rounded-lg object-cover" />
+                                          <div className="flex-1">
+                                              <div className="flex justify-between items-start">
+                                                 <h4 className="font-bold text-stone-800 text-sm">{group.name}</h4>
+                                                 {group.isPrivate && <Lock size={12} className="text-stone-400"/>}
+                                              </div>
+                                              <p className="text-xs text-stone-500 line-clamp-1">{group.description}</p>
+                                              <span className="text-[10px] text-stone-400 font-bold mt-1 block">
+                                                  {(group.members ? Object.keys(group.members).length : 0)} miembros
+                                              </span>
+                                          </div>
+                                      </div>
+                                  ))
+                              ) : (
+                                  <div className="py-10 text-center text-stone-400 text-sm bg-stone-50 rounded-xl border border-dashed">
+                                      {isMe ? 'No has creado ningún grupo aún.' : 'Este usuario no tiene grupos públicos.'}
+                                  </div>
+                              )}
                           </div>
                       )}
 
@@ -866,6 +990,17 @@ function App() {
                              })}
                           </div>
                       )}
+
+                      {profileSubTab === 'map' && (
+                          <div className="animate-in fade-in zoom-in duration-300">
+                             <div className="bg-cyan-50 p-3 rounded-xl mb-4 text-xs text-cyan-800 flex items-center gap-2 border border-cyan-100">
+                                <MapIcon size={16} />
+                                <p>Este mapa se genera automáticamente con las ubicaciones de tus fotos.</p>
+                             </div>
+                             <LifeMap posts={userPosts} />
+                          </div>
+                      )}
+
                     </div>
                   </div>
                 );
@@ -894,6 +1029,27 @@ function App() {
                           </div>
                        </div>
                      )}
+
+                     {searchGroups.length > 0 && (
+                        <div>
+                           <div className="flex items-center justify-between mb-3 px-1"> <h3 className="font-bold text-stone-600 text-sm uppercase">Grupos de Viaje</h3> <span className="text-xs bg-stone-100 px-2 py-1 rounded-full text-stone-500">{searchGroups.length}</span> </div>
+                           <div className="grid gap-3">
+                              {searchGroups.map(group => (
+                                 <div key={group.id} onClick={() => handleOpenGroup(group.id)} className="bg-white p-3 rounded-xl border border-stone-100 flex items-center space-x-3 shadow-sm cursor-pointer hover:border-cyan-300 transition-colors">
+                                    <img src={group.imageUrl} className="w-12 h-12 rounded-lg object-cover" alt={group.name}/>
+                                    <div className="flex-1"> 
+                                        <div className="flex justify-between items-start">
+                                            <h4 className="font-bold text-stone-800 text-sm">{group.name}</h4>
+                                            {group.isPrivate && <Lock size={12} className="text-stone-400"/>}
+                                        </div>
+                                        <p className="text-xs text-stone-500 line-clamp-1">{group.description}</p>
+                                    </div>
+                                 </div>
+                              ))}
+                           </div>
+                        </div>
+                     )}
+
                      {searchDestinations.length > 0 && (
                        <div>
                           <div className="flex items-center justify-between mb-3 px-1"> <h3 className="font-bold text-stone-600 text-sm uppercase">Destinos</h3> <span className="text-xs bg-stone-100 px-2 py-1 rounded-full text-stone-500">{searchDestinations.length}</span> </div>

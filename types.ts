@@ -1,3 +1,4 @@
+
 export interface Badge {
   id: string;
   name: string;
@@ -176,4 +177,33 @@ export interface Challenge {
   question?: string;
   options?: string[];
   correctAnswer?: number;
+}
+
+// --- TRAVEL GROUPS & TEMPLATES ---
+
+export interface TravelTemplate {
+  id: string;
+  groupId: string;
+  authorId: string;
+  authorName: string;
+  authorAvatar: string;
+  title: string;
+  description: string; // Resumen del plan
+  duration: string; // ej: "3 Días"
+  budget: string; // ej: "$200"
+  timestamp: number;
+  likes: number;
+  likedBy?: Record<string, boolean>;
+}
+
+export interface TravelGroup {
+  id: string;
+  name: string;
+  description: string;
+  imageUrl: string;
+  adminId: string; // Creador
+  createdAt: number;
+  isPrivate: boolean; // Privacidad
+  members: Record<string, boolean>; // { userId: true }
+  templates?: Record<string, TravelTemplate>; // Colección de plantillas
 }

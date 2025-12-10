@@ -6,7 +6,6 @@ import { GoogleGenAI, Type } from "@google/genai";
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 // --- SISTEMA DE CACHÉ SIMPLE ---
-// Esto evita llamar a la IA repetidamente por la misma información.
 const memoryCache: Record<string, any> = {};
 
 const getFromCache = (key: string) => {
@@ -17,11 +16,28 @@ const saveToCache = (key: string, data: any) => {
     memoryCache[key] = data;
 };
 
-const ECUADOR_SYSTEM_INSTRUCTION = `Eres el guía turístico oficial de 'Ecuador Travel'.
-Tu misión es promocionar el turismo en las 4 regiones del Ecuador: Costa, Sierra, Amazonía e Insular (Galápagos).
-Tu tono es amigable, entusiasta y experto. Usas emojis de banderas de Ecuador, plantas y animales.
-Si te preguntan por un lugar específico, da datos reales sobre ubicación, comida típica y qué hacer.
-Responde siempre en español. Sé conciso pero útil.`;
+// Prompt Optimizado para claridad y concisión
+const ECUADOR_SYSTEM_INSTRUCTION = `
+Eres el 'Guía Experto' de la app Ecuador Travel.
+TU OBJETIVO: Dar respuestas útiles, directas y visualmente ordenadas sobre turismo en Ecuador.
+
+REGLAS DE ORO:
+1. **SÉ CONCISO:** Máximo 3 o 4 oraciones por párrafo. Evita el relleno.
+2. **ESTRUCTURA TU RESPUESTA:**
+   - Usa listas con viñetas (•) para enumerar lugares o comidas.
+   - Usa emojis para categorizar (📍 Ubicación, 💰 Costo, 🍽️ Comida).
+3. **DATOS REALES:** Si preguntan por un lugar, menciona siempre: Provincia, Clima promedio y Qué llevar.
+4. **TONO:** Amigable y local (puedes usar palabras como "chévere" o "bacán" con moderación), pero profesional.
+5. **ALCANCE:** Solo responde sobre turismo en Ecuador. Si preguntan otra cosa, redirige amablemente al tema.
+
+EJEMPLO DE BUENA RESPUESTA:
+"📍 **Los Frailes, Manabí**
+Es una de las playas más hermosas del país, ubicada dentro del Parque Nacional Machalilla.
+
+• **Qué hacer:** Senderismo al mirador, snorkel y relax.
+• 🎒 **Lleva:** Agua, gorra y protector solar (no hay tiendas dentro).
+• 🕒 **Horario:** 08:00 - 16:00."
+`;
 
 const handleGeminiError = (error: any, context: string): string => {
     console.error(`Error en Gemini (${context}):`, error);
@@ -34,8 +50,7 @@ const handleGeminiError = (error: any, context: string): string => {
 };
 
 export const getTravelAdvice = async (query: string): Promise<string> => {
-  // Check Cache
-  const cacheKey = `advice_${query.trim().toLowerCase()}`;
+  const cacheKey = `advice_v2_${query.trim().toLowerCase()}`; // v2 para invalidar caché anterior
   const cached = getFromCache(cacheKey);
   if (cached) return cached;
 
@@ -45,22 +60,19 @@ export const getTravelAdvice = async (query: string): Promise<string> => {
       contents: query,
       config: {
         systemInstruction: ECUADOR_SYSTEM_INSTRUCTION,
+        temperature: 0.7, // Un poco más creativo pero controlado
+        maxOutputTokens: 500, // Forzar respuestas cortas
       },
     });
     
-    const text = response.text || "Lo siento, me quedé sin palabras. Intenta de nuevo.";
-    
-    // Save to Cache
+    const text = response.text || "Lo siento, no pude procesar tu consulta. Intenta ser más específico.";
     saveToCache(cacheKey, text);
-    
     return text;
   } catch (error: any) {
     const errorType = handleGeminiError(error, "getTravelAdvice");
-    
     if (errorType === "limit_reached") {
         return "🐢 ¡Vaya! He recibido demasiadas consultas hoy y mi energía de IA se está recargando. Por favor, intenta de nuevo en unos minutos.";
     }
-    
     return "Lo siento, estoy teniendo problemas de conexión con el servidor de turismo. Intenta más tarde. 🔌";
   }
 };
@@ -80,18 +92,15 @@ export const generateCaptionForImage = async (location: string, details: string)
     
     const text = response.text || "";
     if (text) saveToCache(cacheKey, text);
-    
     return text;
   } catch (error) {
     handleGeminiError(error, "generateCaption");
-    // Fallback simple
     return `Disfrutando de las maravillas de ${location} 🇪🇨✨ #EcuadorTravel #Viajes`;
   }
 };
 
 export const generateDestinationDetails = async (name: string, location: string, category: string): Promise<any> => {
-  // Check Cache para destinos completos (Esto ahorra mucha cuota)
-  const cacheKey = `dest_${name}_${location}`.toLowerCase().replace(/\s/g, '');
+  const cacheKey = `dest_v2_${name}_${location}`.toLowerCase().replace(/\s/g, '');
   const cached = getFromCache(cacheKey);
   if (cached) return cached;
 
@@ -133,13 +142,11 @@ export const generateDestinationDetails = async (name: string, location: string,
 
     let text = response.text || "{}";
     text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    
     if (!text || text === '{}') return fallbackData;
 
     const data = JSON.parse(text);
-    saveToCache(cacheKey, data); // Guardar en caché si fue exitoso
+    saveToCache(cacheKey, data);
     return data;
-
   } catch (error) {
     handleGeminiError(error, "generateDestinationDetails");
     return fallbackData;
@@ -147,7 +154,7 @@ export const generateDestinationDetails = async (name: string, location: string,
 };
 
 export const generateItinerary = async (destination: string, days: number, budget: string): Promise<any> => {
-  const cacheKey = `itinerary_${destination}_${days}_${budget}`;
+  const cacheKey = `itinerary_v2_${destination}_${days}_${budget}`;
   const cached = getFromCache(cacheKey);
   if (cached) return cached;
 
@@ -155,7 +162,12 @@ export const generateItinerary = async (destination: string, days: number, budge
     const prompt = `
       Crea un itinerario turístico detallado para ${days} días en ${destination}, Ecuador.
       Presupuesto: ${budget}.
-      Incluye lugares reales, platos típicos y consejos.
+      
+      IMPORTANTE:
+      Para cada sección del día (morning, afternoon, night), proporciona una lista de actividades con HORARIOS ESPECÍFICOS.
+      Formato esperado dentro del texto:
+      "08:00 AM - Desayuno en [Lugar]... \n 10:00 AM - Visita a [Lugar]..."
+      Usa saltos de línea (\n) para separar cada actividad horaria.
     `;
 
     const response = await ai.models.generateContent({
@@ -174,9 +186,9 @@ export const generateItinerary = async (destination: string, days: number, budge
               items: {
                 type: Type.OBJECT,
                 properties: {
-                  morning: { type: Type.STRING, description: "Actividad detallada de mañana" },
-                  afternoon: { type: Type.STRING, description: "Actividad detallada de tarde" },
-                  night: { type: Type.STRING, description: "Actividad detallada de noche" }
+                  morning: { type: Type.STRING, description: "Lista de actividades de la mañana con horarios (ej: '08:00 - Actividad...')" },
+                  afternoon: { type: Type.STRING, description: "Lista de actividades de la tarde con horarios (ej: '13:00 - Almuerzo...')" },
+                  night: { type: Type.STRING, description: "Lista de actividades de la noche con horarios (ej: '20:00 - Cena...')" }
                 }
               }
             }
@@ -201,21 +213,47 @@ export const generateItinerary = async (destination: string, days: number, budge
   }
 };
 
-// --- NEW FUNCTION: GOOGLE MAPS GROUNDING ---
+// --- GOOGLE MAPS GROUNDING OPTIMIZADO PARA UI SEGMENTADA ---
 
-export const findNearbyPlaces = async (lat: number, lng: number): Promise<{text: string, places: any[]}> => {
-    // Round coords to avoid cache missing on micro-movements (approx 100m radius)
+export const findNearbyPlaces = async (lat: number, lng: number): Promise<{ places: any[] }> => {
+    // Redondear para caché eficiente
     const roundedLat = lat.toFixed(3);
     const roundedLng = lng.toFixed(3);
-    const cacheKey = `nearby_${roundedLat}_${roundedLng}`;
+    const currentTime = new Date().toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' });
+    const cacheKey = `nearby_v3_${roundedLat}_${roundedLng}_${currentTime.split(':')[0]}`; // Cache por hora (v3 updated)
     
     const cached = getFromCache(cacheKey);
     if (cached) return cached;
 
     try {
+        const prompt = `
+            Actúa como un radar local. Busca lugares REALES alrededor de las coordenadas Lat: ${lat}, Lng: ${lng}.
+            La hora actual local es: ${currentTime}.
+            
+            Debes encontrar 2 opciones para CADA una de estas categorías (Total 8-10 lugares):
+            1. RESTAURANTES (Comida típica, cafeterías)
+            2. TURISMO (Parques, museos, playas, atracciones)
+            3. SERVICIOS (Farmacias, tiendas, supermercados)
+            4. HOSPEDAJE (Hoteles, hostales, alojamientos)
+
+            Devuelve un JSON con esta estructura exacta para cada lugar:
+            {
+              "places": [
+                {
+                   "name": "Nombre real del lugar",
+                   "category": "COMIDA" | "TURISMO" | "SERVICIO" | "HOSPEDAJE",
+                   "isOpen": boolean, (Calcula si está abierto según la hora actual ${currentTime})
+                   "rating": number, (Ej: 4.5)
+                   "address": "Dirección corta o referencia",
+                   "description": "Qué venden o qué se hace ahí (Máx 5 palabras)"
+                }
+              ]
+            }
+        `;
+
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
-            contents: "Recomienda 4 lugares interesantes (turismo o comida) muy cerca de mi ubicación actual. Sé breve, incluye calificación si existe y por qué ir.",
+            contents: prompt,
             config: {
                 tools: [{googleMaps: {}}],
                 toolConfig: {
@@ -225,24 +263,21 @@ export const findNearbyPlaces = async (lat: number, lng: number): Promise<{text:
                             longitude: lng
                         }
                     }
-                }
+                },
+                responseMimeType: "application/json"
             },
         });
 
-        // Extraer Grounding Chunks (Enlaces a mapas)
-        const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-        const places = chunks
-            .filter((c: any) => c.web?.uri || c.web?.title)
-            .map((c: any) => ({
-                title: c.web?.title || "Ver en Mapa",
-                uri: c.web?.uri
-            }));
+        let text = response.text || "{}";
+        text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        const data = JSON.parse(text);
 
-        const result = {
-            text: response.text || "No encontré información cercana.",
-            places: places
-        };
-        
+        const placesWithLinks = (data.places || []).map((p: any) => ({
+            ...p,
+            mapLink: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.name + " " + p.address)}`
+        }));
+
+        const result = { places: placesWithLinks };
         saveToCache(cacheKey, result);
         return result;
 
@@ -250,15 +285,9 @@ export const findNearbyPlaces = async (lat: number, lng: number): Promise<{text:
         const errorType = handleGeminiError(error, "findNearbyPlaces");
         
         if (errorType === "limit_reached") {
-             return {
-                text: "⚠️ El radar turístico está recargando energía (Límite de cuota alcanzado). Por favor intenta en unos minutos.",
-                places: []
-            };
+             return { places: [] }; 
         }
 
-        return {
-            text: "No pudimos conectar con el servicio de mapas en este momento.",
-            places: []
-        };
+        return { places: [] };
     }
 };

@@ -1,6 +1,7 @@
+
 import { ref, set, remove, update, get, push, child } from "firebase/database";
 import { db } from "./firebase";
-import { Post, Story, Destination, Suggestion, User, Chat, Message } from '../types';
+import { Post, Story, Destination, Suggestion, User, Chat, Message, TravelGroup, TravelTemplate } from '../types';
 import { EncryptionService } from "./encryptionService";
 import { POINT_VALUES, checkNewBadges } from "../utils";
 
@@ -169,6 +170,10 @@ export const StorageService = {
     await remove(ref(db, `suggestions/${id}`));
   },
 
+  markSuggestionRead: async (id: string) => {
+    await update(ref(db, `suggestions/${id}`), { isRead: true });
+  },
+
   // --- DESTINATIONS ---
 
   addDestination: async (destination: Destination) => {
@@ -206,6 +211,49 @@ export const StorageService = {
     if (userId) {
         await StorageService.awardPoints(userId, POINT_VALUES.ADD_PHOTO, 'photo');
     }
+  },
+
+  // --- TRAVEL GROUPS & TEMPLATES ---
+
+  createTravelGroup: async (groupData: Omit<TravelGroup, 'members' | 'templates'>) => {
+      const newGroup: TravelGroup = {
+          ...groupData,
+          members: { [groupData.adminId]: true }, // Creator is the first member
+      };
+      await set(ref(db, `travelGroups/${groupData.id}`), newGroup);
+  },
+
+  updateTravelGroup: async (groupId: string, updates: Partial<TravelGroup>) => {
+      await update(ref(db, `travelGroups/${groupId}`), updates);
+  },
+
+  deleteTravelGroup: async (groupId: string) => {
+      await remove(ref(db, `travelGroups/${groupId}`));
+  },
+
+  joinTravelGroup: async (groupId: string, userId: string) => {
+      // Direct join for public groups (logic checked in UI, here we just write)
+      await update(ref(db, `travelGroups/${groupId}/members`), {
+          [userId]: true
+      });
+  },
+
+  leaveTravelGroup: async (groupId: string, userId: string) => {
+      await remove(ref(db, `travelGroups/${groupId}/members/${userId}`));
+  },
+
+  addMemberToGroup: async (groupId: string, userId: string) => {
+      await update(ref(db, `travelGroups/${groupId}/members`), {
+          [userId]: true
+      });
+  },
+
+  createTravelTemplate: async (template: TravelTemplate) => {
+      await set(ref(db, `travelGroups/${template.groupId}/templates/${template.id}`), template);
+  },
+
+  deleteTravelTemplate: async (groupId: string, templateId: string) => {
+      await remove(ref(db, `travelGroups/${groupId}/templates/${templateId}`));
   },
 
   // --- CHAT SYSTEM ---

@@ -1,84 +1,191 @@
 
-import React from 'react';
-import { X, MapPin, Navigation, Loader2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, MapPin, Navigation, Loader2, Utensils, Camera, ShoppingBag, Clock, Star, AlertCircle, Bed } from 'lucide-react';
+
+interface NearbyPlace {
+  name: string;
+  category: 'COMIDA' | 'TURISMO' | 'SERVICIO' | 'HOSPEDAJE';
+  isOpen: boolean;
+  rating: number;
+  address: string;
+  description: string;
+  mapLink: string;
+}
 
 interface NearbyModalProps {
   isOpen: boolean;
   onClose: () => void;
   isLoading: boolean;
-  data: { text: string; places: any[] } | null;
+  data: { places: NearbyPlace[] } | null;
 }
 
 export const NearbyModal: React.FC<NearbyModalProps> = ({ isOpen, onClose, isLoading, data }) => {
+  const [activeFilter, setActiveFilter] = useState<'ALL' | 'COMIDA' | 'TURISMO' | 'SERVICIO' | 'HOSPEDAJE'>('ALL');
+
   if (!isOpen) return null;
+
+  const places = data?.places || [];
+  
+  const filteredPlaces = activeFilter === 'ALL' 
+    ? places 
+    : places.filter(p => p.category === activeFilter);
+
+  const getCategoryIcon = (cat: string) => {
+      switch(cat) {
+          case 'COMIDA': return <Utensils size={16} className="text-orange-500" />;
+          case 'TURISMO': return <Camera size={16} className="text-cyan-500" />;
+          case 'SERVICIO': return <ShoppingBag size={16} className="text-purple-500" />;
+          case 'HOSPEDAJE': return <Bed size={16} className="text-indigo-500" />;
+          default: return <MapPin size={16} className="text-gray-500" />;
+      }
+  };
+
+  const getCategoryLabel = (cat: string) => {
+      switch(cat) {
+          case 'COMIDA': return 'Restaurantes';
+          case 'TURISMO': return 'Turismo';
+          case 'SERVICIO': return 'Servicios';
+          case 'HOSPEDAJE': return 'Hospedaje';
+          default: return 'General';
+      }
+  };
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-cyan-950/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
       <div className="bg-white w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[85vh]">
         
-        <div className="bg-gradient-to-r from-emerald-500 to-teal-600 p-5 text-white flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <div className={`bg-white/20 p-2 rounded-full ${isLoading ? 'animate-pulse' : ''}`}>
-               <MapPin size={24} />
+        {/* Header con Gradiente */}
+        <div className="bg-gradient-to-r from-emerald-500 to-teal-600 p-5 text-white shadow-md z-10">
+          <div className="flex justify-between items-start mb-4">
+            <div className="flex items-center gap-3">
+                <div className={`bg-white/20 p-2.5 rounded-xl border border-white/20 shadow-inner ${isLoading ? 'animate-pulse' : ''}`}>
+                   <MapPin size={24} />
+                </div>
+                <div>
+                    <h2 className="text-xl font-bold leading-tight">Radar Local</h2>
+                    <p className="text-emerald-100 text-xs font-medium flex items-center gap-1">
+                        <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span> 
+                        Tiempo Real
+                    </p>
+                </div>
             </div>
-            <div>
-                <h2 className="text-xl font-bold">¿Qué hay cerca?</h2>
-                <p className="text-emerald-100 text-xs">Radar Turístico en Tiempo Real</p>
-            </div>
+            <button onClick={onClose} className="bg-white/10 hover:bg-white/30 p-2 rounded-full transition-colors">
+                <X size={20} />
+            </button>
           </div>
-          <button onClick={onClose} className="bg-white/20 hover:bg-white/40 p-2 rounded-full transition-colors">
-            <X size={20} />
-          </button>
+
+          {/* Filtros Tabs */}
+          {!isLoading && places.length > 0 && (
+              <div className="flex space-x-2 overflow-x-auto no-scrollbar pb-1">
+                  {[
+                      { id: 'ALL', label: 'Todo' },
+                      { id: 'COMIDA', label: 'Comida' },
+                      { id: 'HOSPEDAJE', label: 'Hospedaje' },
+                      { id: 'TURISMO', label: 'Turismo' },
+                      { id: 'SERVICIO', label: 'Servicios' }
+                  ].map((filter) => (
+                      <button
+                          key={filter.id}
+                          onClick={() => setActiveFilter(filter.id as any)}
+                          className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap border ${
+                              activeFilter === filter.id 
+                                ? 'bg-white text-teal-700 border-white shadow-sm' 
+                                : 'bg-emerald-700/30 text-emerald-50 border-emerald-400/30 hover:bg-emerald-700/50'
+                          }`}
+                      >
+                          {filter.label}
+                      </button>
+                  ))}
+              </div>
+          )}
         </div>
 
-        <div className="flex-1 overflow-y-auto bg-stone-50 p-6">
+        {/* Content Body */}
+        <div className="flex-1 overflow-y-auto bg-stone-50 p-4 scroll-smooth">
           {isLoading ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center space-y-4">
+            <div className="flex flex-col items-center justify-center py-16 text-center space-y-6">
                 <div className="relative">
-                    <div className="absolute inset-0 bg-emerald-400 rounded-full animate-ping opacity-20"></div>
-                    <Loader2 size={48} className="text-emerald-600 animate-spin relative z-10" />
-                </div>
-                <h3 className="font-bold text-stone-600">Escaneando tu ubicación...</h3>
-                <p className="text-sm text-stone-400 max-w-xs">Estamos consultando satélites y mapas para encontrar lo mejor a tu alrededor.</p>
-            </div>
-          ) : data ? (
-            <div className="space-y-6">
-                
-                {/* AI Response Text */}
-                <div className="bg-white p-5 rounded-2xl shadow-sm border border-stone-100 text-stone-700 leading-relaxed whitespace-pre-wrap text-sm">
-                    {data.text}
-                </div>
-
-                {/* Map Links */}
-                {data.places.length > 0 && (
-                    <div>
-                        <h4 className="font-bold text-stone-500 text-xs uppercase mb-3 flex items-center gap-2">
-                            <Navigation size={14} /> Enlaces Directos
-                        </h4>
-                        <div className="grid gap-2">
-                            {data.places.map((place: any, idx: number) => (
-                                <a 
-                                    key={idx}
-                                    href={place.uri}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex items-center justify-between p-3 bg-white hover:bg-emerald-50 border border-stone-200 hover:border-emerald-200 rounded-xl transition-all group"
-                                >
-                                    <span className="font-bold text-stone-700 text-sm group-hover:text-emerald-700 truncate mr-2">
-                                        {place.title}
-                                    </span>
-                                    <div className="bg-stone-100 p-1.5 rounded-full group-hover:bg-emerald-200 text-stone-400 group-hover:text-emerald-700 transition-colors">
-                                        <Navigation size={14} />
-                                    </div>
-                                </a>
-                            ))}
-                        </div>
+                    <div className="absolute inset-0 bg-emerald-400 rounded-full animate-ping opacity-20 duration-1000"></div>
+                    <div className="bg-white p-4 rounded-full shadow-lg relative z-10">
+                        <Loader2 size={32} className="text-emerald-600 animate-spin" />
                     </div>
-                )}
+                </div>
+                <div>
+                    <h3 className="font-bold text-stone-700 text-lg">Escaneando zona...</h3>
+                    <p className="text-sm text-stone-400 mt-1 max-w-[200px] mx-auto">
+                        Buscando restaurantes, hoteles y servicios cercanos.
+                    </p>
+                </div>
+            </div>
+          ) : filteredPlaces.length > 0 ? (
+            <div className="space-y-3">
+                {filteredPlaces.map((place, idx) => (
+                    <div key={idx} className="bg-white rounded-2xl p-4 shadow-sm border border-stone-100 flex flex-col gap-3 hover:shadow-md hover:border-emerald-200 transition-all group">
+                        
+                        {/* Top Row: Name & Rating */}
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <h3 className="font-bold text-stone-800 text-base leading-tight group-hover:text-emerald-700 transition-colors">
+                                    {place.name}
+                                </h3>
+                                <div className="flex items-center gap-2 mt-1">
+                                    <span className="bg-stone-100 text-stone-500 text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1">
+                                        {getCategoryIcon(place.category)}
+                                        {getCategoryLabel(place.category)}
+                                    </span>
+                                    {place.rating > 0 && (
+                                        <span className="flex items-center text-[10px] font-bold text-amber-500">
+                                            <Star size={10} fill="currentColor" className="mr-0.5" />
+                                            {place.rating}
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                            
+                            {/* Status Badge */}
+                            <div className={`px-2 py-1 rounded-lg text-[10px] font-bold border flex items-center gap-1 ${
+                                place.isOpen 
+                                    ? 'bg-green-50 text-green-700 border-green-100' 
+                                    : 'bg-red-50 text-red-700 border-red-100'
+                            }`}>
+                                <Clock size={10} />
+                                {place.isOpen ? 'ABIERTO' : 'CERRADO'}
+                            </div>
+                        </div>
+
+                        {/* Middle: Description & Address */}
+                        <div>
+                            <p className="text-stone-600 text-xs line-clamp-2 mb-1">
+                                {place.description}
+                            </p>
+                            <p className="text-stone-400 text-[10px] flex items-center gap-1">
+                                <MapPin size={10} /> {place.address}
+                            </p>
+                        </div>
+
+                        {/* Bottom: Action Button */}
+                        <a 
+                            href={place.mapLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="bg-stone-100 hover:bg-emerald-600 hover:text-white text-stone-600 font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-2 transition-colors active:scale-95"
+                        >
+                            <Navigation size={14} />
+                            Cómo llegar
+                        </a>
+                    </div>
+                ))}
             </div>
           ) : (
-             <div className="text-center py-10 text-stone-400">
-                No se encontraron resultados. Asegúrate de activar tu GPS.
+             <div className="flex flex-col items-center justify-center py-10 text-stone-400 space-y-3">
+                <AlertCircle size={40} className="opacity-30" />
+                <div className="text-center">
+                    <p className="font-bold text-stone-500">Sin resultados</p>
+                    <p className="text-xs">No encontramos lugares en esta categoría cerca de ti.</p>
+                </div>
+                <button onClick={onClose} className="text-xs text-emerald-600 font-bold hover:underline">
+                    Intentar de nuevo
+                </button>
              </div>
           )}
         </div>

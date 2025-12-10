@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { X, Send, Mail, Trash2, MessageSquarePlus } from 'lucide-react';
+
+import React, { useState, useEffect } from 'react';
+import { X, Send, Lightbulb, Trash2, MessageSquarePlus } from 'lucide-react';
 import { Suggestion, User } from '../types';
 import { StorageService } from '../services/storageService';
 
@@ -20,6 +21,17 @@ export const SuggestionsModal: React.FC<SuggestionsModalProps> = ({
 }) => {
   const [text, setText] = useState('');
   const [isSending, setIsSending] = useState(false);
+
+  // Efecto para marcar como leídas las sugerencias cuando el Admin abre el modal
+  useEffect(() => {
+    if (isOpen && isAdmin) {
+        suggestions.forEach(s => {
+            if (!s.isRead) {
+                StorageService.markSuggestionRead(s.id);
+            }
+        });
+    }
+  }, [isOpen, isAdmin, suggestions]);
 
   if (!isOpen) return null;
 
@@ -57,9 +69,9 @@ export const SuggestionsModal: React.FC<SuggestionsModalProps> = ({
         
         <div className="bg-cyan-700 p-4 flex justify-between items-center text-white">
           <div className="flex items-center gap-2">
-            {isAdmin ? <Mail size={24} /> : <MessageSquarePlus size={24} />}
+            {isAdmin ? <Lightbulb size={24} className="text-yellow-300" /> : <MessageSquarePlus size={24} />}
             <h2 className="text-lg font-bold">
-              {isAdmin ? 'Buzón de Administración' : 'Enviar Sugerencia'}
+              {isAdmin ? 'Buzón de Sugerencias' : 'Enviar Sugerencia'}
             </h2>
           </div>
           <button onClick={onClose} className="hover:bg-white/20 p-2 rounded-full transition-colors">
@@ -72,12 +84,12 @@ export const SuggestionsModal: React.FC<SuggestionsModalProps> = ({
             <div className="space-y-4">
               {suggestions.length === 0 ? (
                 <div className="text-center text-stone-400 py-10">
-                  <Mail size={48} className="mx-auto mb-2 opacity-20" />
+                  <Lightbulb size={48} className="mx-auto mb-2 opacity-20" />
                   <p>No hay mensajes nuevos.</p>
                 </div>
               ) : (
                 suggestions.map(s => (
-                  <div key={s.id} className="bg-white p-4 rounded-xl shadow-sm border border-stone-100 relative group">
+                  <div key={s.id} className="bg-white p-4 rounded-xl shadow-sm border border-stone-100 relative group animate-in slide-in-from-bottom-2">
                     <div className="flex items-center gap-3 mb-2">
                       <img src={s.userAvatar} className="w-8 h-8 rounded-full object-cover" alt="" />
                       <div>
@@ -96,6 +108,7 @@ export const SuggestionsModal: React.FC<SuggestionsModalProps> = ({
                     >
                       <Trash2 size={16} />
                     </button>
+                    {!s.isRead && <span className="absolute top-2 right-8 w-2 h-2 bg-red-500 rounded-full"></span>}
                   </div>
                 ))
               )}

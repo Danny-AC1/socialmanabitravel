@@ -3,59 +3,34 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ecuador Travel - Explora el País de los 4 Mundos</title>
 
-    <!-- SEO OPTIMIZADO -->
-    <title>Ecuador Travel - Tu Red Social y Guía Turística Inteligente</title>
-    <meta
-      name="description"
-      content="La primera red social turística de Ecuador impulsada por IA. Descubre destinos en Costa, Sierra, Amazonía y Galápagos. Conecta con viajeros, comparte fotos y planifica tu ruta con nuestro guía virtual."
-    />
-    <meta
-      name="keywords"
-      content="turismo ecuador, viaje ecuador, manabi turismo, galapagos, cotopaxi, red social viajeros, guia turistica ia, mochileros ecuador, playas ecuador, turismo inteligente, los frailes, machalilla, puerto lopez, pagina de turismo, ecuador, manabi, los ciriales, mejores lugares turisticos de ecuador, lugares turisticos de manabi, lugares, red social, instagram, facebook, social manabi travel, manta, parque nacional machalilla"
-    />
-    <meta name="author" content="Ecuador Travel" />
-    <meta name="robots" content="index, follow" />
-    <meta name="theme-color" content="#0891b2" />
-
-    <!-- OPEN GRAPH (Facebook, WhatsApp) -->
-    <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://manabi-travel-app.vercel.app/" />
-    <meta
-      property="og:title"
-      content="Ecuador Travel - Explora, Comparte y Viaja"
-    />
-    <meta
-      property="og:description"
-      content="Descubre los tesoros escondidos de Ecuador. Únete a la comunidad, sube tus historias y chatea con otros viajeros en tiempo real."
-    />
-    <meta
-      property="og:image"
-      content="https://images.unsplash.com/photo-1598384232375-a010488950d4?q=80&w=1200"
-    />
-    <meta property="og:site_name" content="Ecuador Travel" />
-
-    <!-- TWITTER CARD -->
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Ecuador Travel - Tu Guía Inteligente" />
-    <meta
-      name="twitter:description"
-      content="Explora los 4 mundos del Ecuador con la ayuda de Inteligencia Artificial y una comunidad activa."
-    />
-    <meta
-      name="twitter:image"
-      content="https://images.unsplash.com/photo-1598384232375-a010488950d4?q=80&w=1200"
-    />
-
+    <!-- Travel Themed Favicon (Compass) -->
     <link
       rel="icon"
       type="image/svg+xml"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230891b2' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpolygon points='16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76'/%3E%3C/svg%3E"
     />
 
+    <!-- Leaflet Map Styles & Scripts -->
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
+      // Configuración de seguridad para evitar errores de librerías
       window.process = { env: { NODE_ENV: "development" } };
+
+      // Detector de errores: Si la pantalla se pone blanca, esto te dirá por qué.
       window.onerror = function (message, source, lineno, colno, error) {
         console.error("Error global:", error);
         const root = document.getElementById("root");
@@ -69,6 +44,7 @@
             `;
         }
       };
+
       tailwind.config = {
         theme: {
           extend: {
@@ -80,7 +56,10 @@
                 600: "#0284c7",
                 900: "#0c4a6e",
               },
-              sand: { 100: "#fdf6e3", 200: "#eee8d5" },
+              sand: {
+                100: "#fdf6e3",
+                200: "#eee8d5",
+              },
             },
           },
         },
@@ -94,7 +73,60 @@
         -ms-overflow-style: none;
         scrollbar-width: none;
       }
+      /* Custom Leaflet Marker Styles */
+      .custom-div-icon {
+        background: transparent;
+        border: none;
+      }
+      .marker-pin {
+        width: 40px;
+        height: 40px;
+        border-radius: 50% 50% 50% 0;
+        background: #0891b2;
+        position: absolute;
+        transform: rotate(-45deg);
+        left: 50%;
+        top: 50%;
+        margin: -20px 0 0 -20px;
+        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+      }
+      .marker-pin::after {
+        content: "";
+        width: 34px;
+        height: 34px;
+        margin: 3px 0 0 3px;
+        background: #fff;
+        position: absolute;
+        border-radius: 50%;
+      }
+      .marker-image {
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        object-fit: cover;
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        transform: rotate(45deg); /* Counteract pin rotation */
+        z-index: 10;
+      }
     </style>
+    <script type="importmap">
+      {
+        "imports": {
+          "react/": "https://aistudiocdn.com/react@^19.2.1/",
+          "react": "https://aistudiocdn.com/react@^19.2.1",
+          "@google/genai": "https://aistudiocdn.com/@google/genai@^1.31.0",
+          "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
+          "vite": "https://aistudiocdn.com/vite@^7.2.6",
+          "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1",
+          "lucide-react": "https://aistudiocdn.com/lucide-react@^0.556.0",
+          "firebase/": "https://aistudiocdn.com/firebase@^12.6.0/",
+          "crypto-js": "https://aistudiocdn.com/crypto-js@^4.2.0",
+          "react-helmet-async": "https://aistudiocdn.com/react-helmet-async@^2.0.5"
+        }
+      }
+    </script>
   </head>
   <body class="bg-stone-50 text-gray-900">
     <div id="root"></div>

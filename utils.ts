@@ -100,6 +100,57 @@ function deg2rad(deg: number) {
   return deg * (Math.PI / 180);
 }
 
+// --- MAPPING UTILS ---
+
+const ECUADOR_LOCATIONS: Record<string, { lat: number, lng: number }> = {
+    // Manabí
+    'manta': { lat: -0.95, lng: -80.73 },
+    'portoviejo': { lat: -1.05, lng: -80.45 },
+    'puerto lopez': { lat: -1.56, lng: -80.81 },
+    'los frailes': { lat: -1.50, lng: -80.80 },
+    'machalilla': { lat: -1.48, lng: -80.76 },
+    'monte': { lat: -1.04, lng: -80.66 }, // Montecristi
+    'montecristi': { lat: -1.04, lng: -80.66 },
+    'crucita': { lat: -0.87, lng: -80.53 },
+    'bahia': { lat: -0.60, lng: -80.42 },
+    'canoa': { lat: -0.46, lng: -80.45 },
+    'chone': { lat: -0.69, lng: -80.09 },
+    'pedernales': { lat: 0.07, lng: -80.05 },
+    // Resto Ecuador
+    'quito': { lat: -0.18, lng: -78.46 },
+    'guayaquil': { lat: -2.18, lng: -79.88 },
+    'cuenca': { lat: -2.90, lng: -79.00 },
+    'banos': { lat: -1.39, lng: -78.42 },
+    'baños': { lat: -1.39, lng: -78.42 },
+    'montañita': { lat: -1.83, lng: -80.75 },
+    'salinas': { lat: -2.21, lng: -80.97 },
+    'galapagos': { lat: -0.73, lng: -90.31 },
+    'quilotoa': { lat: -0.85, lng: -78.90 },
+    'cotopaxi': { lat: -0.68, lng: -78.43 },
+    'mitad del mundo': { lat: -0.00, lng: -78.45 },
+    'otavalo': { lat: 0.23, lng: -78.26 },
+    'loja': { lat: -3.99, lng: -79.20 },
+    'ambato': { lat: -1.24, lng: -78.62 },
+    'tena': { lat: -0.99, lng: -77.81 },
+    'puyo': { lat: -1.49, lng: -78.00 },
+    'misahualli': { lat: -1.03, lng: -77.66 }
+};
+
+export const getCoordinatesFromLocationName = (locationName: string): { lat: number, lng: number } | null => {
+    if (!locationName) return null;
+    const cleanName = locationName.toLowerCase().trim();
+    
+    // Búsqueda directa
+    if (ECUADOR_LOCATIONS[cleanName]) return ECUADOR_LOCATIONS[cleanName];
+
+    // Búsqueda parcial (ej: "Playa Murciélago, Manta" contiene "manta")
+    for (const [key, coords] of Object.entries(ECUADOR_LOCATIONS)) {
+        if (cleanName.includes(key)) return coords;
+    }
+
+    return null;
+};
+
 // --- SECURITY UTILS ---
 
 export const ADMIN_EMAILS = ["danny.asc25@gmail.com", "d.e.a.c@outlook.com"];
