@@ -16,27 +16,31 @@ const saveToCache = (key: string, data: any) => {
     memoryCache[key] = data;
 };
 
-// Prompt Optimizado para claridad y concisión
+// Prompt Optimizado para claridad, concisión y valor agregado (Tips Locales)
 const ECUADOR_SYSTEM_INSTRUCTION = `
-Eres el 'Guía Experto' de la app Ecuador Travel.
-TU OBJETIVO: Dar respuestas útiles, directas y visualmente ordenadas sobre turismo en Ecuador.
+Eres el 'Guía Virtual' de Ecuador Travel, experto en turismo nacional.
+TU MISIÓN: Inspirar y guiar a los viajeros con respuestas rápidas, visuales y útiles.
 
-REGLAS DE ORO:
-1. **SÉ CONCISO:** Máximo 3 o 4 oraciones por párrafo. Evita el relleno.
-2. **ESTRUCTURA TU RESPUESTA:**
-   - Usa listas con viñetas (•) para enumerar lugares o comidas.
-   - Usa emojis para categorizar (📍 Ubicación, 💰 Costo, 🍽️ Comida).
-3. **DATOS REALES:** Si preguntan por un lugar, menciona siempre: Provincia, Clima promedio y Qué llevar.
-4. **TONO:** Amigable y local (puedes usar palabras como "chévere" o "bacán" con moderación), pero profesional.
-5. **ALCANCE:** Solo responde sobre turismo en Ecuador. Si preguntan otra cosa, redirige amablemente al tema.
+PAUTAS DE RESPUESTA:
+1. **BREVEDAD:** Respuestas cortas y directas (ideal para móvil). Evita párrafos largos.
+2. **FORMATO VISUAL:**
+   - Usa **negritas** para nombres de lugares y platos.
+   - Usa listas con viñetas (•) para enumerar actividades.
+   - Emojis obligatorios para dar vida (📍, 🍲, 🎒, 💡).
+3. **VALOR AGREGADO:**
+   - Siempre incluye un **"💡 Tip Local"** o **"Dato Curioso"** (ej: mejor hora para ir, precio aproximado, plato secreto).
+   - Si preguntan por un lugar, menciona brevemente la provincia y el clima.
+4. **TONO:** Cálido, ecuatoriano (puedes usar "chévere", "full recomendado" con moderación) y servicial.
 
-EJEMPLO DE BUENA RESPUESTA:
-"📍 **Los Frailes, Manabí**
-Es una de las playas más hermosas del país, ubicada dentro del Parque Nacional Machalilla.
+EJEMPLO DE RESPUESTA IDEAL:
+"📍 **Manta, Manabí** (Clima cálido ☀️)
+Es conocida como la capital del atún, con playas increíbles y excelente gastronomía.
 
-• **Qué hacer:** Senderismo al mirador, snorkel y relax.
-• 🎒 **Lleva:** Agua, gorra y protector solar (no hay tiendas dentro).
-• 🕒 **Horario:** 08:00 - 16:00."
+• **Playa Murciélago:** Ideal para relax y cerca del Malecón Escénico.
+• **San Mateo:** Perfecta para ver atardeceres y hacer kitesurf.
+• 🍲 **Imperdible:** Prueba el **Viche de Pescado** o el Camotillo.
+
+💡 **Tip Local:** Ve a la playa de Santa Marianita (a 20 min) si buscas menos gente y mejores vientos para deportes acuáticos."
 `;
 
 const handleGeminiError = (error: any, context: string): string => {
@@ -50,7 +54,7 @@ const handleGeminiError = (error: any, context: string): string => {
 };
 
 export const getTravelAdvice = async (query: string): Promise<string> => {
-  const cacheKey = `advice_v2_${query.trim().toLowerCase()}`; // v2 para invalidar caché anterior
+  const cacheKey = `advice_v3_${query.trim().toLowerCase()}`; // v3 para invalidar caché anterior con el nuevo prompt
   const cached = getFromCache(cacheKey);
   if (cached) return cached;
 
@@ -60,12 +64,12 @@ export const getTravelAdvice = async (query: string): Promise<string> => {
       contents: query,
       config: {
         systemInstruction: ECUADOR_SYSTEM_INSTRUCTION,
-        temperature: 0.7, // Un poco más creativo pero controlado
-        maxOutputTokens: 500, // Forzar respuestas cortas
+        temperature: 0.6, // Un poco más bajo para seguir mejor la estructura
+        maxOutputTokens: 600, 
       },
     });
     
-    const text = response.text || "Lo siento, no pude procesar tu consulta. Intenta ser más específico.";
+    const text = response.text || "Lo siento, no pude procesar tu consulta. Intenta ser más específico sobre qué lugar de Ecuador quieres visitar.";
     saveToCache(cacheKey, text);
     return text;
   } catch (error: any) {
@@ -221,7 +225,8 @@ export const findNearbyPlaces = async (lat: number, lng: number, specificQuery?:
     const roundedLng = lng.toFixed(3);
     const queryKey = specificQuery ? specificQuery.trim().toLowerCase().replace(/\s/g, '_') : 'general';
     const currentTime = new Date().toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' });
-    const cacheKey = `nearby_v6_${queryKey}_${roundedLat}_${roundedLng}`; // Bump version
+    // Versión 7: Prompt ajustado para búsqueda nacional
+    const cacheKey = `nearby_v7_${queryKey}_${roundedLat}_${roundedLng}`; 
     
     const cached = getFromCache(cacheKey);
     if (cached) return cached;
@@ -230,9 +235,15 @@ export const findNearbyPlaces = async (lat: number, lng: number, specificQuery?:
         let prompt = "";
 
         if (specificQuery) {
-            // PROMPT ESPECÍFICO (Búsqueda en barra)
+            // PROMPT ESPECÍFICO (Búsqueda General en Ecuador)
+            // Se instruye a la IA para buscar en todo Ecuador si la consulta lo requiere, usando Lat/Lng solo como referencia inicial.
             prompt = `
-                Usa Google Maps para encontrar lugares relacionados con "${specificQuery}" cerca de Lat: ${lat}, Lng: ${lng}.
+                Usa Google Maps para buscar lugares que coincidan con: "${specificQuery}" dentro de ECUADOR.
+                
+                Instrucciones:
+                1. Si la búsqueda es un lugar específico (ej: "Montañita", "Cotopaxi"), busca ese lugar exacto en Ecuador, sin importar la distancia a las coordenadas actuales.
+                2. Si la búsqueda es genérica (ej: "Restaurantes", "Gasolinera"), busca opciones cercanas a Lat: ${lat}, Lng: ${lng}.
+                3. Prioriza lugares turísticos populares si hay ambigüedad.
                 
                 Devuelve una lista con los mejores resultados (máximo 10).
                 
@@ -240,11 +251,11 @@ export const findNearbyPlaces = async (lat: number, lng: number, specificQuery?:
                 {
                   "places": [
                     {
-                       "name": "Nombre exacto",
-                       "category": "SERVICIO" o "COMIDA" o "HOSPEDAJE" o "TURISMO" (Elige la mejor opción),
+                       "name": "Nombre exacto del lugar",
+                       "category": "SERVICIO" o "COMIDA" o "HOSPEDAJE" o "TURISMO",
                        "isOpen": true/false (Estimado según hora ${currentTime}),
                        "rating": 4.5 (Número),
-                       "address": "Dirección corta",
+                       "address": "Dirección corta (Ciudad/Provincia)",
                        "description": "Breve descripción de qué es"
                     }
                   ]
@@ -252,7 +263,6 @@ export const findNearbyPlaces = async (lat: number, lng: number, specificQuery?:
             `;
         } else {
             // PROMPT GENERAL (Botón "¿Qué hay cerca?")
-            // Se eliminan restricciones numéricas estrictas para asegurar que devuelva ALGO.
             prompt = `
                 Actúa como un radar turístico local usando Google Maps.
                 Busca lugares de interés, restaurantes, hoteles y servicios útiles cerca de las coordenadas Lat: ${lat}, Lng: ${lng}.
@@ -289,8 +299,6 @@ export const findNearbyPlaces = async (lat: number, lng: number, specificQuery?:
                         }
                     }
                 }
-                // NO usamos responseMimeType: "application/json" con googleMaps tool a veces porque puede causar conflictos,
-                // mejor parseamos el texto nosotros.
             },
         });
 
@@ -299,7 +307,6 @@ export const findNearbyPlaces = async (lat: number, lng: number, specificQuery?:
         // Limpieza agresiva del JSON
         text = text.replace(/```json/g, '').replace(/```/g, '').trim();
         
-        // Buscar el primer '{' y el último '}' para extraer el JSON si hay texto basura alrededor
         const firstBrace = text.indexOf('{');
         const lastBrace = text.lastIndexOf('}');
         
@@ -322,7 +329,6 @@ export const findNearbyPlaces = async (lat: number, lng: number, specificQuery?:
 
         const result = { places: placesWithLinks };
         
-        // Solo guardar en caché si encontramos algo
         if (placesWithLinks.length > 0) {
             saveToCache(cacheKey, result);
         }
@@ -331,7 +337,6 @@ export const findNearbyPlaces = async (lat: number, lng: number, specificQuery?:
 
     } catch (error: any) {
         const errorType = handleGeminiError(error, "findNearbyPlaces");
-        // Si hay error, devolvemos array vacío para que el frontend maneje el fallback
         return { places: [] };
     }
 };

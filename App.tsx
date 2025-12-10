@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Map as MapIcon, Compass, Camera, Search, LogOut, ChevronLeft, PlusCircle, Globe, Filter, Edit3, X, Lightbulb, MapPin, Plus, MessageCircle, Users, Bell, LayoutGrid, Award, Home, Sparkles, Trophy, CheckCircle, Navigation, Lock, Unlock, Hotel, Stethoscope, ShoppingBag, Utensils } from 'lucide-react';
 import { HeroSection } from './components/HeroSection';
@@ -243,14 +244,15 @@ function App() {
   };
 
   const performNearbySearch = async (query: string) => {
-      if (!userLocation) {
-          alert("Necesitas activar la ubicación para buscar lugares cercanos.");
-          return;
-      }
+      // Si no hay ubicación, usamos el centro de Ecuador o Quito como fallback
+      // para permitir búsquedas genéricas de lugares.
+      const searchLat = userLocation?.lat || -1.8312; // Default lat
+      const searchLng = userLocation?.lng || -78.1834; // Default lng
+
       setIsSearchingExternal(true);
       setExternalSearchResults([]);
       try {
-          const result = await findNearbyPlaces(userLocation.lat, userLocation.lng, query);
+          const result = await findNearbyPlaces(searchLat, searchLng, query);
           setExternalSearchResults(result.places || []);
       } catch (error) {
           console.error("Error searching external", error);
@@ -261,6 +263,9 @@ function App() {
 
   const handleQuickSearch = (term: string) => {
       setSearchQuery(term);
+      if (activeTab !== 'search') {
+          navigateToTab('search');
+      }
       performNearbySearch(term);
   };
 
@@ -646,7 +651,16 @@ function App() {
           </div>
           
           <div className="hidden md:flex flex-1 max-w-md mx-8 relative">
-            <input type="text" placeholder="Buscar..." className="w-full bg-stone-100 border-transparent focus:bg-white border focus:border-cyan-300 rounded-full py-2 pl-10 pr-4 outline-none transition-all text-sm" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+            <input 
+                type="text" 
+                placeholder="Buscar lugares, personas, comida..." 
+                className="w-full bg-stone-100 border-transparent focus:bg-white border focus:border-cyan-300 rounded-full py-2 pl-10 pr-4 outline-none transition-all text-sm" 
+                value={searchQuery} 
+                onChange={(e) => setSearchQuery(e.target.value)} 
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleQuickSearch(searchQuery);
+                }}
+            />
             <Search className="absolute left-3 top-2.5 text-stone-400" size={16} />
           </div>
 
@@ -859,20 +873,12 @@ function App() {
                 const isFollowing = (user.following || []).includes(targetUser!.id);
                 const userContributions = destinations.filter(d => d.createdBy === targetUser!.id);
                 
-                // --- LÓGICA DE GRUPOS ACTUALIZADA ---
-                let visibleGroups: TravelGroup[] = [];
-
-                if (isMe) {
-                    // Si veo mi perfil: Grupos que Creé + Grupos donde soy Miembro
-                    visibleGroups = travelGroups.filter(g => 
-                        g.adminId === user.id || (g.members && g.members[user.id])
-                    );
-                } else {
-                    // Si veo perfil ajeno: Solo grupos PÚBLICOS creados por esa persona
-                    visibleGroups = travelGroups.filter(g => 
-                        g.adminId === targetUser!.id && !g.isPrivate
-                    );
-                }
+                // Grupos creados por el usuario
+                const userCreatedGroups = travelGroups.filter(g => g.adminId === targetUser!.id);
+                // Si visito perfil ajeno, solo veo los grupos PÚBLICOS
+                const visibleGroups = isMe 
+                    ? userCreatedGroups 
+                    : userCreatedGroups.filter(g => !g.isPrivate);
 
                 const totalPoints = targetUser.points || 0;
                 const currentLevel = getUserLevel(totalPoints);
@@ -1024,7 +1030,7 @@ function App() {
                                   ))
                               ) : (
                                   <div className="py-10 text-center text-stone-400 text-sm bg-stone-50 rounded-xl border border-dashed">
-                                      {isMe ? 'No has creado ni te has unido a ningún grupo aún.' : 'Este usuario no tiene grupos públicos.'}
+                                      {isMe ? 'No has creado ningún grupo aún.' : 'Este usuario no tiene grupos públicos.'}
                                   </div>
                               )}
                           </div>
@@ -1132,15 +1138,15 @@ function App() {
                      {isSearchingExternal ? (
                          <div className="bg-white p-6 rounded-2xl shadow-sm border border-stone-100 text-center">
                              <div className="animate-spin text-cyan-600 mx-auto mb-2 w-fit"><Compass size={24}/></div>
-                             <p className="text-stone-500 text-sm font-bold">Buscando "{searchQuery}" cerca de ti...</p>
+                             <p className="text-stone-500 text-sm font-bold">Buscando "{searchQuery}" en todo Ecuador...</p>
                          </div>
                      ) : externalSearchResults.length > 0 && (
                          <div>
                              <div className="flex items-center justify-between mb-3 px-1">
                                  <h3 className="font-bold text-stone-600 text-sm uppercase flex items-center gap-2">
-                                     <MapPin size={16} className="text-emerald-600"/> Resultados Cercanos
+                                     <MapPin size={16} className="text-emerald-600"/> Resultados de Google Maps
                                  </h3>
-                                 <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full font-bold">Google Maps</span>
+                                 <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full font-bold">Externo</span>
                              </div>
                              <div className="grid gap-3">
                                  {externalSearchResults.map((place, idx) => (
