@@ -104,33 +104,32 @@ export const generateCaptionForImage = async (location: string, details: string)
 };
 
 export const generateDestinationDetails = async (name: string, location: string, category: string): Promise<any> => {
-  const cacheKey = `dest_v2_${name}_${location}`.toLowerCase().replace(/\s/g, '');
+  // Use a unique cache key
+  const cacheKey = `dest_v3_${name}_${location}`.toLowerCase().replace(/\s/g, '');
   const cached = getFromCache(cacheKey);
   if (cached) return cached;
 
+  // Fallback vacío intencional para obligar al usuario a escribir si falla, en lugar de guardar basura.
   const fallbackData = {
-    description: `Un hermoso lugar para visitar en ${location}.`,
-    fullDescription: `Disfruta de la experiencia única que ofrece ${name}. Este destino ubicado en ${location} es ideal para los amantes de ${category}. (Información generada automáticamente por falta de conexión a IA).`,
-    highlights: ["Paisajes increíbles", "Gastronomía local", "Fotos únicas"],
-    travelTips: ["Lleva ropa cómoda", "No olvides tu cámara", "Hidrátate bien"],
+    description: "",
+    fullDescription: "",
+    highlights: [],
+    travelTips: [],
     coordinates: { latitude: -1.8312, longitude: -78.1834 }
   };
 
   const prompt = `
-    Actúa como una ENCICLOPEDIA TURÍSTICA EXPERTA Y RIGUROSA de Ecuador.
-    Genera un objeto JSON válido con información turística 100% REAL, PRECISA y DETALLADA sobre: "${name}" ubicado en "${location}" (Categoría: ${category}).
+    Actúa como una ENCICLOPEDIA TURÍSTICA EXPERTA de Ecuador.
+    Genera información turística real y detallada sobre: "${name}" ubicado en "${location}" (Categoría: ${category}).
     
-    REQUISITOS OBLIGATORIOS:
-    1. La 'fullDescription' debe ser EXTENSA (Mínimo 15 líneas de texto o 4 párrafos completos).
-    2. Incluye datos históricos reales, geografía exacta, biodiversidad específica (flora/fauna) y datos culturales precisos.
-    3. Incluye las COORDENADAS GEOGRÁFICAS (latitude, longitude) más precisas posibles del lugar.
-    
-    El JSON debe tener EXACTAMENTE esta estructura:
+    Si el lugar no es muy conocido, infiere la información basándote en la ubicación geográfica (${location}) y la categoría (${category}), pero sé honesto.
+
+    Devuelve SOLAMENTE un objeto JSON válido con esta estructura exacta (sin markdown de código):
     {
-      "description": "Resumen atractivo de máximo 200 caracteres para la tarjeta.",
-      "fullDescription": "Descripción profunda, educativa y detallada de más de 300 palabras. Debe cubrir historia, qué ver, importancia ecológica y cultura.",
-      "highlights": ["Dato preciso 1", "Plato típico real del lugar", "Actividad específica", "Punto de interés exacto"],
-      "travelTips": ["Consejo de clima/ropa específico", "Mejor época real de visita", "Consejo de seguridad o acceso"],
+      "description": "Resumen atractivo de máximo 200 caracteres.",
+      "fullDescription": "Descripción detallada de al menos 3 párrafos sobre historia, clima, qué hacer y por qué visitar.",
+      "highlights": ["Punto destacado 1", "Plato típico", "Actividad"],
+      "travelTips": ["Consejo de ropa", "Mejor época", "Acceso"],
       "coordinates": { "latitude": 0.0, "longitude": 0.0 }
     }
   `;
@@ -145,14 +144,28 @@ export const generateDestinationDetails = async (name: string, location: string,
     });
 
     let text = response.text || "{}";
+    // Limpieza agresiva para asegurar JSON válido
     text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    
+    // Buscar inicio y fin del objeto JSON por si hay texto extra
+    const firstBrace = text.indexOf('{');
+    const lastBrace = text.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1) {
+        text = text.substring(firstBrace, lastBrace + 1);
+    }
+
     if (!text || text === '{}') return fallbackData;
 
     const data = JSON.parse(text);
+    
+    // Validar que tenga datos mínimos
+    if (!data.description) data.description = `Un destino increíble en ${location}.`;
+    
     saveToCache(cacheKey, data);
     return data;
   } catch (error) {
     handleGeminiError(error, "generateDestinationDetails");
+    // Retornamos fallback vacío para que el usuario llene los datos en el modal
     return fallbackData;
   }
 };
@@ -265,7 +278,7 @@ export const findNearbyPlaces = async (lat: number, lng: number, specificQuery?:
             // PROMPT GENERAL (Botón "¿Qué hay cerca?")
             prompt = `
                 Actúa como un radar turístico local usando Google Maps.
-                Busca lugares de interés, restaurantes, hoteles y servicios útiles cerca de las coordenadas Lat: ${lat}, Lng: ${lng}.
+                Busca lugares de interés, restaurantes, hoteles y servicios útiles en un radio de 50 KM alrededor de las coordenadas Lat: ${lat}, Lng: ${lng}.
                 
                 Prioriza lugares turísticos y restaurantes populares.
                 Intenta encontrar al menos 5 lugares variados.

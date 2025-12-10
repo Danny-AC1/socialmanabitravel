@@ -1,5 +1,5 @@
 
-import { ref, set, remove, update, get, push, child } from "firebase/database";
+import { ref, set, remove, update, get, push } from "firebase/database";
 import { db } from "./firebase";
 import { Post, Story, Destination, Suggestion, User, Chat, Message, TravelGroup, TravelTemplate } from '../types';
 import { EncryptionService } from "./encryptionService";
@@ -13,75 +13,94 @@ export const StorageService = {
   // --- GAMIFICATION SYSTEM ---
   
   awardPoints: async (userId: string, amount: number, actionType: 'post' | 'comment' | 'destination' | 'photo' | 'share' | 'login') => {
-    const userRef = ref(db, `users/${userId}`);
-    const snapshot = await get(userRef);
-    
-    if (snapshot.exists()) {
-        const user = snapshot.val() as User;
-        const currentPoints = user.points || 0;
-        const newPoints = currentPoints + amount;
+    try {
+        const userRef = ref(db, `users/${userId}`);
+        const snapshot = await get(userRef);
         
-        let actionCount = 0;
-        if (actionType === 'post') actionCount = Math.floor(newPoints / POINT_VALUES.POST);
-        if (actionType === 'comment') actionCount = Math.floor(newPoints / POINT_VALUES.COMMENT);
-        
-        // Verificar nuevas insignias
-        const newBadges = checkNewBadges({ ...user, points: newPoints }, actionType as any, actionCount);
-        const updatedBadges = [...(user.badges || []), ...newBadges];
+        if (snapshot.exists()) {
+            const user = snapshot.val() as User;
+            const currentPoints = user.points || 0;
+            const newPoints = currentPoints + amount;
+            
+            let actionCount = 0;
+            // Cálculo aproximado para insignias basado en puntos acumulados si no tenemos contadores específicos
+            if (actionType === 'post') actionCount = Math.floor(newPoints / POINT_VALUES.POST);
+            if (actionType === 'comment') actionCount = Math.floor(newPoints / POINT_VALUES.COMMENT);
+            
+            // Verificar nuevas insignias
+            const newBadges = checkNewBadges({ ...user, points: newPoints }, actionType as any, actionCount);
+            
+            // Fusionar insignias nuevas con las existentes evitando duplicados
+            const currentBadgeIds = new Set((user.badges || []).map(b => b.id));
+            const uniqueNewBadges = newBadges.filter(b => !currentBadgeIds.has(b.id));
+            const updatedBadges = [...(user.badges || []), ...uniqueNewBadges];
 
-        await update(userRef, {
-            points: newPoints,
-            badges: updatedBadges
-        });
+            await update(userRef, {
+                points: newPoints,
+                badges: updatedBadges
+            });
 
-        return { newPoints, newBadges };
+            return { newPoints, newBadges: uniqueNewBadges };
+        }
+    } catch (e) {
+        console.error("Error awarding points:", e);
     }
   },
 
   checkDailyLogin: async (userId: string) => {
-    const userRef = ref(db, `users/${userId}`);
-    const snapshot = await get(userRef);
-    
-    if (snapshot.exists()) {
-        const user = snapshot.val() as User;
-        const lastLogin = user.lastLogin || 0;
-        const now = Date.now();
+    try {
+        const userRef = ref(db, `users/${userId}`);
+        const snapshot = await get(userRef);
+        
+        if (snapshot.exists()) {
+            const user = snapshot.val() as User;
+            const lastLogin = user.lastLogin || 0;
+            const now = Date.now();
 
-        const lastDate = new Date(lastLogin).toDateString();
-        const currentDate = new Date(now).toDateString();
+            const lastDate = new Date(lastLogin).toDateString();
+            const currentDate = new Date(now).toDateString();
 
-        if (lastDate !== currentDate) {
-            await StorageService.awardPoints(userId, POINT_VALUES.LOGIN_DAILY, 'login');
-            await update(userRef, { lastLogin: now });
-            return true;
+            if (lastDate !== currentDate) {
+                await StorageService.awardPoints(userId, POINT_VALUES.LOGIN_DAILY, 'login');
+                await update(userRef, { lastLogin: now });
+                return true;
+            }
         }
+        return false;
+    } catch (e) {
+        console.error("Error checking daily login:", e);
+        return false;
     }
-    return false;
   },
 
   completeChallenge: async (userId: string, challengeId: string, points: number) => {
-    const userRef = ref(db, `users/${userId}`);
-    const snapshot = await get(userRef);
-    
-    if (snapshot.exists()) {
-        const user = snapshot.val() as User;
-        const completed = user.completedChallenges || {};
+    try {
+        const userRef = ref(db, `users/${userId}`);
+        const snapshot = await get(userRef);
         
-        if (completed[challengeId]) {
-            return false;
+        if (snapshot.exists()) {
+            const user = snapshot.val() as User;
+            const completed = user.completedChallenges || {};
+            
+            if (completed[challengeId]) {
+                return false;
+            }
+
+            const newCompleted = { ...completed, [challengeId]: Date.now() };
+            const currentPoints = user.points || 0;
+            const newPoints = currentPoints + points;
+
+            await update(userRef, {
+                points: newPoints,
+                completedChallenges: newCompleted
+            });
+            return true;
         }
-
-        const newCompleted = { ...completed, [challengeId]: Date.now() };
-        const currentPoints = user.points || 0;
-        const newPoints = currentPoints + points;
-
-        await update(userRef, {
-            points: newPoints,
-            completedChallenges: newCompleted
-        });
-        return true;
+        return false;
+    } catch (e) {
+        console.error("Error completing challenge:", e);
+        return false;
     }
-    return false;
   },
 
   // --- CONTENT ---
@@ -103,8 +122,10 @@ export const StorageService = {
     const isLiked = post.isLiked;
     const newLikes = isLiked ? (post.likes - 1) : (post.likes + 1);
     
+    // Optimistic update handled by UI, backend update here
+    // Note: A real implementation should use transactions for likes to avoid race conditions
     await update(ref(db, `posts/${post.id}`), {
-      likes: newLikes
+      likes: Math.max(0, newLikes) // Prevent negative likes
     });
   },
 

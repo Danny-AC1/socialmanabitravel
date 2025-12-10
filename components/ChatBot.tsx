@@ -66,12 +66,12 @@ export const ChatBot: React.FC<ChatBotProps> = ({ externalIsOpen, externalQuery,
     <>
       <button 
         onClick={toggleChat}
-        className={`fixed bottom-6 right-6 z-[200] p-4 rounded-full shadow-lg transition-all duration-300 ${isOpen ? 'rotate-90 scale-0' : 'bg-cyan-600 hover:bg-cyan-700 text-white scale-100'}`}
+        className={`fixed bottom-24 right-6 z-[200] p-4 rounded-full shadow-lg transition-all duration-300 ${isOpen ? 'rotate-90 scale-0' : 'bg-cyan-600 hover:bg-cyan-700 text-white scale-100'}`}
       >
         <MessageSquare size={28} />
       </button>
 
-      <div className={`fixed bottom-6 right-6 z-[200] w-80 md:w-96 bg-white rounded-2xl shadow-2xl flex flex-col transition-all duration-300 origin-bottom-right overflow-hidden ${isOpen ? 'scale-100 opacity-100' : 'scale-0 opacity-0 pointer-events-none'}`} style={{ height: '500px' }}>
+      <div className={`fixed bottom-24 right-6 z-[200] w-80 md:w-96 bg-white rounded-2xl shadow-2xl flex flex-col transition-all duration-300 origin-bottom-right overflow-hidden ${isOpen ? 'scale-100 opacity-100' : 'scale-0 opacity-0 pointer-events-none'}`} style={{ height: '500px' }}>
         
         <div className="bg-gradient-to-r from-cyan-600 to-blue-600 p-4 text-white flex justify-between items-center">
           <div className="flex items-center space-x-2">

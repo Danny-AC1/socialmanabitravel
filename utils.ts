@@ -1,6 +1,7 @@
 
-
 import { Badge, User, Challenge } from './types';
+
+// --- MEDIA & FILE UTILS ---
 
 export const resizeImage = (file: File, maxWidth = 800, quality = 0.7): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -77,6 +78,37 @@ export const validateVideo = (file: File): Promise<string> => {
 
     video.src = URL.createObjectURL(file);
   });
+};
+
+export const downloadMedia = async (url: string, filename: string) => {
+  try {
+    // Si es base64, creamos un link directo
+    if (url.startsWith('data:')) {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        return;
+    }
+
+    // Si es una URL remota, intentamos fetch
+    const response = await fetch(url);
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(blobUrl);
+  } catch (error) {
+    console.error("Error downloading media, trying fallback:", error);
+    window.open(url, '_blank');
+  }
 };
 
 /**
@@ -217,7 +249,6 @@ export const checkNewBadges = (user: User, action: 'post' | 'comment' | 'destina
   }
 
   // Badge: Fotógrafo (5 Posts - requires tracking count, simulating check)
-  // En una app real, leeríamos el count exacto. Aquí asumimos que si ganó puntos por post, chequeamos.
   if (action === 'post' && !hasBadge('b_fotografo') && (totalActionCount || 0) >= 5) {
      newBadges.push(BADGES.find(b => b.id === 'b_fotografo')!);
   }

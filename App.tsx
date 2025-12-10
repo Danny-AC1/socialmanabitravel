@@ -283,14 +283,14 @@ function App() {
         const { latitude, longitude } = position.coords;
         
         // 1. Buscar destinos internos cercanos primero
-        // AUMENTADO EL RADIO A 150KM para asegurar resultados si está lejos
+        // Radio ajustado a 50km según solicitud
         const internalNearby = destinations
             .filter(d => d.coordinates)
             .map(d => {
                 const dist = calculateDistance(latitude, longitude, d.coordinates!.latitude, d.coordinates!.longitude);
                 return { ...d, dist };
             })
-            .filter(d => d.dist <= 150) 
+            .filter(d => d.dist <= 50) 
             .sort((a, b) => a.dist - b.dist)
             .map(d => ({
                 name: d.name,

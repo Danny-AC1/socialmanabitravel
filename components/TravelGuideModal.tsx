@@ -1,8 +1,8 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { X, MapPin, Star, Info, Camera, Compass, Wallet, MessageSquare, Plus, Upload, Trash2, Edit2, ChevronLeft, ChevronRight, AlertCircle, Navigation, Map, Award } from 'lucide-react';
+import { X, MapPin, Star, Info, Camera, Compass, Wallet, MessageSquare, Plus, Upload, Trash2, Edit2, ChevronLeft, ChevronRight, AlertCircle, Navigation, Map, Award, Download } from 'lucide-react';
 import { Destination } from '../types';
-import { resizeImage } from '../utils';
+import { resizeImage, downloadMedia } from '../utils';
 
 interface TravelGuideModalProps {
   destination: Destination;
@@ -82,6 +82,13 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
           onToggleFeatured(destination.id, !destination.isFeatured);
           // Opcional: Cerrar modal o mostrar feedback
           alert(destination.isFeatured ? "Quitado de destacados." : "¡Marcado como Destino Destacado en Inicio!");
+      }
+  };
+
+  const handleDownload = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (viewingImage) {
+          downloadMedia(viewingImage, `destination-${destination.name.replace(/\s+/g, '-')}-${Date.now()}.jpg`);
       }
   };
 
@@ -391,6 +398,14 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
              className="absolute top-4 right-4 text-white/70 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors z-50"
            >
              <X size={32} />
+           </button>
+
+           <button
+             onClick={handleDownload}
+             className="absolute top-4 right-16 text-white/70 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors z-50"
+             title="Descargar imagen"
+           >
+             <Download size={32} />
            </button>
 
            {hasMultipleImages && (

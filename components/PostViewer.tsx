@@ -1,7 +1,8 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Clover, MessageSquareText, Share2, MoreVertical, Edit2, Trash2, MapPin, Send, Eye, EyeOff } from 'lucide-react';
+import { X, Clover, MessageSquareText, Share2, MoreVertical, Edit2, Trash2, MapPin, Send, Eye, EyeOff, Download } from 'lucide-react';
 import { Post } from '../types';
+import { downloadMedia } from '../utils';
 
 interface PostViewerProps {
   post: Post;
@@ -38,6 +39,12 @@ export const PostViewer: React.FC<PostViewerProps> = ({
       onComment(post.id, commentText);
       setCommentText('');
     }
+  };
+
+  const handleDownload = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      const ext = post.mediaType === 'video' ? 'mp4' : 'jpg';
+      downloadMedia(post.imageUrl, `ecuador-travel-${post.id}.${ext}`);
   };
 
   useEffect(() => {
@@ -205,6 +212,9 @@ export const PostViewer: React.FC<PostViewerProps> = ({
                   </button>
                   <button onClick={() => onShare(post)} className="text-gray-400 hover:text-cyan-600 transition-colors">
                     <Share2 size={28} />
+                  </button>
+                  <button onClick={handleDownload} className="text-gray-400 hover:text-cyan-600 transition-colors" title="Descargar">
+                    <Download size={28} />
                   </button>
                </div>
                <div className="font-bold text-sm text-gray-800">

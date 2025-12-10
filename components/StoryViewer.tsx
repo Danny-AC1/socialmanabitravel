@@ -1,7 +1,8 @@
 
 import React, { useEffect, useState, useRef } from 'react';
-import { X, Clover, Share2, Trash2, MapPin, Edit2, Eye } from 'lucide-react';
+import { X, Clover, Share2, Trash2, MapPin, Edit2, Eye, Download } from 'lucide-react';
 import { Story, StoryViewer as ViewerType } from '../types';
+import { downloadMedia } from '../utils';
 
 interface StoryViewerProps {
   stories: Story[];
@@ -123,6 +124,14 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
     onLike(currentStory.id);
   };
 
+  const handleDownload = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      setIsPaused(true);
+      const ext = currentStory.mediaType === 'video' ? 'mp4' : 'jpg';
+      downloadMedia(currentStory.imageUrl, `story-${currentStory.userName}-${currentStory.id}.${ext}`);
+      setTimeout(() => setIsPaused(false), 1000);
+  };
+
   const toggleViewersList = (e: React.MouseEvent) => {
       e.stopPropagation();
       setShowViewers(!showViewers);
@@ -201,6 +210,9 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
             </div>
           </div>
           <div className="flex gap-2">
+            <button onClick={handleDownload} className="p-2 hover:bg-white/20 rounded-full transition-colors z-50">
+               <Download size={24} />
+            </button>
             {isOwner && (
                <>
                  <button onClick={handleEditClick} className="p-2 hover:bg-white/20 hover:text-cyan-400 rounded-full transition-colors z-50">
