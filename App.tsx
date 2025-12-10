@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Map as MapIcon, Compass, Camera, Search, LogOut, ChevronLeft, PlusCircle, Globe, Filter, Edit3, X, Lightbulb, MapPin, Plus, MessageCircle, Users, Bell, LayoutGrid, Award, Home, Sparkles, Trophy, CheckCircle, Navigation, Lock, Unlock, Hotel, Stethoscope, ShoppingBag, Utensils } from 'lucide-react';
 import { HeroSection } from './components/HeroSection';
@@ -279,23 +278,24 @@ function App() {
         const { latitude, longitude } = position.coords;
         
         // 1. Buscar destinos internos cercanos primero
+        // AUMENTADO EL RADIO A 150KM para asegurar resultados si está lejos
         const internalNearby = destinations
             .filter(d => d.coordinates)
             .map(d => {
                 const dist = calculateDistance(latitude, longitude, d.coordinates!.latitude, d.coordinates!.longitude);
                 return { ...d, dist };
             })
-            .filter(d => d.dist <= 50) // Radio de 50km
+            .filter(d => d.dist <= 150) 
             .sort((a, b) => a.dist - b.dist)
             .map(d => ({
                 name: d.name,
                 category: 'TURISMO',
-                isOpen: true, // Asumimos abierto
+                isOpen: true, 
                 rating: d.rating,
                 address: d.location,
                 description: `A ${d.dist.toFixed(1)} km - ${d.category}`,
                 mapLink: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(d.name + " " + d.location)}`,
-                isInternal: true // Flag para resaltar en UI
+                isInternal: true 
             }));
 
         try {
@@ -305,14 +305,22 @@ function App() {
             // 3. Fusionar resultados (Internos primero)
             const combinedPlaces = [...internalNearby, ...(aiResult.places || [])];
             
-            setNearbyData({ 
-                text: combinedPlaces.length > 0 ? "Resultados encontrados" : "No se encontraron lugares cercanos", 
-                places: combinedPlaces 
-            });
+            // Si después de todo no hay nada, mostrar mensaje pero mantener el modal
+            if (combinedPlaces.length === 0) {
+                 setNearbyData({ 
+                    text: "No se encontraron lugares en este momento. Intenta buscar por categoría específica.", 
+                    places: [] 
+                });
+            } else {
+                setNearbyData({ 
+                    text: "Resultados encontrados", 
+                    places: combinedPlaces 
+                });
+            }
         } catch (error: any) {
-            // Si falla la IA, al menos mostramos los internos
+            // Si falla la IA, al menos mostramos los internos si existen
             setNearbyData({ 
-                text: "Mostrando destinos de la app (Error de conexión externa)", 
+                text: internalNearby.length > 0 ? "Mostrando destinos de la app (Conexión limitada)" : "Error de conexión. Intenta de nuevo.", 
                 places: internalNearby 
             });
         } finally {
@@ -851,12 +859,20 @@ function App() {
                 const isFollowing = (user.following || []).includes(targetUser!.id);
                 const userContributions = destinations.filter(d => d.createdBy === targetUser!.id);
                 
-                // Grupos creados por el usuario
-                const userCreatedGroups = travelGroups.filter(g => g.adminId === targetUser!.id);
-                // Si visito perfil ajeno, solo veo los grupos PÚBLICOS
-                const visibleGroups = isMe 
-                    ? userCreatedGroups 
-                    : userCreatedGroups.filter(g => !g.isPrivate);
+                // --- LÓGICA DE GRUPOS ACTUALIZADA ---
+                let visibleGroups: TravelGroup[] = [];
+
+                if (isMe) {
+                    // Si veo mi perfil: Grupos que Creé + Grupos donde soy Miembro
+                    visibleGroups = travelGroups.filter(g => 
+                        g.adminId === user.id || (g.members && g.members[user.id])
+                    );
+                } else {
+                    // Si veo perfil ajeno: Solo grupos PÚBLICOS creados por esa persona
+                    visibleGroups = travelGroups.filter(g => 
+                        g.adminId === targetUser!.id && !g.isPrivate
+                    );
+                }
 
                 const totalPoints = targetUser.points || 0;
                 const currentLevel = getUserLevel(totalPoints);
@@ -1008,7 +1024,7 @@ function App() {
                                   ))
                               ) : (
                                   <div className="py-10 text-center text-stone-400 text-sm bg-stone-50 rounded-xl border border-dashed">
-                                      {isMe ? 'No has creado ningún grupo aún.' : 'Este usuario no tiene grupos públicos.'}
+                                      {isMe ? 'No has creado ni te has unido a ningún grupo aún.' : 'Este usuario no tiene grupos públicos.'}
                                   </div>
                               )}
                           </div>

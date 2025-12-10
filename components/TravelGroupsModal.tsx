@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Users, Plus, Search, Map, Calendar, DollarSign, ArrowRight, ArrowLeft, Share2, Trash2, FileText, Loader2, Image as ImageIcon, Lock, Shield, UserPlus, Unlock, Globe, Sun, Sunset, Moon, PlusCircle, Camera, Edit2 } from 'lucide-react';
+import { X, Users, Plus, Search, Map, Calendar, DollarSign, ArrowRight, ArrowLeft, Share2, Trash2, FileText, Loader2, Image as ImageIcon, Lock, Shield, UserPlus, Unlock, Globe, Sun, Sunset, Moon, PlusCircle, Camera, Edit2, LogOut } from 'lucide-react';
 import { User, TravelGroup, TravelTemplate } from '../types';
 import { StorageService } from '../services/storageService';
 import { db } from '../services/firebase';
@@ -172,7 +172,7 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
   };
 
   const handleLeave = async (group: TravelGroup) => {
-      if(confirm("¿Salir del grupo?")) {
+      if(confirm("¿Estás seguro de que quieres salir de este grupo?")) {
           await StorageService.leaveTravelGroup(group.id, currentUser.id);
           setView('list');
       }
@@ -255,10 +255,11 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
                 {visibleGroups.map(group => {
                     const memberCount = group.members ? Object.keys(group.members).length : 0;
                     const isMember = group.members && group.members[currentUser.id];
+                    const isAdmin = group.adminId === currentUser.id;
                     
                     return (
-                        <div key={group.id} onClick={() => { setSelectedGroup(group); setView('detail'); }} className="bg-white rounded-xl shadow-sm border border-stone-100 overflow-hidden cursor-pointer hover:shadow-md transition-all group-card relative">
-                            <div className="h-32 bg-gray-200 relative">
+                        <div key={group.id} onClick={() => { setSelectedGroup(group); setView('detail'); }} className="bg-white rounded-xl shadow-sm border border-stone-100 overflow-hidden cursor-pointer hover:shadow-md transition-all group-card relative flex flex-col h-full">
+                            <div className="h-32 bg-gray-200 relative shrink-0">
                                 <img src={group.imageUrl} className="w-full h-full object-cover" />
                                 <div className="absolute inset-0 bg-black/30 group-hover:bg-black/10 transition-colors"></div>
                                 {isMember && <span className="absolute top-2 right-2 bg-green-500 text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-sm">MIEMBRO</span>}
@@ -266,26 +267,40 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
                                     {group.isPrivate ? <Lock size={12}/> : <Globe size={12}/>}
                                 </span>
                             </div>
-                            <div className="p-4">
+                            <div className="p-4 flex flex-col flex-1">
                                 <h4 className="font-bold text-gray-800 text-lg mb-1 flex items-center gap-2">
                                     {group.name}
                                 </h4>
-                                <p className="text-gray-500 text-xs line-clamp-2 mb-3">{group.description}</p>
-                                <div className="flex items-center gap-4 text-xs text-gray-400 font-medium">
-                                    <span className="flex items-center gap-1"><Users size={14} /> {memberCount} viajeros</span>
-                                    <span className="flex items-center gap-1"><FileText size={14} /> {(group.templates ? Object.keys(group.templates).length : 0)} plantillas</span>
+                                <p className="text-gray-500 text-xs line-clamp-2 mb-3 flex-1">{group.description}</p>
+                                <div className="flex items-center gap-4 text-xs text-gray-400 font-medium mb-3">
+                                    <span className="flex items-center gap-1"><Users size={14} /> {memberCount}</span>
+                                    <span className="flex items-center gap-1"><FileText size={14} /> {(group.templates ? Object.keys(group.templates).length : 0)}</span>
                                 </div>
                                 
-                                {!isMember && !group.isPrivate && (
-                                    <div className="mt-3">
-                                        <button 
-                                            onClick={(e) => { e.stopPropagation(); handleJoin(group); }} 
-                                            className="w-full bg-cyan-50 text-cyan-700 text-xs font-bold py-2 rounded-lg hover:bg-cyan-100 transition-colors"
-                                        >
-                                            Unirme
-                                        </button>
-                                    </div>
-                                )}
+                                {/* Action Buttons in Card */}
+                                <div className="mt-auto">
+                                    {isMember ? (
+                                        // Show Leave button if member (and not admin to prevent accidental orphan groups here, though logic handles it)
+                                        !isAdmin && (
+                                            <button 
+                                                onClick={(e) => { e.stopPropagation(); handleLeave(group); }} 
+                                                className="w-full bg-red-50 text-red-600 text-xs font-bold py-2 rounded-lg hover:bg-red-100 transition-colors border border-red-200 flex items-center justify-center gap-1"
+                                            >
+                                                <LogOut size={14} /> Salir
+                                            </button>
+                                        )
+                                    ) : (
+                                        // Show Join if not member and public
+                                        !group.isPrivate && (
+                                            <button 
+                                                onClick={(e) => { e.stopPropagation(); handleJoin(group); }} 
+                                                className="w-full bg-cyan-600 text-white text-xs font-bold py-2 rounded-lg hover:bg-cyan-700 transition-colors shadow-sm flex items-center justify-center gap-1"
+                                            >
+                                                <UserPlus size={14} /> Unirme
+                                            </button>
+                                        )
+                                    )}
+                                </div>
                             </div>
                         </div>
                     );
@@ -293,7 +308,7 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
                 {visibleGroups.length === 0 && (
                     <div className="col-span-2 text-center py-10 text-gray-400">
                         <Users size={48} className="mx-auto mb-2 opacity-20" />
-                        <p>No hay grupos disponibles. ¡Crea el primero!</p>
+                        <p>No hay grupos disponibles.</p>
                     </div>
                 )}
             </div>

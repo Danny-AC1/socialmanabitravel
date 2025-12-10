@@ -221,7 +221,7 @@ export const findNearbyPlaces = async (lat: number, lng: number, specificQuery?:
     const roundedLng = lng.toFixed(3);
     const queryKey = specificQuery ? specificQuery.trim().toLowerCase().replace(/\s/g, '_') : 'general';
     const currentTime = new Date().toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' });
-    const cacheKey = `nearby_v5_${queryKey}_${roundedLat}_${roundedLng}_${currentTime.split(':')[0]}`;
+    const cacheKey = `nearby_v6_${queryKey}_${roundedLat}_${roundedLng}`; // Bump version
     
     const cached = getFromCache(cacheKey);
     if (cached) return cached;
@@ -230,51 +230,46 @@ export const findNearbyPlaces = async (lat: number, lng: number, specificQuery?:
         let prompt = "";
 
         if (specificQuery) {
-            // PROMPT PARA BÚSQUEDA ESPECÍFICA (Hospitales, Farmacias, etc.)
+            // PROMPT ESPECÍFICO (Búsqueda en barra)
             prompt = `
-                Actúa como un radar local. Busca lugares REALES relacionados con "${specificQuery}" alrededor de las coordenadas Lat: ${lat}, Lng: ${lng}.
-                La hora actual local es: ${currentTime}.
+                Usa Google Maps para encontrar lugares relacionados con "${specificQuery}" cerca de Lat: ${lat}, Lng: ${lng}.
                 
-                Encuentra al menos 5 opciones relevantes para la búsqueda "${specificQuery}".
+                Devuelve una lista con los mejores resultados (máximo 10).
                 
-                Devuelve un JSON con esta estructura exacta para cada lugar:
+                IMPORTANTE: Devuelve SOLAMENTE un JSON válido con esta estructura:
                 {
                   "places": [
                     {
-                       "name": "Nombre real del lugar",
-                       "category": "SERVICIO" | "COMIDA" | "HOSPEDAJE" | "TURISMO", (Clasifica según corresponda, ej: Hospital -> SERVICIO)
-                       "isOpen": boolean, (Calcula si está abierto según la hora actual ${currentTime})
-                       "rating": number, (Ej: 4.5)
-                       "address": "Dirección corta o referencia",
-                       "description": "Breve descripción relacionada con la búsqueda"
+                       "name": "Nombre exacto",
+                       "category": "SERVICIO" o "COMIDA" o "HOSPEDAJE" o "TURISMO" (Elige la mejor opción),
+                       "isOpen": true/false (Estimado según hora ${currentTime}),
+                       "rating": 4.5 (Número),
+                       "address": "Dirección corta",
+                       "description": "Breve descripción de qué es"
                     }
                   ]
                 }
             `;
         } else {
-            // PROMPT GENERAL (TURISMO)
+            // PROMPT GENERAL (Botón "¿Qué hay cerca?")
+            // Se eliminan restricciones numéricas estrictas para asegurar que devuelva ALGO.
             prompt = `
-                Actúa como un radar local. Busca lugares REALES alrededor de las coordenadas Lat: ${lat}, Lng: ${lng}.
-                La hora actual local es: ${currentTime}.
+                Actúa como un radar turístico local usando Google Maps.
+                Busca lugares de interés, restaurantes, hoteles y servicios útiles cerca de las coordenadas Lat: ${lat}, Lng: ${lng}.
                 
-                PRIORIDAD: Encuentra los MEJORES atractivos turísticos cercanos primero.
+                Prioriza lugares turísticos y restaurantes populares.
+                Intenta encontrar al menos 5 lugares variados.
                 
-                Debes encontrar lugares en estas categorías:
-                1. TURISMO (Playas, miradores, parques, museos, plazas principales) - Mínimo 4 opciones.
-                2. COMIDA (Restaurantes típicos, cafeterías populares) - Mínimo 3 opciones.
-                3. HOSPEDAJE (Hoteles recomendados, hostales) - Mínimo 2 opciones.
-                4. SERVICIOS (Farmacias, supermercados) - Máximo 2 opciones.
-
-                Devuelve un JSON con esta estructura exacta para cada lugar:
+                IMPORTANTE: Devuelve SOLAMENTE un JSON válido con esta estructura:
                 {
                   "places": [
                     {
-                       "name": "Nombre real del lugar",
-                       "category": "TURISMO" | "COMIDA" | "HOSPEDAJE" | "SERVICIO",
-                       "isOpen": boolean, (Calcula si está abierto según la hora actual ${currentTime})
-                       "rating": number, (Ej: 4.5)
-                       "address": "Dirección corta o referencia",
-                       "description": "Qué es (Ej: 'Playa famosa', 'Comida Manabita')"
+                       "name": "Nombre exacto",
+                       "category": "TURISMO" o "COMIDA" o "HOSPEDAJE" o "SERVICIO",
+                       "isOpen": true/false (Estimado según hora ${currentTime}),
+                       "rating": 4.5 (Número),
+                       "address": "Dirección corta",
+                       "description": "Qué es (ej: 'Playa popular', 'Restaurante de mariscos')"
                     }
                   ]
                 }
@@ -293,14 +288,32 @@ export const findNearbyPlaces = async (lat: number, lng: number, specificQuery?:
                             longitude: lng
                         }
                     }
-                },
-                responseMimeType: "application/json"
+                }
+                // NO usamos responseMimeType: "application/json" con googleMaps tool a veces porque puede causar conflictos,
+                // mejor parseamos el texto nosotros.
             },
         });
 
         let text = response.text || "{}";
+        
+        // Limpieza agresiva del JSON
         text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-        const data = JSON.parse(text);
+        
+        // Buscar el primer '{' y el último '}' para extraer el JSON si hay texto basura alrededor
+        const firstBrace = text.indexOf('{');
+        const lastBrace = text.lastIndexOf('}');
+        
+        if (firstBrace !== -1 && lastBrace !== -1) {
+            text = text.substring(firstBrace, lastBrace + 1);
+        }
+
+        let data;
+        try {
+            data = JSON.parse(text);
+        } catch (e) {
+            console.error("Error parseando JSON de lugares:", text);
+            return { places: [] };
+        }
 
         const placesWithLinks = (data.places || []).map((p: any) => ({
             ...p,
@@ -308,16 +321,17 @@ export const findNearbyPlaces = async (lat: number, lng: number, specificQuery?:
         }));
 
         const result = { places: placesWithLinks };
-        saveToCache(cacheKey, result);
+        
+        // Solo guardar en caché si encontramos algo
+        if (placesWithLinks.length > 0) {
+            saveToCache(cacheKey, result);
+        }
+        
         return result;
 
     } catch (error: any) {
         const errorType = handleGeminiError(error, "findNearbyPlaces");
-        
-        if (errorType === "limit_reached") {
-             return { places: [] }; 
-        }
-
+        // Si hay error, devolvemos array vacío para que el frontend maneje el fallback
         return { places: [] };
     }
 };
