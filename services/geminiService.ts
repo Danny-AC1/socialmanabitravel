@@ -16,31 +16,22 @@ const saveToCache = (key: string, data: any) => {
     memoryCache[key] = data;
 };
 
-// Prompt Optimizado para claridad, concisión y valor agregado (Tips Locales)
+// Prompt Restaurado: Más natural, amable y conversacional (Estilo Original)
 const ECUADOR_SYSTEM_INSTRUCTION = `
-Eres el 'Guía Virtual' de Ecuador Travel, experto en turismo nacional.
-TU MISIÓN: Inspirar y guiar a los viajeros con respuestas rápidas, visuales y útiles.
+Eres un guía turístico experto y amigable de Ecuador.
+Tu objetivo es ayudar a los viajeros a descubrir los maravillosos destinos de las 4 regiones: Costa, Sierra, Amazonía y Galápagos.
 
-PAUTAS DE RESPUESTA:
-1. **BREVEDAD:** Respuestas cortas y directas (ideal para móvil). Evita párrafos largos.
-2. **FORMATO VISUAL:**
-   - Usa **negritas** para nombres de lugares y platos.
-   - Usa listas con viñetas (•) para enumerar actividades.
-   - Emojis obligatorios para dar vida (📍, 🍲, 🎒, 💡).
-3. **VALOR AGREGADO:**
-   - Siempre incluye un **"💡 Tip Local"** o **"Dato Curioso"** (ej: mejor hora para ir, precio aproximado, plato secreto).
-   - Si preguntan por un lugar, menciona brevemente la provincia y el clima.
-4. **TONO:** Cálido, ecuatoriano (puedes usar "chévere", "full recomendado" con moderación) y servicial.
+Personalidad:
+- Amable, entusiasta y servicial.
+- Tus respuestas deben ser breves y fáciles de leer en un celular.
+- Usa emojis para dar vida a la conversación, pero sin exagerar.
 
-EJEMPLO DE RESPUESTA IDEAL:
-"📍 **Manta, Manabí** (Clima cálido ☀️)
-Es conocida como la capital del atún, con playas increíbles y excelente gastronomía.
+Si te piden recomendaciones:
+- Sugiere lugares específicos.
+- Menciona brevemente por qué vale la pena visitarlos.
+- Si es relevante, menciona algún plato típico.
 
-• **Playa Murciélago:** Ideal para relax y cerca del Malecón Escénico.
-• **San Mateo:** Perfecta para ver atardeceres y hacer kitesurf.
-• 🍲 **Imperdible:** Prueba el **Viche de Pescado** o el Camotillo.
-
-💡 **Tip Local:** Ve a la playa de Santa Marianita (a 20 min) si buscas menos gente y mejores vientos para deportes acuáticos."
+Importante: Responde siempre en español y con un tono acogedor.
 `;
 
 const handleGeminiError = (error: any, context: string): string => {
@@ -54,7 +45,8 @@ const handleGeminiError = (error: any, context: string): string => {
 };
 
 export const getTravelAdvice = async (query: string): Promise<string> => {
-  const cacheKey = `advice_v3_${query.trim().toLowerCase()}`; // v3 para invalidar caché anterior con el nuevo prompt
+  // Cache key actualizado para invalidar versiones anteriores
+  const cacheKey = `advice_restored_v1_${query.trim().toLowerCase()}`;
   const cached = getFromCache(cacheKey);
   if (cached) return cached;
 
@@ -64,8 +56,8 @@ export const getTravelAdvice = async (query: string): Promise<string> => {
       contents: query,
       config: {
         systemInstruction: ECUADOR_SYSTEM_INSTRUCTION,
-        temperature: 0.6, // Un poco más bajo para seguir mejor la estructura
-        maxOutputTokens: 600, 
+        temperature: 0.7, // Temperature un poco más alta para creatividad natural
+        maxOutputTokens: 500, 
       },
     });
     
@@ -230,7 +222,7 @@ export const generateItinerary = async (destination: string, days: number, budge
   }
 };
 
-// --- GOOGLE MAPS GROUNDING OPTIMIZADO PARA UI SEGMENTADA ---
+// --- GOOGLE MAPS GROUNDING (MODO RADAR LOCAL ESTRICTO) ---
 
 export const findNearbyPlaces = async (lat: number, lng: number, specificQuery?: string): Promise<{ places: any[] }> => {
     // Redondear para caché eficiente
@@ -238,70 +230,39 @@ export const findNearbyPlaces = async (lat: number, lng: number, specificQuery?:
     const roundedLng = lng.toFixed(3);
     const queryKey = specificQuery ? specificQuery.trim().toLowerCase().replace(/\s/g, '_') : 'general';
     const currentTime = new Date().toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' });
-    // Versión 8: Prompt ajustado para búsqueda de 30km
-    const cacheKey = `nearby_v8_${queryKey}_${roundedLat}_${roundedLng}`; 
+    
+    // Cache Key V9: Búsqueda estricta local
+    const cacheKey = `nearby_local_v9_${queryKey}_${roundedLat}_${roundedLng}`; 
     
     const cached = getFromCache(cacheKey);
     if (cached) return cached;
 
     try {
-        let prompt = "";
-
-        if (specificQuery) {
-            // PROMPT ESPECÍFICO (Búsqueda General en Ecuador)
-            // Se instruye a la IA para buscar en todo Ecuador si la consulta lo requiere, usando Lat/Lng solo como referencia inicial.
-            prompt = `
-                Usa Google Maps para buscar lugares que coincidan con: "${specificQuery}" dentro de ECUADOR.
-                
-                Instrucciones:
-                1. Si la búsqueda es un lugar específico (ej: "Montañita", "Cotopaxi"), busca ese lugar exacto en Ecuador, sin importar la distancia a las coordenadas actuales.
-                2. Si la búsqueda es genérica (ej: "Restaurantes", "Gasolinera"), busca opciones cercanas a Lat: ${lat}, Lng: ${lng}.
-                3. Prioriza lugares turísticos populares si hay ambigüedad.
-                
-                Devuelve una lista con los mejores resultados (máximo 10).
-                
-                IMPORTANTE: Devuelve SOLAMENTE un JSON válido con esta estructura:
+        // PROMPT ESTRICTO DE RADIO 30KM
+        // Se elimina la lógica que permitía buscar en todo el país.
+        const prompt = `
+            Actúa como un radar local de alta precisión.
+            Busca: "${specificQuery || 'lugares de interés'}" usando Google Maps.
+            
+            REGLAS CRÍTICAS DE BÚSQUEDA:
+            1. **RADIO ESTRICTO:** Busca SOLAMENTE en un radio de 30 KM alrededor de las coordenadas Lat: ${lat}, Lng: ${lng}.
+            2. **PROHIBIDO:** No devuelvas resultados de otras ciudades o provincias lejanas, aunque coincidan con el nombre. Si no hay nada cerca, devuelve una lista vacía.
+            3. Prioriza lugares abiertos ahora (${currentTime}).
+            
+            IMPORTANTE: Devuelve SOLAMENTE un JSON válido con esta estructura:
+            {
+              "places": [
                 {
-                  "places": [
-                    {
-                       "name": "Nombre exacto del lugar",
-                       "category": "SERVICIO" o "COMIDA" o "HOSPEDAJE" o "TURISMO",
-                       "isOpen": true/false (Estimado según hora ${currentTime}),
-                       "rating": 4.5 (Número),
-                       "address": "Dirección corta (Ciudad/Provincia)",
-                       "description": "Breve descripción de qué es"
-                    }
-                  ]
+                   "name": "Nombre oficial exacto",
+                   "category": "TURISMO" o "COMIDA" o "HOSPEDAJE" o "SERVICIO",
+                   "isOpen": true/false (Estimado),
+                   "rating": 4.5 (Número),
+                   "address": "Dirección específica (Calle/Sector)",
+                   "description": "Qué es (ej: 'Playa popular a 5km', 'Restaurante de mariscos')"
                 }
-            `;
-        } else {
-            // PROMPT GENERAL (Botón "¿Qué hay cerca?")
-            // OPTIMIZACIÓN: Radio de 30km y mayor precisión
-            prompt = `
-                Actúa como un radar turístico local de alta precisión usando Google Maps.
-                Busca lugares de interés, restaurantes, hoteles y servicios útiles en un radio EXACTO de 30 KM alrededor de las coordenadas Lat: ${lat}, Lng: ${lng}.
-                
-                Instrucciones:
-                1. Busca dentro de los 30km a la redonda.
-                2. Prioriza lugares turísticos destacados y restaurantes populares.
-                3. Intenta encontrar al menos 10 lugares variados (Comida, Turismo, Hospedaje).
-                4. Sé preciso con la dirección y el estado "Abierto/Cerrado".
-                
-                IMPORTANTE: Devuelve SOLAMENTE un JSON válido con esta estructura:
-                {
-                  "places": [
-                    {
-                       "name": "Nombre oficial exacto",
-                       "category": "TURISMO" o "COMIDA" o "HOSPEDAJE" o "SERVICIO",
-                       "isOpen": true/false (Estimado según hora ${currentTime}),
-                       "rating": 4.5 (Número),
-                       "address": "Dirección específica (Calle/Sector, Ciudad)",
-                       "description": "Qué es (ej: 'Playa popular', 'Restaurante de mariscos')"
-                    }
-                  ]
-                }
-            `;
-        }
+              ]
+            }
+        `;
 
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
@@ -320,8 +281,6 @@ export const findNearbyPlaces = async (lat: number, lng: number, specificQuery?:
         });
 
         let text = response.text || "{}";
-        
-        // Limpieza agresiva del JSON
         text = text.replace(/```json/g, '').replace(/```/g, '').trim();
         
         const firstBrace = text.indexOf('{');
