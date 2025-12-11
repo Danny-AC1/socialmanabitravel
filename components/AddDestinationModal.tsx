@@ -24,17 +24,16 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
   // Datos Detallados (Editables)
   const [description, setDescription] = useState('');
   const [fullDescription, setFullDescription] = useState('');
-  const [highlightsStr, setHighlightsStr] = useState(''); // Manejar como string separado por comas para edición fácil
+  const [highlightsStr, setHighlightsStr] = useState('');
   const [travelTipsStr, setTravelTipsStr] = useState('');
 
   // Estados de UI
-  const [isSubmitting, setIsSubmitting] = useState(false); // Para la llamada a IA
-  const [isSaving, setIsSaving] = useState(false); // Para el guardado final
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [aiStatus, setAiStatus] = useState('');
-  const [step, setStep] = useState<'basic' | 'review'>('basic'); // Control de pasos
+  const [step, setStep] = useState<'basic' | 'review'>('basic');
   
   // Verificación
-  const [isVerified, setIsVerified] = useState(false);
   const [verificationError, setVerificationError] = useState<string | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -48,7 +47,6 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
 
   if (!isOpen) return null;
 
-  // Normalización estricta
   const normalize = (text: string) => {
     return (text || "")
       .toString()
@@ -68,7 +66,7 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
       setFullDescription('');
       setHighlightsStr('');
       setTravelTipsStr('');
-      setIsVerified(false);
+      setVerificationError(null);
       setStep('basic');
       setRegion('Costa');
       setCategory('Naturaleza');
@@ -76,35 +74,7 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
 
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setName(e.target.value);
-    setIsVerified(false);
     setVerificationError(null);
-  };
-
-  const handleVerify = (e?: React.MouseEvent) => {
-    e?.preventDefault(); 
-    
-    if (!name.trim() || name.trim().length < 3) {
-        setVerificationError("El nombre es muy corto.");
-        return;
-    }
-
-    const inputNormalized = normalize(name);
-    
-    const duplicate = existingDestinations.find(d => {
-        const dbName = normalize(d.name);
-        if (dbName === inputNormalized) return true;
-        if (dbName.includes(inputNormalized)) return true;
-        if (inputNormalized.includes(dbName)) return true;
-        return false;
-    });
-
-    if (duplicate) {
-        setVerificationError(`Conflicto con: "${duplicate.name}". Ya existe.`);
-        setIsVerified(false);
-    } else {
-        setVerificationError(null);
-        setIsVerified(true);
-    }
   };
 
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -119,36 +89,55 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
     }
   };
 
-  // PASO 1: Generar Datos con IA (o llenar vacíos si falla)
-  const handleGenerateData = async () => {
-    if (!isVerified) return;
-    if (!name || !province || !imagePreview) {
-      alert("Por favor completa el nombre, la provincia y sube una foto.");
+  // PASO 1: Verificar y Generar Datos
+  const handleVerifyAndGenerate = async () => {
+    // 1. Validaciones de Campos
+    if (!name.trim() || name.trim().length < 3) {
+      setVerificationError("El nombre es muy corto.");
+      return;
+    }
+    if (!province) {
+      alert("Por favor selecciona una provincia.");
+      return;
+    }
+    if (!imagePreview) {
+      alert("Por favor sube una foto de portada.");
       return;
     }
 
+    // 2. Verificación de Duplicados
+    const inputNormalized = normalize(name);
+    const duplicate = existingDestinations.find(d => {
+        const dbName = normalize(d.name);
+        // Coincidencia exacta o muy cercana
+        if (dbName === inputNormalized) return true;
+        return false;
+    });
+
+    if (duplicate) {
+        setVerificationError(`El destino "${duplicate.name}" ya existe en la guía.`);
+        return;
+    }
+
+    // 3. Si todo está bien, procedemos a la IA
     const fullLocation = locationDetail ? `${locationDetail}, ${province}` : `${province}, ${region}`;
 
     setIsSubmitting(true);
     setAiStatus('Consultando experto IA...');
+    setVerificationError(null);
     
     try {
       const aiDetails = await generateDestinationDetails(name, fullLocation, category);
       
-      // Llenamos los estados con la respuesta de la IA
       setDescription(aiDetails.description || '');
       setFullDescription(aiDetails.fullDescription || '');
-      
-      // Convertimos arrays a strings para edición fácil en textarea
       setHighlightsStr(Array.isArray(aiDetails.highlights) ? aiDetails.highlights.join('\n') : '');
       setTravelTipsStr(Array.isArray(aiDetails.travelTips) ? aiDetails.travelTips.join('\n') : '');
 
-      // Cambiamos al paso de revisión
       setStep('review');
 
     } catch (error) {
       console.error(error);
-      // Si falla fatalmente, permitimos pasar manual
       setDescription(`Un hermoso lugar para visitar en ${province}.`);
       setStep('review');
     } finally {
@@ -159,7 +148,7 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
 
   // PASO 2: Guardar Final
   const handleFinalSubmit = async () => {
-      if (!description.trim() || !fullDescription.trim()) {
+      if (!description.trim()) {
           alert("Por favor completa la descripción del lugar.");
           return;
       }
@@ -167,7 +156,6 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
       setIsSaving(true);
       const fullLocation = locationDetail ? `${locationDetail}, ${province}` : `${province}, ${region}`;
 
-      // Reconstruir arrays desde los textareas
       const highlightsArray = highlightsStr.split('\n').filter(line => line.trim().length > 0);
       const tipsArray = travelTipsStr.split('\n').filter(line => line.trim().length > 0);
 
@@ -182,7 +170,7 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
         rating: 5.0,
         priceLevel: 'Variado',
         description: description,
-        fullDescription: fullDescription,
+        fullDescription: fullDescription || description,
         highlights: highlightsArray.length > 0 ? highlightsArray : ["Paisajes increíbles"],
         travelTips: tipsArray.length > 0 ? tipsArray : ["Llevar cámara", "Ropa cómoda"]
       };
@@ -212,45 +200,29 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
           {/* VISTA 1: DATOS BÁSICOS */}
           {step === 'basic' && (
             <div className="space-y-5 animate-in slide-in-from-left-4">
-                {/* VERIFICACIÓN */}
-                <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200">
+                
+                {/* Nombre */}
+                <div>
                     <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Nombre del Lugar</label>
-                    <div className="flex gap-2">
-                        <input
+                    <input
                         type="text"
                         placeholder="Ej: Laguna de Quilotoa"
-                        className={`flex-1 bg-white border rounded-xl p-3 outline-none focus:ring-2 transition-all ${verificationError ? 'border-red-300 focus:ring-red-200' : isVerified ? 'border-green-300 focus:ring-green-200' : 'border-gray-200 focus:ring-cyan-500'}`}
+                        className={`w-full bg-white border rounded-xl p-3 outline-none focus:ring-2 transition-all ${verificationError ? 'border-red-300 focus:ring-red-200' : 'border-gray-200 focus:ring-cyan-500'}`}
                         value={name}
                         onChange={handleNameChange}
-                        />
-                        {!isVerified && (
-                            <button 
-                                onClick={handleVerify}
-                                className="bg-stone-800 hover:bg-stone-700 text-white px-4 py-2 rounded-xl text-sm font-bold transition-colors flex items-center gap-2 shadow-sm active:scale-95"
-                            >
-                                <Search size={16} /> Verificar
-                            </button>
-                        )}
-                    </div>
-                    
+                    />
                     {verificationError && (
-                        <div className="bg-red-50 text-red-600 text-xs mt-3 p-3 rounded-xl flex items-start gap-2 font-bold animate-in slide-in-from-top-1 border border-red-100">
-                            <AlertTriangle size={16} className="shrink-0 mt-0.5" /> 
+                        <div className="bg-red-50 text-red-600 text-xs mt-2 p-2 rounded-lg flex items-center gap-2 font-bold animate-in slide-in-from-top-1 border border-red-100">
+                            <AlertTriangle size={14} className="shrink-0" /> 
                             <span>{verificationError}</span>
-                        </div>
-                    )}
-                    
-                    {isVerified && (
-                        <div className="bg-green-50 text-green-700 text-xs mt-3 p-3 rounded-xl flex items-center gap-2 font-bold animate-in slide-in-from-top-1 border border-green-100">
-                            <CheckCircle size={16} /> 
-                            <span>¡Disponible! Completa los datos.</span>
                         </div>
                     )}
                 </div>
 
-                <div className={`space-y-5 transition-all duration-500 ${!isVerified ? 'opacity-40 pointer-events-none grayscale' : 'opacity-100'}`}>
+                {/* Formulario Completo (Siempre visible) */}
+                <div className="space-y-5">
                     <div 
-                        onClick={() => isVerified && fileInputRef.current?.click()}
+                        onClick={() => fileInputRef.current?.click()}
                         className={`border-2 border-dashed rounded-2xl h-48 flex flex-col items-center justify-center cursor-pointer transition-colors relative overflow-hidden group ${
                         imagePreview ? 'border-transparent p-0' : 'border-gray-300 hover:border-cyan-500 bg-gray-50 hover:bg-cyan-50'
                         }`}
@@ -395,9 +367,9 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
 
           {/* BOTONES DE ACCIÓN */}
           <div className="pt-2">
-            {step === 'basic' && isVerified && (
+            {step === 'basic' && (
                 <button 
-                    onClick={handleGenerateData}
+                    onClick={handleVerifyAndGenerate}
                     disabled={isSubmitting}
                     className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white font-bold py-4 rounded-xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-3 disabled:opacity-70 disabled:cursor-not-allowed active:scale-95"
                 >
@@ -409,7 +381,7 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
                     ) : (
                     <>
                         <Wand2 size={20} />
-                        <span>Generar Datos con IA</span>
+                        <span>Verificar y Generar con IA</span>
                     </>
                     )}
                 </button>
