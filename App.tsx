@@ -30,7 +30,7 @@ import { Post, Story, Destination, User, EcuadorRegion, Suggestion, Chat, Notifi
 import { StorageService } from './services/storageService';
 import { AuthService } from './services/authService';
 import { resizeImage, isAdmin, getUserLevel, getNextLevel, BADGES, POINT_VALUES, getDailyChallenge, calculateDistance } from './utils';
-import { findNearbyPlaces } from './services/geminiService';
+import { findNearbyPlaces as findNearbyPlacesService } from './services/geminiService';
 import { db } from './services/firebase';
 import { ref, onValue } from 'firebase/database';
 import { Helmet } from 'react-helmet-async';
@@ -257,7 +257,7 @@ export default function App() {
       setExternalSearchResults([]);
       try {
           // La función findNearbyPlaces ahora está optimizada para buscar solo en 30km
-          const result = await findNearbyPlaces(userLocation.lat, userLocation.lng, query);
+          const result = await findNearbyPlacesService(userLocation.lat, userLocation.lng, query);
           setExternalSearchResults(result.places || []);
       } catch (error) {
           console.error("Error searching external", error);
@@ -310,7 +310,7 @@ export default function App() {
 
         try {
             // 2. Buscar lugares externos con IA (Prompt ajustado a 30km)
-            const aiResult = await findNearbyPlaces(latitude, longitude);
+            const aiResult = await findNearbyPlacesService(latitude, longitude);
             
             // 3. Fusionar resultados (Internos primero)
             const combinedPlaces = [...internalNearby, ...(aiResult.places || [])];
