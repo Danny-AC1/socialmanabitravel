@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { X, MapPin, Star, Info, Camera, Compass, Wallet, MessageSquare, Plus, Upload, Trash2, Edit2, ChevronLeft, ChevronRight, AlertCircle, Navigation, Map, Award, Download } from 'lucide-react';
+import { X, MapPin, Star, Info, Camera, Compass, Wallet, MessageSquare, Plus, Upload, Trash2, Edit2, ChevronLeft, ChevronRight, AlertCircle, Navigation, Map, Award, Download, Check, MinusCircle } from 'lucide-react';
 import { Destination } from '../types';
 import { resizeImage, downloadMedia } from '../utils';
 
@@ -15,6 +15,7 @@ interface TravelGuideModalProps {
   onDeletePhoto?: (photoUrl: string) => void;
   onDeleteDestination?: (id: string) => void;
   onToggleFeatured?: (id: string, isFeatured: boolean) => void;
+  onUpdateDestination?: (id: string, updates: Partial<Destination>) => void;
 }
 
 export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({ 
@@ -27,13 +28,18 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
   onChangeCover,
   onDeletePhoto,
   onDeleteDestination,
-  onToggleFeatured
+  onToggleFeatured,
+  onUpdateDestination
 }) => {
   const [userRating, setUserRating] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
   const [viewingImage, setViewingImage] = useState<string | null>(null);
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
+  
+  // States for Editing
+  const [editingSection, setEditingSection] = useState<'highlights' | 'tips' | null>(null);
+  const [tempList, setTempList] = useState<string[]>([]);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
@@ -80,7 +86,6 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
   const handleToggleFeature = () => {
       if(onToggleFeatured) {
           onToggleFeatured(destination.id, !destination.isFeatured);
-          // Opcional: Cerrar modal o mostrar feedback
           alert(destination.isFeatured ? "Quitado de destacados." : "¡Marcado como Destino Destacado en Inicio!");
       }
   };
@@ -90,6 +95,43 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
       if (viewingImage) {
           downloadMedia(viewingImage, `destination-${destination.name.replace(/\s+/g, '-')}-${Date.now()}.jpg`);
       }
+  };
+
+  // --- EDITING LOGIC ---
+
+  const startEditing = (section: 'highlights' | 'tips') => {
+      setTempList(section === 'highlights' ? (destination.highlights || []) : (destination.travelTips || []));
+      setEditingSection(section);
+  };
+
+  const cancelEditing = () => {
+      setEditingSection(null);
+      setTempList([]);
+  };
+
+  const saveEditing = async () => {
+      if (onUpdateDestination) {
+          const updates = editingSection === 'highlights' 
+              ? { highlights: tempList } 
+              : { travelTips: tempList };
+          await onUpdateDestination(destination.id, updates);
+      }
+      setEditingSection(null);
+  };
+
+  const handleItemChange = (index: number, value: string) => {
+      const newList = [...tempList];
+      newList[index] = value;
+      setTempList(newList);
+  };
+
+  const handleAddItem = () => {
+      setTempList([...tempList, ""]);
+  };
+
+  const handleRemoveItem = (index: number) => {
+      const newList = tempList.filter((_, i) => i !== index);
+      setTempList(newList);
   };
 
   // --- GALLERY NAVIGATION LOGIC ---
@@ -333,34 +375,102 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
                 </div>
               </section>
 
+              {/* LO IMPERDIBLE (Highlights) */}
               <section>
-                <h3 className="text-xl font-bold text-stone-800 mb-4 flex items-center gap-2">
-                  <Compass className="text-cyan-600" size={20} />
-                  Lo Imperdible
-                </h3>
-                <ul className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-1 gap-3">
-                  {destination.highlights && destination.highlights.map((item, idx) => (
-                    <li key={idx} className="flex items-start bg-white p-3 rounded-xl shadow-sm border border-stone-100">
-                      <div className="min-w-[6px] h-[6px] rounded-full bg-cyan-500 mt-2 mr-3" />
-                      <span className="text-stone-700 font-medium">{item}</span>
-                    </li>
-                  ))}
-                </ul>
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-xl font-bold text-stone-800 flex items-center gap-2">
+                        <Compass className="text-cyan-600" size={20} />
+                        Lo Imperdible
+                    </h3>
+                    {isAdminUser && editingSection !== 'highlights' && (
+                        <button onClick={() => startEditing('highlights')} className="text-cyan-600 hover:bg-cyan-50 p-1.5 rounded-full transition-colors">
+                            <Edit2 size={16} />
+                        </button>
+                    )}
+                </div>
+
+                {editingSection === 'highlights' ? (
+                    <div className="space-y-2 bg-stone-100 p-3 rounded-xl border border-stone-200">
+                        {tempList.map((item, idx) => (
+                            <div key={idx} className="flex gap-2">
+                                <input 
+                                    className="flex-1 text-sm p-2 rounded border border-gray-300"
+                                    value={item}
+                                    onChange={(e) => handleItemChange(idx, e.target.value)}
+                                />
+                                <button onClick={() => handleRemoveItem(idx)} className="text-red-500 hover:bg-red-100 p-2 rounded"><MinusCircle size={16} /></button>
+                            </div>
+                        ))}
+                        <button onClick={handleAddItem} className="w-full text-xs font-bold text-cyan-600 py-2 hover:bg-white rounded border border-dashed border-cyan-300 flex items-center justify-center gap-1">
+                            <Plus size={14} /> Agregar Item
+                        </button>
+                        <div className="flex gap-2 mt-2">
+                            <button onClick={cancelEditing} className="flex-1 bg-white text-gray-600 text-xs font-bold py-2 rounded shadow-sm border">Cancelar</button>
+                            <button onClick={saveEditing} className="flex-1 bg-cyan-600 text-white text-xs font-bold py-2 rounded shadow-sm">Guardar</button>
+                        </div>
+                    </div>
+                ) : (
+                    <ul className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-1 gap-3">
+                        {destination.highlights && destination.highlights.map((item, idx) => (
+                            <li key={idx} className="flex items-start bg-white p-3 rounded-xl shadow-sm border border-stone-100">
+                            <div className="min-w-[6px] h-[6px] rounded-full bg-cyan-500 mt-2 mr-3" />
+                            <span className="text-stone-700 font-medium">{item}</span>
+                            </li>
+                        ))}
+                        {(!destination.highlights || destination.highlights.length === 0) && (
+                            <li className="text-sm text-stone-400 italic">No hay puntos destacados.</li>
+                        )}
+                    </ul>
+                )}
               </section>
 
+              {/* TIPS DE VIAJERO */}
               <div className="bg-amber-50 border border-amber-100 rounded-2xl p-6">
-                <h3 className="font-bold text-amber-800 mb-4 flex items-center gap-2">
-                  <Star size={18} />
-                  Tips de Viajero
-                </h3>
-                <ul className="space-y-3">
-                  {destination.travelTips && destination.travelTips.map((tip, idx) => (
-                    <li key={idx} className="text-amber-900/80 text-sm flex gap-2">
-                      <span>•</span>
-                      {tip}
-                    </li>
-                  ))}
-                </ul>
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="font-bold text-amber-800 flex items-center gap-2">
+                        <Star size={18} />
+                        Tips de Viajero
+                    </h3>
+                    {isAdminUser && editingSection !== 'tips' && (
+                        <button onClick={() => startEditing('tips')} className="text-amber-800 hover:bg-amber-100 p-1.5 rounded-full transition-colors">
+                            <Edit2 size={16} />
+                        </button>
+                    )}
+                </div>
+
+                {editingSection === 'tips' ? (
+                    <div className="space-y-2 bg-white/50 p-3 rounded-xl border border-amber-200">
+                        {tempList.map((item, idx) => (
+                            <div key={idx} className="flex gap-2">
+                                <input 
+                                    className="flex-1 text-sm p-2 rounded border border-amber-200"
+                                    value={item}
+                                    onChange={(e) => handleItemChange(idx, e.target.value)}
+                                />
+                                <button onClick={() => handleRemoveItem(idx)} className="text-red-500 hover:bg-red-100 p-2 rounded"><MinusCircle size={16} /></button>
+                            </div>
+                        ))}
+                        <button onClick={handleAddItem} className="w-full text-xs font-bold text-amber-600 py-2 hover:bg-white rounded border border-dashed border-amber-300 flex items-center justify-center gap-1">
+                            <Plus size={14} /> Agregar Tip
+                        </button>
+                        <div className="flex gap-2 mt-2">
+                            <button onClick={cancelEditing} className="flex-1 bg-white text-gray-600 text-xs font-bold py-2 rounded shadow-sm border">Cancelar</button>
+                            <button onClick={saveEditing} className="flex-1 bg-amber-600 text-white text-xs font-bold py-2 rounded shadow-sm">Guardar</button>
+                        </div>
+                    </div>
+                ) : (
+                    <ul className="space-y-3">
+                        {destination.travelTips && destination.travelTips.map((tip, idx) => (
+                            <li key={idx} className="text-amber-900/80 text-sm flex gap-2">
+                            <span>•</span>
+                            {tip}
+                            </li>
+                        ))}
+                        {(!destination.travelTips || destination.travelTips.length === 0) && (
+                            <li className="text-sm text-amber-700/50 italic">No hay tips registrados.</li>
+                        )}
+                    </ul>
+                )}
               </div>
 
               <div className="bg-white border border-stone-200 rounded-2xl p-6 shadow-sm">

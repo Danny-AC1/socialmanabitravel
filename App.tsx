@@ -283,14 +283,14 @@ function App() {
         const { latitude, longitude } = position.coords;
         
         // 1. Buscar destinos internos cercanos primero
-        // Radio ajustado a 50km según solicitud
+        // Radio ajustado a 30km para mayor precisión
         const internalNearby = destinations
             .filter(d => d.coordinates)
             .map(d => {
                 const dist = calculateDistance(latitude, longitude, d.coordinates!.latitude, d.coordinates!.longitude);
                 return { ...d, dist };
             })
-            .filter(d => d.dist <= 50) 
+            .filter(d => d.dist <= 30) 
             .sort((a, b) => a.dist - b.dist)
             .map(d => ({
                 name: d.name,
@@ -304,7 +304,7 @@ function App() {
             }));
 
         try {
-            // 2. Buscar lugares externos con IA
+            // 2. Buscar lugares externos con IA (Prompt ajustado a 30km)
             const aiResult = await findNearbyPlaces(latitude, longitude);
             
             // 3. Fusionar resultados (Internos primero)
@@ -313,12 +313,12 @@ function App() {
             // Si después de todo no hay nada, mostrar mensaje pero mantener el modal
             if (combinedPlaces.length === 0) {
                  setNearbyData({ 
-                    text: "No se encontraron lugares en este momento. Intenta buscar por categoría específica.", 
+                    text: "No se encontraron lugares en un radio de 30km. Intenta buscar por categoría específica.", 
                     places: [] 
                 });
             } else {
                 setNearbyData({ 
-                    text: "Resultados encontrados", 
+                    text: "Resultados encontrados (30km a la redonda)", 
                     places: combinedPlaces 
                 });
             }
@@ -536,6 +536,13 @@ function App() {
       await StorageService.updateDestinationStatus(id, { isFeatured });
       if (selectedDestination && selectedDestination.id === id) {
           setSelectedDestination({ ...selectedDestination, isFeatured });
+      }
+  };
+
+  const handleUpdateDestination = async (id: string, updates: Partial<Destination>) => {
+      await StorageService.updateDestinationStatus(id, updates);
+      if (selectedDestination && selectedDestination.id === id) {
+          setSelectedDestination(prev => prev ? { ...prev, ...updates } : null);
       }
   };
 
@@ -1279,7 +1286,7 @@ function App() {
       {viewingPost && <PostViewer post={viewingPost} currentUserId={user.id} onClose={() => setViewingPost(null)} onLike={handleLike} onComment={handleComment} onShare={handleShare} onEdit={handleEditPost} onDelete={handleDeletePost} />}
       <ChatBot externalIsOpen={chatOpen} externalQuery={chatQuery} onCloseExternal={() => setChatOpen(false)} />
       {viewingStoryIndex !== null && <StoryViewer stories={viewingStoryList} initialStoryIndex={viewingStoryIndex} currentUserId={user.id} onClose={() => setViewingStoryIndex(null)} onMarkViewed={handleMarkStoryViewed} onDelete={handleDeleteStory} onEdit={handleEditStory} onLike={handleLikeStory} onShare={handleShare} />}
-      {selectedDestination && <TravelGuideModal destination={selectedDestination} onClose={() => setSelectedDestination(null)} onAskAI={handleAskAIFromGuide} onRate={handleRateDestination} onAddPhoto={handleAddPhotoToDestination} onChangeCover={handleChangeDestinationCover} onDeletePhoto={handleDeleteDestinationPhoto} onDeleteDestination={handleDeleteDestination} onToggleFeatured={handleToggleFeatured} isAdminUser={isAdminUser} />}
+      {selectedDestination && <TravelGuideModal destination={selectedDestination} onClose={() => setSelectedDestination(null)} onAskAI={handleAskAIFromGuide} onRate={handleRateDestination} onAddPhoto={handleAddPhotoToDestination} onChangeCover={handleChangeDestinationCover} onDeletePhoto={handleDeleteDestinationPhoto} onDeleteDestination={handleDeleteDestination} onToggleFeatured={handleToggleFeatured} onUpdateDestination={handleUpdateDestination} isAdminUser={isAdminUser} />}
     </div>
   );
 }

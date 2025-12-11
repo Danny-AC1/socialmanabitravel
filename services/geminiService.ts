@@ -238,8 +238,8 @@ export const findNearbyPlaces = async (lat: number, lng: number, specificQuery?:
     const roundedLng = lng.toFixed(3);
     const queryKey = specificQuery ? specificQuery.trim().toLowerCase().replace(/\s/g, '_') : 'general';
     const currentTime = new Date().toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' });
-    // Versión 7: Prompt ajustado para búsqueda nacional
-    const cacheKey = `nearby_v7_${queryKey}_${roundedLat}_${roundedLng}`; 
+    // Versión 8: Prompt ajustado para búsqueda de 30km
+    const cacheKey = `nearby_v8_${queryKey}_${roundedLat}_${roundedLng}`; 
     
     const cached = getFromCache(cacheKey);
     if (cached) return cached;
@@ -276,22 +276,26 @@ export const findNearbyPlaces = async (lat: number, lng: number, specificQuery?:
             `;
         } else {
             // PROMPT GENERAL (Botón "¿Qué hay cerca?")
+            // OPTIMIZACIÓN: Radio de 30km y mayor precisión
             prompt = `
-                Actúa como un radar turístico local usando Google Maps.
-                Busca lugares de interés, restaurantes, hoteles y servicios útiles en un radio de 50 KM alrededor de las coordenadas Lat: ${lat}, Lng: ${lng}.
+                Actúa como un radar turístico local de alta precisión usando Google Maps.
+                Busca lugares de interés, restaurantes, hoteles y servicios útiles en un radio EXACTO de 30 KM alrededor de las coordenadas Lat: ${lat}, Lng: ${lng}.
                 
-                Prioriza lugares turísticos y restaurantes populares.
-                Intenta encontrar al menos 5 lugares variados.
+                Instrucciones:
+                1. Busca dentro de los 30km a la redonda.
+                2. Prioriza lugares turísticos destacados y restaurantes populares.
+                3. Intenta encontrar al menos 10 lugares variados (Comida, Turismo, Hospedaje).
+                4. Sé preciso con la dirección y el estado "Abierto/Cerrado".
                 
                 IMPORTANTE: Devuelve SOLAMENTE un JSON válido con esta estructura:
                 {
                   "places": [
                     {
-                       "name": "Nombre exacto",
+                       "name": "Nombre oficial exacto",
                        "category": "TURISMO" o "COMIDA" o "HOSPEDAJE" o "SERVICIO",
                        "isOpen": true/false (Estimado según hora ${currentTime}),
                        "rating": 4.5 (Número),
-                       "address": "Dirección corta",
+                       "address": "Dirección específica (Calle/Sector, Ciudad)",
                        "description": "Qué es (ej: 'Playa popular', 'Restaurante de mariscos')"
                     }
                   ]

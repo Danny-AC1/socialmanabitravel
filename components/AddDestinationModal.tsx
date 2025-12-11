@@ -381,7 +381,7 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
                     ) : (
                     <>
                         <Wand2 size={20} />
-                        <span>Verificar y Generar con IA</span>
+                        <span>Verificar y Generar</span>
                     </>
                     )}
                 </button>
