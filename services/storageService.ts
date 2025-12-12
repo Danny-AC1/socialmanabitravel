@@ -349,6 +349,10 @@ export const StorageService = {
     await remove(ref(db, `chats/${chatId}/messages/${messageId}`));
   },
 
+  deleteChat: async (chatId: string) => {
+    await remove(ref(db, `chats/${chatId}`));
+  },
+
   editMessage: async (chatId: string, messageId: string, newText: string) => {
     const encryptedText = EncryptionService.encrypt(newText, chatId);
     await update(ref(db, `chats/${chatId}/messages/${messageId}`), {

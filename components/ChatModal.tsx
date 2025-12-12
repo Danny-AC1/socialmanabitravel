@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, Send, Lock, ChevronLeft, Search, Image as ImageIcon, 
   Mic, Paperclip, Trash2, Check, CheckCheck, 
-  Play, Video, Reply as ReplyIcon, Edit2
+  Play, Video, Reply as ReplyIcon, Edit2, AlertTriangle
 } from 'lucide-react';
 import { User, Chat, Message } from '../types';
 import { StorageService } from '../services/storageService';
@@ -42,6 +42,9 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null); // Mensaje presionado
   const [isEditingId, setIsEditingId] = useState<string | null>(null); // ID del mensaje siendo editado
   
+  // Chat Deletion (Long Press)
+  const [chatToDelete, setChatToDelete] = useState<Chat | null>(null);
+  
   // Recording States
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
@@ -52,6 +55,8 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<any>(null);
+  const prevChatIdRef = useRef<string | null>(null); // Para controlar el scroll inicial
+  const longPressTimerRef = useRef<any>(null); // Para detectar presión larga en chats
 
   // Swipe States (Solo para Reply)
   const [swipeStartX, setSwipeStartX] = useState<number | null>(null);
@@ -72,6 +77,35 @@ export const ChatModal: React.FC<ChatModalProps> = ({
       const mins = Math.floor(seconds / 60);
       const secs = seconds % 60;
       return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // --- LONG PRESS LOGIC FOR CHAT DELETION ---
+
+  const handleChatPressStart = (chat: Chat) => {
+      // Iniciar temporizador de 800ms
+      longPressTimerRef.current = setTimeout(() => {
+          setChatToDelete(chat);
+          // Vibración háptica si es soportada
+          if (navigator.vibrate) navigator.vibrate(50);
+      }, 800);
+  };
+
+  const handleChatPressEnd = () => {
+      // Cancelar temporizador si se suelta antes
+      if (longPressTimerRef.current) {
+          clearTimeout(longPressTimerRef.current);
+          longPressTimerRef.current = null;
+      }
+  };
+
+  const handleConfirmDeleteChat = async () => {
+      if (chatToDelete) {
+          await StorageService.deleteChat(chatToDelete.id);
+          if (activeChatId === chatToDelete.id) {
+              setActiveChatId(null);
+          }
+          setChatToDelete(null);
+      }
   };
 
   // --- EFFECTS ---
@@ -119,11 +153,23 @@ export const ChatModal: React.FC<ChatModalProps> = ({
     });
   }, [activeChatId]);
 
+  // SCROLL LOGIC
   useEffect(() => {
     if (messagesEndRef.current && !selectedMessage) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+      // Si cambiamos de chat (o es la primera carga), scroll instantáneo "auto" para aparecer abajo.
+      // Si ya estábamos en este chat y llega un mensaje, scroll suave "smooth".
+      const isChatSwitch = prevChatIdRef.current !== activeChatId;
+      
+      messagesEndRef.current.scrollIntoView({ 
+          behavior: isChatSwitch ? "auto" : "smooth" 
+      });
+      
+      // Actualizamos la referencia del chat actual solo si hay mensajes cargados
+      if (messages.length > 0) {
+          prevChatIdRef.current = activeChatId;
+      }
     }
-  }, [messages, mediaPreview, replyTo]);
+  }, [messages, mediaPreview, replyTo, activeChatId]);
 
   useEffect(() => {
     if (initialChatId) setActiveChatId(initialChatId);
@@ -286,8 +332,9 @@ export const ChatModal: React.FC<ChatModalProps> = ({
     setSwipedMessageId(msg.id);
   };
 
-  // Se eliminó la variable 'e' que no se usaba
-  const handleSwipeMove = () => {
+  // Modificación: Agregamos _e para cumplir con el tipo de evento esperado, 
+  // pero el guion bajo indica que no se usa intencionalmente.
+  const handleSwipeMove = (_e: React.TouchEvent) => {
     if (swipeStartX === null) return;
   };
 
@@ -315,6 +362,37 @@ export const ChatModal: React.FC<ChatModalProps> = ({
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-0 md:p-4 animate-in fade-in duration-200">
       <div className="bg-white w-full h-full md:max-w-5xl md:h-[90vh] md:rounded-3xl overflow-hidden shadow-2xl flex flex-row relative">
         
+        {/* DELETE CONFIRMATION OVERLAY */}
+        {chatToDelete && (
+            <div className="absolute inset-0 z-[80] bg-black/50 flex items-center justify-center p-4">
+                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
+                    <div className="p-6 text-center">
+                        <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4">
+                            <AlertTriangle className="text-red-600" size={24} />
+                        </div>
+                        <h3 className="text-lg font-bold text-gray-900 mb-2">¿Eliminar Chat?</h3>
+                        <p className="text-sm text-gray-500 mb-6">
+                            Se eliminará la conversación con <strong>{getChatPartner(chatToDelete)?.name}</strong>. Esta acción no se puede deshacer.
+                        </p>
+                        <div className="flex gap-3">
+                            <button 
+                                onClick={() => setChatToDelete(null)}
+                                className="flex-1 py-2.5 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition-colors"
+                            >
+                                Cancelar
+                            </button>
+                            <button 
+                                onClick={handleConfirmDeleteChat}
+                                className="flex-1 py-2.5 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-colors"
+                            >
+                                Eliminar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+
         {/* ACTION SHEET / MENU (Overlay when message selected) */}
         {selectedMessage && (
             <div className="absolute inset-0 z-50 bg-black/50 flex items-center justify-center p-4 animate-in fade-in duration-150" onClick={() => setSelectedMessage(null)}>
@@ -369,7 +447,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                    ))}
                 </div>
              ) : (
-                <div>
+                <div className="select-none">
                    {chats.map(chat => {
                       const partner = getChatPartner(chat);
                       if (!partner) return null;
@@ -380,10 +458,17 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                          <div 
                             key={chat.id} 
                             onClick={() => setActiveChatId(chat.id)}
-                            className={`flex items-center gap-3 p-3 cursor-pointer transition-colors border-b border-gray-50 last:border-0 hover:bg-gray-100 ${isActive ? 'bg-cyan-50' : ''}`}
+                            onMouseDown={() => handleChatPressStart(chat)}
+                            onMouseUp={handleChatPressEnd}
+                            onMouseLeave={handleChatPressEnd}
+                            onTouchStart={() => handleChatPressStart(chat)}
+                            onTouchEnd={handleChatPressEnd}
+                            onTouchMove={handleChatPressEnd} // Cancel if scrolling
+                            onContextMenu={(e) => e.preventDefault()} // Prevent native context menu
+                            className={`flex items-center gap-3 p-3 cursor-pointer transition-colors border-b border-gray-50 last:border-0 hover:bg-gray-100 active:bg-gray-200 ${isActive ? 'bg-cyan-50' : ''}`}
                          >
                             <div className="relative">
-                               <img src={partner.avatar} className="w-14 h-14 rounded-full object-cover" />
+                               <img src={partner.avatar} className="w-14 h-14 rounded-full object-cover pointer-events-none" />
                                <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white rounded-full"></div>
                             </div>
                             <div className="flex-1 min-w-0">
