@@ -45,38 +45,109 @@ export const resizeImage = (file: File, maxWidth = 800, quality = 0.7): Promise<
   });
 };
 
-export const validateVideo = (file: File): Promise<string> => {
+/**
+ * Comprime un video utilizando Canvas y MediaRecorder en el navegador.
+ * Reduce la resolución a HD (720p) si es necesario y optimiza el bitrate.
+ */
+const compressVideo = async (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
-    // 1. Check file size (limit to 10MB for base64 safety in this demo)
-    const MAX_SIZE_MB = 10;
-    if (file.size > MAX_SIZE_MB * 1024 * 1024) {
-      reject(new Error(`El video es demasiado pesado. Máximo ${MAX_SIZE_MB}MB.`));
-      return;
-    }
-
     const video = document.createElement('video');
-    video.preload = 'metadata';
+    video.src = URL.createObjectURL(file);
+    video.muted = true;
+    video.playsInline = true;
+    video.crossOrigin = "anonymous";
 
-    video.onloadedmetadata = function() {
-      window.URL.revokeObjectURL(video.src);
-      // 2. Check duration (Max 60 seconds)
-      if (video.duration > 60) {
-        reject(new Error("El video no puede durar más de 1 minuto."));
-        return;
-      }
+    video.onloadedmetadata = () => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
       
-      // Convert to Base64
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => {
-        resolve(reader.result as string);
+      // Calcular nueva resolución (Max 720p para optimizar peso)
+      const MAX_WIDTH = 1280; // 720p standard width
+      let width = video.videoWidth;
+      let height = video.videoHeight;
+
+      if (width > MAX_WIDTH) {
+        height = height * (MAX_WIDTH / width);
+        width = MAX_WIDTH;
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+
+      // Configurar el grabador
+      const stream = canvas.captureStream(30); // 30 FPS
+      // Intentar usar códecs eficientes
+      const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') 
+        ? 'video/webm;codecs=vp9' 
+        : 'video/webm';
+
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: mimeType,
+        videoBitsPerSecond: 2500000 // 2.5 Mbps (Buena calidad, peso controlado)
+      });
+
+      const chunks: Blob[] = [];
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data);
       };
-      reader.onerror = (error) => reject(error);
+
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(chunks, { type: 'video/webm' });
+        
+        // Convertir el Blob comprimido a Base64
+        const reader = new FileReader();
+        reader.readAsDataURL(blob);
+        reader.onloadend = () => {
+          URL.revokeObjectURL(video.src);
+          resolve(reader.result as string);
+        };
+        reader.onerror = (e) => reject(e);
+      };
+
+      mediaRecorder.start();
+
+      // Reproducir y dibujar
+      video.play();
+      
+      const drawFrame = () => {
+        if (video.paused || video.ended) {
+          mediaRecorder.stop();
+          return;
+        }
+        if (ctx) ctx.drawImage(video, 0, 0, width, height);
+        requestAnimationFrame(drawFrame);
+      };
+      
+      drawFrame();
     };
 
-    video.onerror = () => reject(new Error("Archivo de video inválido."));
+    video.onerror = () => reject(new Error("Error al leer el video para compresión."));
+  });
+};
 
-    video.src = URL.createObjectURL(file);
+export const validateVideo = async (file: File): Promise<string> => {
+  // Umbral para decidir si comprimir (30 MB)
+  const COMPRESSION_THRESHOLD = 30 * 1024 * 1024;
+
+  // Si el archivo es "pesado", iniciamos la compresión
+  if (file.size > COMPRESSION_THRESHOLD) {
+    console.log("Video grande detectado. Iniciando compresión inteligente...");
+    try {
+      return await compressVideo(file);
+    } catch (error) {
+      console.error("Fallo la compresión, intentando carga normal...", error);
+      // Fallback a carga normal si falla la compresión, aunque sea pesado
+    }
+  }
+
+  // Carga normal para videos ligeros o fallback
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => {
+      resolve(reader.result as string);
+    };
+    reader.onerror = (error) => reject(error);
   });
 };
 

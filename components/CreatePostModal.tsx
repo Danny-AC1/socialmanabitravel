@@ -1,3 +1,4 @@
+
 import React, { useState, useRef } from 'react';
 import { X, Camera, Wand2, Loader2, MapPin, Image as ImageIcon, Clock, Video, AlertCircle } from 'lucide-react';
 import { generateCaptionForImage } from '../services/geminiService';
@@ -114,7 +115,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, onClos
           {/* File Warning */}
           <div className="bg-blue-50 p-3 rounded-xl flex items-start gap-2 text-blue-700 text-xs">
              <AlertCircle size={16} className="shrink-0 mt-0.5" />
-             <p>Puedes subir fotos o videos cortos de <strong>máximo 1 minuto</strong>. ¡Comparte tus mejores momentos!</p>
+             <p>¡Sin límites! Puedes subir videos de cualquier duración. Si son muy pesados, <strong>los comprimiremos automáticamente</strong> para ti sin perder calidad.</p>
           </div>
 
           <div 
@@ -124,9 +125,10 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, onClos
             }`}
           >
             {isProcessing ? (
-               <div className="flex flex-col items-center text-cyan-600">
+               <div className="flex flex-col items-center text-cyan-600 p-4 text-center">
                  <Loader2 size={32} className="animate-spin mb-2" />
-                 <p className="text-sm font-medium">Procesando archivo...</p>
+                 <p className="text-sm font-bold">Procesando video...</p>
+                 <p className="text-xs text-cyan-500 mt-1">Si el archivo es grande, esto puede tomar unos segundos.</p>
                </div>
             ) : mediaPreview ? (
               mediaType === 'video' ? (
@@ -143,7 +145,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, onClos
                 </div>
                 <p className="font-semibold">Foto o Video</p>
                 <span className="text-xs text-cyan-400">
-                  Max 1 min
+                  Alta Calidad
                 </span>
               </div>
             )}

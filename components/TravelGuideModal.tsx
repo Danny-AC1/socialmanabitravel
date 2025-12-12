@@ -298,15 +298,14 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
                     Galería de la Comunidad
                     </h3>
                     
-                    {isAdminUser && (
-                        <button 
-                            onClick={() => fileInputRef.current?.click()}
-                            disabled={isUploading}
-                            className="text-xs bg-cyan-100 hover:bg-cyan-200 text-cyan-800 px-3 py-1.5 rounded-full font-bold flex items-center gap-1 transition-colors"
-                        >
-                            {isUploading ? "Subiendo..." : <><Plus size={14}/> Gestionar Fotos</>}
-                        </button>
-                    )}
+                    {/* Botón habilitado para todos los usuarios */}
+                    <button 
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isUploading}
+                        className="text-xs bg-cyan-100 hover:bg-cyan-200 text-cyan-800 px-3 py-1.5 rounded-full font-bold flex items-center gap-1 transition-colors"
+                    >
+                        {isUploading ? "Subiendo..." : <><Plus size={14}/> {isAdminUser ? "Gestionar Fotos" : "Agregar Foto"}</>}
+                    </button>
                     <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={(e) => handlePhotoUpload(e)} />
                 </div>
                 

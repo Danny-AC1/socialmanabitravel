@@ -47,14 +47,33 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
 
   if (!isOpen) return null;
 
+  // --- LÓGICA DE NORMALIZACIÓN AVANZADA ---
+
   const normalize = (text: string) => {
     return (text || "")
       .toString()
       .toLowerCase()
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "") 
-      .replace(/[^a-z0-9]/g, "")      
       .trim();
+  };
+
+  const isProtectedArea = (text: string) => {
+      const t = normalize(text);
+      return t.includes('parque nacional') || t.includes('reserva') || t.includes('refugio de vida');
+  };
+
+  const getCoreName = (text: string) => {
+      let cleaned = normalize(text);
+      // Palabras que son descriptores genéricos y NO parte del nombre propio único si están al inicio
+      // OJO: "Puerto" NO se quita porque "Puerto Cayo" es el nombre, "Cayo" solo no existe como tal.
+      const descriptorsToRemove = ['playa ', 'balneario ', 'sector ', 'comuna ', 'recinto '];
+      
+      descriptorsToRemove.forEach(d => {
+          if (cleaned.startsWith(d)) cleaned = cleaned.replace(d, '');
+      });
+      
+      return cleaned.trim();
   };
 
   const resetForm = () => {
@@ -105,17 +124,27 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
       return;
     }
 
-    // 2. Verificación de Duplicados
-    const inputNormalized = normalize(name);
+    // 2. Verificación de Duplicados Inteligente
     const duplicate = existingDestinations.find(d => {
-        const dbName = normalize(d.name);
-        // Coincidencia exacta o muy cercana
-        if (dbName === inputNormalized) return true;
-        return false;
+        // Regla A: Distinguir Áreas Protegidas vs Pueblos
+        // Ejemplo: "Parque Nacional Machalilla" != "Machalilla" (pueblo)
+        const inputIsProtected = isProtectedArea(name);
+        const dbIsProtected = isProtectedArea(d.name);
+
+        if (inputIsProtected !== dbIsProtected) {
+            return false; // Son entidades diferentes (una es parque, la otra no)
+        }
+
+        // Regla B: Comparar Nombres Núcleo
+        // Ejemplo: "Playa Puerto Cayo" == "Puerto Cayo"
+        const inputCore = getCoreName(name);
+        const dbCore = getCoreName(d.name);
+
+        return inputCore === dbCore;
     });
 
     if (duplicate) {
-        setVerificationError(`El destino "${duplicate.name}" ya existe en la guía.`);
+        setVerificationError(`Este lugar parece duplicado de: "${duplicate.name}". Intenta buscarlo en la lista.`);
         return;
     }
 
