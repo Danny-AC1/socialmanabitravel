@@ -18,7 +18,6 @@ import {
 } from '../services/geminiService';
 import { db } from '../services/firebase';
 import { ref, onValue } from 'firebase/database';
-import { resizeImage, validateVideo } from '../utils';
 
 interface ChatModalProps {
   isOpen: boolean;
@@ -26,6 +25,7 @@ interface ChatModalProps {
   currentUser: User;
   allUsers: User[];
   initialChatId?: string | null;
+  isIntegrated?: boolean; // Nueva prop para indicar que no es un modal flotante
 }
 
 export const ChatModal: React.FC<ChatModalProps> = ({ 
@@ -33,7 +33,8 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   onClose, 
   currentUser, 
   allUsers,
-  initialChatId 
+  initialChatId,
+  isIntegrated = false
 }) => {
   const [activeChatId, setActiveChatId] = useState<string | null>(initialChatId || null);
   const [chats, setChats] = useState<Chat[]>([]);
@@ -43,7 +44,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [mediaPreview, setMediaPreview] = useState<{type: 'image'|'video'|'audio', url: string} | null>(null);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
-  const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [isEditingId, setIsEditingId] = useState<string | null>(null);
   
   // AI States
@@ -54,12 +54,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   const [isTranscribing, setIsTranscribing] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const recordingTimerRef = useRef<any>(null);
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingDuration, setRecordingDuration] = useState(0);
 
   // --- AI LOGIC ---
 
@@ -79,7 +73,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   };
 
   const handleTranslate = async (msg: Message) => {
-    if (msg.translation) return; // Ya traducido
+    if (msg.translation) return;
     setIsTranslatingId(msg.id);
     const translation = await translateChatMessage(msg.text);
     await StorageService.updateMessageAI(activeChatId!, msg.id, { translation });
@@ -101,7 +95,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
       const data = snapshot.val();
       if (data) {
         const userChats = Object.values(data)
-          .filter((chat: any) => chat.participants.includes(currentUser.id))
+          .filter((chat: any) => chat.participants && chat.participants.includes(currentUser.id))
           .sort((a: any, b: any) => b.updatedAt - a.updatedAt) as Chat[];
         setChats(userChats);
       }
@@ -129,7 +123,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({
         const sorted = loadedMessages.sort((a, b) => a.timestamp - b.timestamp);
         setMessages(sorted);
         
-        // Disparar sugerencias si el último mensaje no es mío
         const lastMsg = sorted[sorted.length - 1];
         if (lastMsg && lastMsg.senderId !== currentUser.id) {
             processAISuggestions(lastMsg.text);
@@ -146,14 +139,12 @@ export const ChatModal: React.FC<ChatModalProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, mediaPreview, aiSuggestions, chatSummary]);
 
-  // Fix: defined filteredUsers to enable user search within the chat sidebar
   const filteredUsers = allUsers.filter(u => 
     u.id !== currentUser.id && 
     (u.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
      u.email.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
-  // Fix: implemented handleStartChat to correctly initiate or resume a conversation with a selected user
   const handleStartChat = async (userId: string) => {
     const chatId = await StorageService.initiateChat(currentUser.id, userId);
     setActiveChatId(chatId);
@@ -180,17 +171,12 @@ export const ChatModal: React.FC<ChatModalProps> = ({
     } : null;
 
     try {
-        const msgId = `msg_${Date.now()}`;
         await StorageService.sendMessage(activeChatId, currentUser.id, inputText, type, url, replyData);
-        
-        // Si enviamos audio, transcribirlo automáticamente para el receptor
         if (type === 'audio' && url) {
             setIsTranscribing(true);
             const transcription = await transcribeAudioMessage(url);
-            // Actualizar el mensaje recién enviado con la transcripción (el ID real viene de Firebase)
-            // Para simplicidad en este MVP, lo dejamos para el listener
+            // StorageService.updateMessageAI(...) 
         }
-
         setInputText('');
         setMediaPreview(null);
         setReplyTo(null);
@@ -203,22 +189,30 @@ export const ChatModal: React.FC<ChatModalProps> = ({
     return allUsers.find(u => u.id === partnerId);
   };
 
+  const modalClass = isIntegrated 
+    ? "w-full h-full flex flex-row relative overflow-hidden" 
+    : "fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-md p-0 md:p-4 animate-in fade-in duration-300";
+  
+  const innerClass = isIntegrated 
+    ? "w-full h-full flex flex-row relative" 
+    : "bg-white/95 backdrop-blur-2xl w-full h-full md:max-w-6xl md:h-[92vh] md:rounded-[2.5rem] overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.3)] flex flex-row relative border border-white/20";
+
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-md p-0 md:p-4 animate-in fade-in duration-300">
-      <div className="bg-white/95 backdrop-blur-2xl w-full h-full md:max-w-6xl md:h-[92vh] md:rounded-[2.5rem] overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.3)] flex flex-row relative border border-white/20">
+    <div className={modalClass}>
+      <div className={innerClass}>
         
-        {/* SIDEBAR (GLASSMorphism) */}
-        <div className={`w-full md:w-[380px] bg-white/50 border-r border-white/20 flex flex-col ${activeChatId ? 'hidden md:flex' : 'flex'}`}>
-          <div className="p-6 border-b border-gray-100/50 flex flex-col gap-4">
+        {/* SIDEBAR */}
+        <div className={`w-full md:w-[350px] bg-white/50 border-r border-stone-100 flex flex-col ${activeChatId && isIntegrated ? 'hidden md:flex' : activeChatId ? 'hidden md:flex' : 'flex'}`}>
+          <div className="p-5 border-b border-stone-100 flex flex-col gap-3">
              <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-black text-cyan-900 tracking-tight">Mensajes</h2>
-                <button onClick={onClose} className="md:hidden text-gray-500"><X size={24} /></button>
+                <h2 className="text-xl font-black text-cyan-900 tracking-tight">Viajeros</h2>
+                {!isIntegrated && <button onClick={onClose} className="md:hidden text-gray-500"><X size={24} /></button>}
              </div>
-             <div className="relative bg-gray-200/50 rounded-2xl h-12 flex items-center px-4 focus-within:ring-2 focus-within:ring-cyan-500 transition-all">
-                <Search size={18} className="text-gray-400 mr-2" />
+             <div className="relative bg-gray-100/50 rounded-xl h-10 flex items-center px-3 focus-within:ring-2 focus-within:ring-cyan-500 transition-all">
+                <Search size={16} className="text-gray-400 mr-2" />
                 <input 
-                   className="bg-transparent outline-none w-full text-sm font-medium"
-                   placeholder="Buscar viajeros o chats..."
+                   className="bg-transparent outline-none w-full text-xs font-medium"
+                   placeholder="Buscar viajeros..."
                    value={searchTerm}
                    onChange={(e) => setSearchTerm(e.target.value)}
                 />
@@ -228,9 +222,9 @@ export const ChatModal: React.FC<ChatModalProps> = ({
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
              {searchTerm ? (
                 filteredUsers.map(u => (
-                  <div key={u.id} onClick={() => { setActiveChatId(null); setTimeout(() => handleStartChat(u.id), 50); }} className="flex items-center gap-4 p-4 hover:bg-white rounded-2xl cursor-pointer transition-all active:scale-95">
-                     <img src={u.avatar} className="w-12 h-12 rounded-full object-cover ring-2 ring-cyan-100" />
-                     <div className="flex-1"><p className="font-bold text-gray-900">{u.name}</p><p className="text-xs text-stone-400">Toca para iniciar chat</p></div>
+                  <div key={u.id} onClick={() => handleStartChat(u.id)} className="flex items-center gap-3 p-3 hover:bg-white rounded-xl cursor-pointer transition-all">
+                     <img src={u.avatar} className="w-10 h-10 rounded-full object-cover ring-2 ring-cyan-50" />
+                     <div className="flex-1"><p className="font-bold text-sm text-gray-900">{u.name}</p><p className="text-[10px] text-stone-400">Iniciar chat</p></div>
                   </div>
                 ))
              ) : (
@@ -239,18 +233,17 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                   if (!partner) return null;
                   const isActive = activeChatId === chat.id;
                   return (
-                    <div key={chat.id} onClick={() => setActiveChatId(chat.id)} className={`flex items-center gap-4 p-4 cursor-pointer transition-all rounded-2xl group ${isActive ? 'bg-cyan-600 text-white shadow-lg' : 'hover:bg-white'}`}>
+                    <div key={chat.id} onClick={() => setActiveChatId(chat.id)} className={`flex items-center gap-3 p-3 cursor-pointer transition-all rounded-xl group ${isActive ? 'bg-cyan-600 text-white shadow-md' : 'hover:bg-white'}`}>
                        <div className="relative">
-                          <img src={partner.avatar} className="w-14 h-14 rounded-full object-cover shadow-sm" />
-                          <div className={`absolute bottom-0 right-0 w-4 h-4 rounded-full border-2 border-white bg-green-500`}></div>
+                          <img src={partner.avatar} className="w-12 h-12 rounded-full object-cover shadow-sm" />
+                          <div className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white bg-green-500`}></div>
                        </div>
                        <div className="flex-1 min-w-0">
-                          <div className="flex justify-between items-baseline mb-1">
-                             <h4 className={`font-bold truncate ${isActive ? 'text-white' : 'text-gray-900'}`}>{partner.name}</h4>
-                             <span className={`text-[10px] font-bold ${isActive ? 'text-cyan-100' : 'text-gray-400'}`}>12:45</span>
+                          <div className="flex justify-between items-baseline">
+                             <h4 className={`font-bold truncate text-sm ${isActive ? 'text-white' : 'text-gray-900'}`}>{partner.name}</h4>
                           </div>
-                          <p className={`text-xs truncate ${isActive ? 'text-cyan-50' : 'text-gray-500'}`}>
-                             {chat.lastMessage ? EncryptionService.decrypt(chat.lastMessage, chat.id) : 'Inicia el viaje...'}
+                          <p className={`text-[10px] truncate ${isActive ? 'text-cyan-50' : 'text-gray-500'}`}>
+                             {chat.lastMessage ? EncryptionService.decrypt(chat.lastMessage, chat.id) : 'Comenzar...'}
                           </p>
                        </div>
                     </div>
@@ -260,98 +253,67 @@ export const ChatModal: React.FC<ChatModalProps> = ({
           </div>
         </div>
 
-        {/* CHAT WINDOW (AI-First) */}
-        <div className={`flex-1 flex flex-col relative bg-[#f8fafc] ${!activeChatId ? 'hidden md:flex' : 'flex'}`}>
-           {activeChatId && getChatPartner(chats.find(c => c.id === activeChatId)!) ? (
+        {/* CHAT WINDOW */}
+        <div className={`flex-1 flex flex-col relative bg-stone-50/50 ${!activeChatId ? 'hidden md:flex' : 'flex'}`}>
+           {activeChatId ? (
               <>
-                 {/* AI HEADER */}
-                 <div className="bg-white/80 backdrop-blur-md p-4 px-6 flex items-center justify-between shadow-sm z-30 border-b border-gray-100">
-                    <div className="flex items-center gap-4">
-                       <button onClick={() => setActiveChatId(null)} className="md:hidden text-gray-500"><ChevronLeft size={28} /></button>
-                       <div className="relative">
-                          <img src={getChatPartner(chats.find(c => c.id === activeChatId)!)?.avatar} className="w-12 h-12 rounded-full object-cover" />
-                       </div>
+                 <div className="bg-white/80 backdrop-blur-md p-3 px-5 flex items-center justify-between shadow-sm z-30 border-b border-stone-100">
+                    <div className="flex items-center gap-3">
+                       <button onClick={() => setActiveChatId(null)} className="md:hidden text-stone-500"><ChevronLeft size={24} /></button>
+                       <img src={getChatPartner(chats.find(c => c.id === activeChatId)!)?.avatar} className="w-10 h-10 rounded-full object-cover" />
                        <div>
-                          <h3 className="font-bold text-gray-900 leading-tight">{getChatPartner(chats.find(c => c.id === activeChatId)!)?.name}</h3>
-                          <div className="flex items-center text-[10px] font-bold text-cyan-600 gap-1 tracking-wider uppercase">
-                             <Lock size={10} /> Conexión Segura E2E
+                          <h3 className="font-bold text-gray-900 text-sm leading-tight">{getChatPartner(chats.find(c => c.id === activeChatId)!)?.name}</h3>
+                          <div className="flex items-center text-[9px] font-bold text-cyan-600 gap-1 uppercase tracking-tighter">
+                             <Lock size={8} /> Cifrado E2E
                           </div>
                        </div>
                     </div>
-                    
-                    <div className="flex items-center gap-3">
-                       <button 
-                          onClick={handleSummarize}
-                          disabled={isSummarizing}
-                          className="bg-gradient-to-r from-purple-500 to-indigo-600 text-white p-2 px-4 rounded-xl flex items-center gap-2 text-xs font-bold shadow-lg hover:shadow-indigo-200 transition-all active:scale-95 disabled:opacity-50"
-                       >
-                          {isSummarizing ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-                          <span className="hidden sm:inline">IA Summary</span>
-                       </button>
-                    </div>
+                    <button 
+                       onClick={handleSummarize}
+                       disabled={isSummarizing}
+                       className="bg-indigo-600 text-white p-2 px-3 rounded-lg flex items-center gap-2 text-[10px] font-bold shadow-md hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-50"
+                    >
+                       {isSummarizing ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                       <span>Resumen IA</span>
+                    </button>
                  </div>
 
-                 {/* CHAT SUMMARY (Glassmorphism Overlay) */}
                  {chatSummary && (
-                    <div className="m-4 mb-0 bg-white/60 backdrop-blur-md border border-white p-4 rounded-2xl shadow-xl relative animate-in slide-in-from-top-4">
-                       <button onClick={() => setChatSummary(null)} className="absolute top-2 right-2 text-gray-400 hover:text-red-500"><X size={18} /></button>
-                       <h4 className="text-xs font-black text-indigo-600 uppercase tracking-widest mb-2 flex items-center gap-2">
-                          <History size={14} /> Resumen de IA
-                       </h4>
-                       <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-                          {chatSummary}
-                       </div>
+                    <div className="m-3 mb-0 bg-indigo-50/80 backdrop-blur-sm border border-indigo-100 p-3 rounded-xl shadow-sm relative animate-in slide-in-from-top-2">
+                       <button onClick={() => setChatSummary(null)} className="absolute top-1 right-1 text-indigo-300 hover:text-indigo-600"><X size={14} /></button>
+                       <h4 className="text-[10px] font-black text-indigo-700 uppercase tracking-widest mb-1">IA Smart Summary</h4>
+                       <div className="text-xs text-indigo-900 leading-tight whitespace-pre-wrap">{chatSummary}</div>
                     </div>
                  )}
 
-                 {/* MESSAGES LIST */}
-                 <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                    {messages.map((msg, idx) => {
+                 <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                    {messages.map((msg) => {
                        const isMe = msg.senderId === currentUser.id;
-                       const partner = getChatPartner(chats.find(c => c.id === activeChatId)!);
-                       
                        return (
-                          <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2`}>
-                             {!isMe && <img src={partner?.avatar} className="w-8 h-8 rounded-full mt-auto mr-2 border border-white shadow-sm" />}
-                             <div className={`max-w-[80%] relative group ${isMe ? 'items-end' : 'items-start'}`}>
-                                <div className={`p-3 rounded-2xl shadow-sm text-sm ${isMe ? 'bg-cyan-600 text-white rounded-br-none' : 'bg-white text-gray-800 rounded-bl-none border border-gray-100'}`}>
+                          <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-1`}>
+                             <div className={`max-w-[85%] ${isMe ? 'items-end' : 'items-start'}`}>
+                                <div className={`p-3 rounded-2xl text-xs ${isMe ? 'bg-cyan-600 text-white rounded-br-none' : 'bg-white text-gray-800 rounded-bl-none border border-stone-100 shadow-sm'}`}>
                                    {msg.replyTo && (
-                                      <div className={`mb-2 p-2 rounded-lg text-xs bg-black/5 border-l-4 ${isMe ? 'border-cyan-300' : 'border-cyan-600'}`}>
+                                      <div className={`mb-1 p-1.5 rounded-lg text-[10px] bg-black/5 border-l-2 ${isMe ? 'border-cyan-300' : 'border-cyan-600'}`}>
                                          <p className="font-bold opacity-70">{msg.replyTo.senderName}</p>
                                          <p className="truncate">{msg.replyTo.text}</p>
                                       </div>
                                    )}
-                                   
-                                   {msg.mediaUrl && msg.type === 'image' && <img src={msg.mediaUrl} className="rounded-xl mb-2 max-h-60 w-full object-cover" />}
-                                   
-                                   <p className="leading-relaxed">{msg.text}</p>
-
+                                   {msg.mediaUrl && msg.type === 'image' && <img src={msg.mediaUrl} className="rounded-lg mb-2 max-h-48 w-full object-cover" />}
+                                   <p className="leading-snug">{msg.text}</p>
                                    {msg.translation && (
-                                      <div className="mt-2 pt-2 border-t border-black/10 text-xs italic opacity-90 flex items-center gap-2">
-                                         <Globe size={12} /> {msg.translation}
-                                      </div>
-                                   )}
-
-                                   {msg.transcription && (
-                                      <div className="mt-2 bg-black/5 p-2 rounded-lg text-xs flex flex-col gap-1">
-                                         <span className="font-bold text-[10px] text-cyan-600 flex items-center gap-1"><Wand2 size={10} /> IA Transcribed</span>
-                                         <p className="leading-tight text-gray-600" dangerouslySetInnerHTML={{ __html: msg.transcription }} />
+                                      <div className="mt-2 pt-2 border-t border-black/5 text-[10px] italic opacity-80 flex items-center gap-1">
+                                         <Globe size={10} /> {msg.translation}
                                       </div>
                                    )}
                                 </div>
-
-                                <div className={`flex items-center gap-2 mt-1 px-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
-                                   <span className="text-[10px] text-gray-400 font-bold">12:30</span>
+                                <div className={`flex items-center gap-1 mt-1 px-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
                                    {!isMe && (
-                                      <button 
-                                         onClick={() => handleTranslate(msg)}
-                                         className="text-cyan-500 hover:text-cyan-700 p-1 rounded-full hover:bg-cyan-50 transition-colors"
-                                         title="Traducir con IA"
-                                      >
-                                         {isTranslatingId === msg.id ? <Loader2 size={12} className="animate-spin" /> : <Globe size={12} />}
+                                      <button onClick={() => handleTranslate(msg)} className="text-cyan-500 p-0.5" title="Traducir">
+                                         {isTranslatingId === msg.id ? <Loader2 size={10} className="animate-spin" /> : <Globe size={10} />}
                                       </button>
                                    )}
-                                   {isMe && <CheckCheck size={12} className="text-cyan-500" />}
+                                   {isMe && <CheckCheck size={10} className="text-cyan-500" />}
                                 </div>
                              </div>
                           </div>
@@ -360,58 +322,43 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                     <div ref={messagesEndRef} />
                  </div>
 
-                 {/* AI SUGGESTION CHIPS */}
                  {aiSuggestions.length > 0 && (
-                    <div className="px-6 py-2 flex gap-2 overflow-x-auto no-scrollbar animate-in slide-in-from-bottom-2">
+                    <div className="px-4 py-2 flex gap-2 overflow-x-auto no-scrollbar">
                        {aiSuggestions.map((sug, i) => (
-                          <button 
-                            key={i} 
-                            onClick={() => setInputText(sug.query)}
-                            className="bg-white border border-cyan-100 text-cyan-700 px-4 py-2 rounded-full text-xs font-bold shadow-sm hover:bg-cyan-50 transition-all flex items-center gap-2 whitespace-nowrap active:scale-95"
-                          >
-                             {sug.type === 'guide' && <MapIcon size={14} />}
-                             {sug.type === 'weather' && <Sun size={14} />}
-                             {sug.type === 'itinerary' && <Sparkles size={14} />}
+                          <button key={i} onClick={() => setInputText(sug.query)} className="bg-white border border-stone-200 text-stone-700 px-3 py-1.5 rounded-full text-[10px] font-bold shadow-sm hover:bg-stone-50 whitespace-nowrap active:scale-95 transition-all">
                              {sug.label}
                           </button>
                        ))}
-                       <button onClick={() => setAiSuggestions([])} className="text-gray-400 p-2"><X size={14} /></button>
+                       <button onClick={() => setAiSuggestions([])} className="text-stone-400 p-1"><X size={12} /></button>
                     </div>
                  )}
 
-                 {/* INPUT AREA (MODERN) */}
-                 <div className="p-4 bg-white border-t border-gray-100">
-                    <div className="max-w-4xl mx-auto relative flex items-end gap-2">
-                       <button className="p-3 text-gray-400 hover:text-cyan-600"><Paperclip size={24} /></button>
-                       
+                 <div className="p-3 bg-white border-t border-stone-100">
+                    <div className="flex items-end gap-2">
                        <div className="flex-1 relative">
                           <textarea 
-                             className="w-full bg-gray-50 border border-gray-100 rounded-[1.5rem] p-3 px-5 pr-12 outline-none focus:ring-2 focus:ring-cyan-500 transition-all min-h-[50px] max-h-32 resize-none text-sm font-medium"
+                             className="w-full bg-stone-50 border border-stone-100 rounded-xl p-2 px-4 outline-none focus:ring-1 focus:ring-cyan-500 transition-all min-h-[40px] max-h-24 resize-none text-xs font-medium"
                              placeholder="Escribe un mensaje..."
                              rows={1}
                              value={inputText}
                              onChange={e => setInputText(e.target.value)}
                              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSendMessage())}
                           />
-                          <button className="absolute right-3 bottom-3 text-gray-400 hover:text-cyan-600"><Mic size={20} /></button>
                        </div>
-
                        <button 
                           onClick={handleSendMessage}
-                          className="bg-cyan-600 text-white p-4 rounded-full shadow-lg hover:bg-cyan-700 active:scale-90 transition-all"
+                          className="bg-cyan-600 text-white p-2.5 rounded-full shadow-md hover:bg-cyan-700 active:scale-90 transition-all"
                        >
-                          <Send size={20} />
+                          <Send size={16} />
                        </button>
                     </div>
                  </div>
               </>
            ) : (
-              <div className="flex-1 flex flex-col items-center justify-center text-center p-10">
-                 <div className="bg-white p-8 rounded-full shadow-inner mb-6">
-                    <MessageSquare size={64} className="text-cyan-100" />
-                 </div>
-                 <h3 className="text-2xl font-black text-gray-800 mb-2">Tu Canvas de Viaje</h3>
-                 <p className="text-gray-500 max-w-sm">Selecciona un chat para iniciar una conversación segura y potenciada por IA.</p>
+              <div className="flex-1 flex flex-col items-center justify-center text-center p-10 opacity-40">
+                 <MessageSquare size={48} className="text-stone-300 mb-4" />
+                 <h3 className="text-lg font-bold text-stone-500">Tus Conversaciones</h3>
+                 <p className="text-xs text-stone-400 max-w-[200px]">Selecciona un viajero de la lista para planificar tu próxima aventura.</p>
               </div>
            )}
         </div>
