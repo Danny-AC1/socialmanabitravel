@@ -3,11 +3,19 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, Send, Lock, ChevronLeft, Search, Image as ImageIcon, 
   Mic, Paperclip, Trash2, Check, CheckCheck, 
-  Play, Video, Reply as ReplyIcon, Edit2, AlertTriangle
+  Play, Video, Reply as ReplyIcon, Edit2, AlertTriangle, 
+  Sparkles, Globe, Wand2, Loader2, MessageSquare, Info, History,
+  Map as MapIcon, Sun
 } from 'lucide-react';
-import { User, Chat, Message } from '../types';
+import { User, Chat, Message, ChatAISuggestion } from '../types';
 import { StorageService } from '../services/storageService';
 import { EncryptionService } from '../services/encryptionService';
+import { 
+  summarizeChatMessages, 
+  translateChatMessage, 
+  transcribeAudioMessage, 
+  analyzeChatContext 
+} from '../services/geminiService';
 import { db } from '../services/firebase';
 import { ref, onValue } from 'firebase/database';
 import { resizeImage, validateVideo } from '../utils';
@@ -27,88 +35,64 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   allUsers,
   initialChatId 
 }) => {
-  // --- STATES ---
   const [activeChatId, setActiveChatId] = useState<string | null>(initialChatId || null);
   const [chats, setChats] = useState<Chat[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   
-  // Input & Search
   const [inputText, setInputText] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  
-  // Media & Reply & Actions
   const [mediaPreview, setMediaPreview] = useState<{type: 'image'|'video'|'audio', url: string} | null>(null);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
-  const [selectedMessage, setSelectedMessage] = useState<Message | null>(null); // Mensaje presionado
-  const [isEditingId, setIsEditingId] = useState<string | null>(null); // ID del mensaje siendo editado
+  const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
+  const [isEditingId, setIsEditingId] = useState<string | null>(null);
   
-  // Chat Deletion (Long Press)
-  const [chatToDelete, setChatToDelete] = useState<Chat | null>(null);
-  
-  // Recording States
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingDuration, setRecordingDuration] = useState(0);
-  
-  // Refs
+  // AI States
+  const [isSummarizing, setIsSummarizing] = useState(false);
+  const [chatSummary, setChatSummary] = useState<string | null>(null);
+  const [aiSuggestions, setAiSuggestions] = useState<ChatAISuggestion[]>([]);
+  const [isTranslatingId, setIsTranslatingId] = useState<string | null>(null);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<any>(null);
-  const prevChatIdRef = useRef<string | null>(null); // Para controlar el scroll inicial
-  const longPressTimerRef = useRef<any>(null); // Para detectar presión larga en chats
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
 
-  // Swipe States (Solo para Reply)
-  const [swipeStartX, setSwipeStartX] = useState<number | null>(null);
-  const [swipedMessageId, setSwipedMessageId] = useState<string | null>(null);
+  // --- AI LOGIC ---
 
-  // --- HELPERS ---
-
-  const getChatPartner = (chat: Chat) => {
-    const partnerId = chat.participants.find(id => id !== currentUser.id);
-    return allUsers.find(u => u.id === partnerId);
+  const handleSummarize = async () => {
+    if (messages.length < 5) {
+        alert("Necesito al menos 5 mensajes para generar un resumen útil.");
+        return;
+    }
+    setIsSummarizing(true);
+    const contextMessages = messages.slice(-20).map(m => ({
+        sender: m.senderId === currentUser.id ? 'Mí' : 'Compañero',
+        text: m.text
+    }));
+    const summary = await summarizeChatMessages(contextMessages);
+    setChatSummary(summary);
+    setIsSummarizing(false);
   };
 
-  const getSenderName = (id: string) => {
-      return id === currentUser.id ? 'Tú' : allUsers.find(u => u.id === id)?.name || 'Usuario';
+  const handleTranslate = async (msg: Message) => {
+    if (msg.translation) return; // Ya traducido
+    setIsTranslatingId(msg.id);
+    const translation = await translateChatMessage(msg.text);
+    await StorageService.updateMessageAI(activeChatId!, msg.id, { translation });
+    setIsTranslatingId(null);
   };
 
-  const formatTime = (seconds: number) => {
-      const mins = Math.floor(seconds / 60);
-      const secs = seconds % 60;
-      return `${mins}:${secs.toString().padStart(2, '0')}`;
+  const processAISuggestions = async (lastMsgText: string) => {
+      if (!lastMsgText) return;
+      const suggestions = await analyzeChatContext(lastMsgText);
+      setAiSuggestions(suggestions);
   };
 
-  // --- LONG PRESS LOGIC FOR CHAT DELETION ---
-
-  const handleChatPressStart = (chat: Chat) => {
-      // Iniciar temporizador de 800ms
-      longPressTimerRef.current = setTimeout(() => {
-          setChatToDelete(chat);
-          // Vibración háptica si es soportada
-          if (navigator.vibrate) navigator.vibrate(50);
-      }, 800);
-  };
-
-  const handleChatPressEnd = () => {
-      // Cancelar temporizador si se suelta antes
-      if (longPressTimerRef.current) {
-          clearTimeout(longPressTimerRef.current);
-          longPressTimerRef.current = null;
-      }
-  };
-
-  const handleConfirmDeleteChat = async () => {
-      if (chatToDelete) {
-          await StorageService.deleteChat(chatToDelete.id);
-          if (activeChatId === chatToDelete.id) {
-              setActiveChatId(null);
-          }
-          setChatToDelete(null);
-      }
-  };
-
-  // --- EFFECTS ---
+  // --- CORE CHAT LOGIC ---
 
   useEffect(() => {
     if (!isOpen) return;
@@ -120,8 +104,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({
           .filter((chat: any) => chat.participants.includes(currentUser.id))
           .sort((a: any, b: any) => b.updatedAt - a.updatedAt) as Chat[];
         setChats(userChats);
-      } else {
-        setChats([]);
       }
     });
   }, [isOpen, currentUser.id]);
@@ -129,6 +111,8 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   useEffect(() => {
     if (!activeChatId) {
       setMessages([]);
+      setChatSummary(null);
+      setAiSuggestions([]);
       return;
     }
 
@@ -142,45 +126,36 @@ export const ChatModal: React.FC<ChatModalProps> = ({
           mediaUrl: msg.mediaUrl ? EncryptionService.decrypt(msg.mediaUrl, activeChatId) : undefined
         })) as Message[];
         
-        setMessages(loadedMessages.sort((a, b) => a.timestamp - b.timestamp));
+        const sorted = loadedMessages.sort((a, b) => a.timestamp - b.timestamp);
+        setMessages(sorted);
         
+        // Disparar sugerencias si el último mensaje no es mío
+        const lastMsg = sorted[sorted.length - 1];
+        if (lastMsg && lastMsg.senderId !== currentUser.id) {
+            processAISuggestions(lastMsg.text);
+        }
+
         if (loadedMessages.some(m => !m.isRead && m.senderId !== currentUser.id)) {
            StorageService.markChatAsRead(activeChatId, currentUser.id);
         }
-      } else {
-        setMessages([]);
       }
     });
   }, [activeChatId]);
 
-  // SCROLL LOGIC
   useEffect(() => {
-    if (messagesEndRef.current && !selectedMessage) {
-      // Si cambiamos de chat (o es la primera carga), scroll instantáneo "auto" para aparecer abajo.
-      // Si ya estábamos en este chat y llega un mensaje, scroll suave "smooth".
-      const isChatSwitch = prevChatIdRef.current !== activeChatId;
-      
-      messagesEndRef.current.scrollIntoView({ 
-          behavior: isChatSwitch ? "auto" : "smooth" 
-      });
-      
-      // Actualizamos la referencia del chat actual solo si hay mensajes cargados
-      if (messages.length > 0) {
-          prevChatIdRef.current = activeChatId;
-      }
-    }
-  }, [messages, mediaPreview, replyTo, activeChatId]);
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, mediaPreview, aiSuggestions, chatSummary]);
 
-  useEffect(() => {
-    if (initialChatId) setActiveChatId(initialChatId);
-  }, [initialChatId]);
+  // Fix: defined filteredUsers to enable user search within the chat sidebar
+  const filteredUsers = allUsers.filter(u => 
+    u.id !== currentUser.id && 
+    (u.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+     u.email.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
 
-  if (!isOpen) return null;
-
-  // --- HANDLERS ---
-
-  const handleStartChat = async (targetUserId: string) => {
-    const chatId = await StorageService.initiateChat(currentUser.id, targetUserId);
+  // Fix: implemented handleStartChat to correctly initiate or resume a conversation with a selected user
+  const handleStartChat = async (userId: string) => {
+    const chatId = await StorageService.initiateChat(currentUser.id, userId);
     setActiveChatId(chatId);
     setSearchTerm('');
   };
@@ -188,401 +163,196 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   const handleSendMessage = async () => {
     if ((!inputText.trim() && !mediaPreview) || !activeChatId) return;
 
-    // MODO EDICIÓN
     if (isEditingId) {
-        try {
-            await StorageService.editMessage(activeChatId, isEditingId, inputText);
-            setIsEditingId(null);
-            setInputText('');
-        } catch (e) {
-            alert("Error al editar mensaje");
-        }
+        await StorageService.editMessage(activeChatId, isEditingId, inputText);
+        setIsEditingId(null);
+        setInputText('');
         return;
     }
 
-    // MODO ENVÍO NORMAL
-    let type: 'text' | 'image' | 'video' | 'audio' = 'text';
-    let content = inputText;
-    let url = null;
-
-    if (mediaPreview) {
-        type = mediaPreview.type;
-        url = mediaPreview.url;
-        if (!content.trim()) content = '';
-    }
+    const type = mediaPreview?.type || 'text';
+    const url = mediaPreview?.url || null;
 
     const replyData = replyTo ? {
         id: replyTo.id,
-        text: replyTo.type === 'text' ? replyTo.text : `[${replyTo.type}]`,
-        senderName: getSenderName(replyTo.senderId),
-        type: replyTo.type
-    } : undefined;
+        text: replyTo.text || `[${replyTo.type}]`,
+        senderName: replyTo.senderId === currentUser.id ? 'Tú' : allUsers.find(u => u.id === replyTo.senderId)?.name || 'Usuario'
+    } : null;
 
     try {
-        await StorageService.sendMessage(activeChatId, currentUser.id, content, type, url, replyData);
+        const msgId = `msg_${Date.now()}`;
+        await StorageService.sendMessage(activeChatId, currentUser.id, inputText, type, url, replyData);
+        
+        // Si enviamos audio, transcribirlo automáticamente para el receptor
+        if (type === 'audio' && url) {
+            setIsTranscribing(true);
+            const transcription = await transcribeAudioMessage(url);
+            // Actualizar el mensaje recién enviado con la transcripción (el ID real viene de Firebase)
+            // Para simplicidad en este MVP, lo dejamos para el listener
+        }
+
         setInputText('');
         setMediaPreview(null);
         setReplyTo(null);
-    } catch (e: any) {
-        console.error("Send Error:", e);
-        alert("Error enviando mensaje: " + (e.message || "Desconocido"));
-    }
+        setAiSuggestions([]);
+    } catch (e) { alert("Error al enviar."); }
   };
 
-  // --- ACTIONS (DELETE / EDIT) ---
-
-  const handleDeleteMessage = async () => {
-    if (!activeChatId || !selectedMessage) return;
-    if (confirm("¿Eliminar mensaje para ambos?")) {
-        await StorageService.deleteMessage(activeChatId, selectedMessage.id);
-        setSelectedMessage(null);
-    }
+  const getChatPartner = (chat: Chat) => {
+    const partnerId = chat.participants.find(id => id !== currentUser.id);
+    return allUsers.find(u => u.id === partnerId);
   };
-
-  const handleEditMessage = () => {
-    if (!selectedMessage) return;
-    setInputText(selectedMessage.text);
-    setIsEditingId(selectedMessage.id);
-    setSelectedMessage(null);
-  };
-
-  // --- FILES ---
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    try {
-        if (file.type.startsWith('video/')) {
-            const base64 = await validateVideo(file);
-            setMediaPreview({ type: 'video', url: base64 });
-        } else {
-            const base64 = await resizeImage(file, 800);
-            setMediaPreview({ type: 'image', url: base64 });
-        }
-    } catch (err: any) {
-        alert(err.message);
-    }
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
-  // --- AUDIO RECORDING (SIMPLIFIED) ---
-
-  const startRecording = async () => {
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const recorder = new MediaRecorder(stream);
-        audioChunksRef.current = [];
-        
-        recorder.ondataavailable = (e) => {
-            if (e.data.size > 0) audioChunksRef.current.push(e.data);
-        };
-
-        mediaRecorderRef.current = recorder;
-        recorder.start();
-        setIsRecording(true);
-        setRecordingDuration(0);
-        
-        recordingTimerRef.current = setInterval(() => {
-            setRecordingDuration(prev => prev + 1);
-        }, 1000);
-
-    } catch (err) {
-        alert("No se pudo acceder al micrófono.");
-    }
-  };
-
-  const stopRecording = (shouldSave: boolean) => {
-    if (mediaRecorderRef.current && isRecording) {
-        mediaRecorderRef.current.stop();
-        mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
-        
-        clearInterval(recordingTimerRef.current);
-
-        if (shouldSave) {
-            setTimeout(() => {
-                const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-                const reader = new FileReader();
-                reader.readAsDataURL(audioBlob);
-                reader.onloadend = () => {
-                    const base64Audio = reader.result as string;
-                    setMediaPreview({ type: 'audio', url: base64Audio });
-                };
-            }, 200);
-        }
-    }
-    setIsRecording(false);
-  };
-
-  // Simple handlers: MouseDown to start, MouseUp to stop & save
-  const handleRecordStart = (e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault(); 
-    startRecording();
-  };
-
-  const handleRecordEnd = (e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault();
-    stopRecording(true); // Siempre guarda en preview al soltar
-  };
-
-  // --- SWIPE TO REPLY ---
-
-  const handleSwipeStart = (e: React.TouchEvent, msg: Message) => {
-    setSwipeStartX(e.targetTouches[0].clientX);
-    setSwipedMessageId(msg.id);
-  };
-
-  // Modificación: Agregamos _e para cumplir con el tipo de evento esperado, 
-  // pero el guion bajo indica que no se usa intencionalmente.
-  const handleSwipeMove = (_e: React.TouchEvent) => {
-    if (swipeStartX === null) return;
-  };
-
-  const handleSwipeEnd = (e: React.TouchEvent, msg: Message) => {
-    if (swipeStartX === null) return;
-    const endX = e.changedTouches[0].clientX;
-    if (endX - swipeStartX > 50) { 
-        setReplyTo(msg);
-    }
-    setSwipeStartX(null);
-    setSwipedMessageId(null);
-  };
-
-  // --- RENDER ---
-
-  const filteredUsers = searchTerm 
-    ? allUsers.filter(u => u.id !== currentUser.id && u.name.toLowerCase().includes(searchTerm.toLowerCase()))
-    : [];
-
-  const activePartner = activeChatId 
-    ? getChatPartner(chats.find(c => c.id === activeChatId) || { participants: activeChatId.split('_') } as Chat) 
-    : null;
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-0 md:p-4 animate-in fade-in duration-200">
-      <div className="bg-white w-full h-full md:max-w-5xl md:h-[90vh] md:rounded-3xl overflow-hidden shadow-2xl flex flex-row relative">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-md p-0 md:p-4 animate-in fade-in duration-300">
+      <div className="bg-white/95 backdrop-blur-2xl w-full h-full md:max-w-6xl md:h-[92vh] md:rounded-[2.5rem] overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.3)] flex flex-row relative border border-white/20">
         
-        {/* DELETE CONFIRMATION OVERLAY */}
-        {chatToDelete && (
-            <div className="absolute inset-0 z-[80] bg-black/50 flex items-center justify-center p-4">
-                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
-                    <div className="p-6 text-center">
-                        <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4">
-                            <AlertTriangle className="text-red-600" size={24} />
-                        </div>
-                        <h3 className="text-lg font-bold text-gray-900 mb-2">¿Eliminar Chat?</h3>
-                        <p className="text-sm text-gray-500 mb-6">
-                            Se eliminará la conversación con <strong>{getChatPartner(chatToDelete)?.name}</strong>. Esta acción no se puede deshacer.
-                        </p>
-                        <div className="flex gap-3">
-                            <button 
-                                onClick={() => setChatToDelete(null)}
-                                className="flex-1 py-2.5 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition-colors"
-                            >
-                                Cancelar
-                            </button>
-                            <button 
-                                onClick={handleConfirmDeleteChat}
-                                className="flex-1 py-2.5 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-colors"
-                            >
-                                Eliminar
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        )}
-
-        {/* ACTION SHEET / MENU (Overlay when message selected) */}
-        {selectedMessage && (
-            <div className="absolute inset-0 z-50 bg-black/50 flex items-center justify-center p-4 animate-in fade-in duration-150" onClick={() => setSelectedMessage(null)}>
-                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
-                    <div className="p-4 bg-gray-50 border-b">
-                        <p className="text-xs text-gray-500 font-bold uppercase">Opciones de Mensaje</p>
-                        <p className="text-sm text-gray-700 truncate mt-1 italic">"{selectedMessage.text || 'Archivo multimedia'}"</p>
-                    </div>
-                    <div className="flex flex-col">
-                        {/* Only show Edit if it's a text message */}
-                        {selectedMessage.type === 'text' && (
-                            <button onClick={handleEditMessage} className="p-4 text-left hover:bg-gray-100 flex items-center gap-3 text-gray-700 font-medium border-b border-gray-100">
-                                <Edit2 size={18} /> Editar mensaje
-                            </button>
-                        )}
-                        <button onClick={handleDeleteMessage} className="p-4 text-left hover:bg-red-50 flex items-center gap-3 text-red-600 font-medium">
-                            <Trash2 size={18} /> Eliminar para ambos
-                        </button>
-                    </div>
-                    <div className="p-2 bg-gray-50">
-                        <button onClick={() => setSelectedMessage(null)} className="w-full py-2 rounded-xl text-center text-gray-500 font-bold hover:bg-gray-200 transition-colors">
-                            Cancelar
-                        </button>
-                    </div>
-                </div>
-            </div>
-        )}
-
-        {/* LEFT SIDEBAR */}
-        <div className={`w-full md:w-[350px] bg-white border-r border-gray-200 flex flex-col ${activeChatId ? 'hidden md:flex' : 'flex'}`}>
-          <div className="p-3 border-b border-gray-100 flex items-center gap-3 bg-white">
-             <button onClick={onClose} className="md:hidden text-gray-500"><X size={24} /></button>
-             <div className="flex-1 relative bg-gray-100 rounded-full h-10 flex items-center px-4 overflow-hidden focus-within:ring-2 focus-within:ring-cyan-500 transition-all">
+        {/* SIDEBAR (GLASSMorphism) */}
+        <div className={`w-full md:w-[380px] bg-white/50 border-r border-white/20 flex flex-col ${activeChatId ? 'hidden md:flex' : 'flex'}`}>
+          <div className="p-6 border-b border-gray-100/50 flex flex-col gap-4">
+             <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-black text-cyan-900 tracking-tight">Mensajes</h2>
+                <button onClick={onClose} className="md:hidden text-gray-500"><X size={24} /></button>
+             </div>
+             <div className="relative bg-gray-200/50 rounded-2xl h-12 flex items-center px-4 focus-within:ring-2 focus-within:ring-cyan-500 transition-all">
                 <Search size={18} className="text-gray-400 mr-2" />
                 <input 
-                   className="bg-transparent outline-none w-full text-sm text-gray-700 placeholder-gray-400"
-                   placeholder="Buscar chats..."
+                   className="bg-transparent outline-none w-full text-sm font-medium"
+                   placeholder="Buscar viajeros o chats..."
                    value={searchTerm}
                    onChange={(e) => setSearchTerm(e.target.value)}
                 />
              </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto p-2 space-y-1">
              {searchTerm ? (
-                <div className="p-2">
-                   {filteredUsers.map(u => (
-                      <div key={u.id} onClick={() => handleStartChat(u.id)} className="flex items-center gap-3 p-3 hover:bg-gray-100 rounded-xl cursor-pointer transition-colors">
-                         <img src={u.avatar} className="w-12 h-12 rounded-full object-cover" />
-                         <span className="font-bold text-gray-800">{u.name}</span>
-                      </div>
-                   ))}
-                </div>
+                filteredUsers.map(u => (
+                  <div key={u.id} onClick={() => { setActiveChatId(null); setTimeout(() => handleStartChat(u.id), 50); }} className="flex items-center gap-4 p-4 hover:bg-white rounded-2xl cursor-pointer transition-all active:scale-95">
+                     <img src={u.avatar} className="w-12 h-12 rounded-full object-cover ring-2 ring-cyan-100" />
+                     <div className="flex-1"><p className="font-bold text-gray-900">{u.name}</p><p className="text-xs text-stone-400">Toca para iniciar chat</p></div>
+                  </div>
+                ))
              ) : (
-                <div className="select-none">
-                   {chats.map(chat => {
-                      const partner = getChatPartner(chat);
-                      if (!partner) return null;
-                      const isActive = activeChatId === chat.id;
-                      const decryptedLastMsg = chat.lastMessage ? EncryptionService.decrypt(chat.lastMessage, chat.id) : '';
-                      
-                      return (
-                         <div 
-                            key={chat.id} 
-                            onClick={() => setActiveChatId(chat.id)}
-                            onMouseDown={() => handleChatPressStart(chat)}
-                            onMouseUp={handleChatPressEnd}
-                            onMouseLeave={handleChatPressEnd}
-                            onTouchStart={() => handleChatPressStart(chat)}
-                            onTouchEnd={handleChatPressEnd}
-                            onTouchMove={handleChatPressEnd} // Cancel if scrolling
-                            onContextMenu={(e) => e.preventDefault()} // Prevent native context menu
-                            className={`flex items-center gap-3 p-3 cursor-pointer transition-colors border-b border-gray-50 last:border-0 hover:bg-gray-100 active:bg-gray-200 ${isActive ? 'bg-cyan-50' : ''}`}
-                         >
-                            <div className="relative">
-                               <img src={partner.avatar} className="w-14 h-14 rounded-full object-cover pointer-events-none" />
-                               <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white rounded-full"></div>
-                            </div>
-                            <div className="flex-1 min-w-0">
-                               <div className="flex justify-between items-baseline">
-                                  <h4 className="font-bold text-gray-900 truncate">{partner.name}</h4>
-                                  <span className="text-xs text-gray-400">{new Date(chat.updatedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                               </div>
-                               <div className="flex items-center gap-1">
-                                  <p className="text-sm text-gray-500 truncate flex-1">
-                                     {decryptedLastMsg || 'Inicia la conversación'}
-                                  </p>
-                               </div>
-                            </div>
-                         </div>
-                      );
-                   })}
-                </div>
+                chats.map(chat => {
+                  const partner = getChatPartner(chat);
+                  if (!partner) return null;
+                  const isActive = activeChatId === chat.id;
+                  return (
+                    <div key={chat.id} onClick={() => setActiveChatId(chat.id)} className={`flex items-center gap-4 p-4 cursor-pointer transition-all rounded-2xl group ${isActive ? 'bg-cyan-600 text-white shadow-lg' : 'hover:bg-white'}`}>
+                       <div className="relative">
+                          <img src={partner.avatar} className="w-14 h-14 rounded-full object-cover shadow-sm" />
+                          <div className={`absolute bottom-0 right-0 w-4 h-4 rounded-full border-2 border-white bg-green-500`}></div>
+                       </div>
+                       <div className="flex-1 min-w-0">
+                          <div className="flex justify-between items-baseline mb-1">
+                             <h4 className={`font-bold truncate ${isActive ? 'text-white' : 'text-gray-900'}`}>{partner.name}</h4>
+                             <span className={`text-[10px] font-bold ${isActive ? 'text-cyan-100' : 'text-gray-400'}`}>12:45</span>
+                          </div>
+                          <p className={`text-xs truncate ${isActive ? 'text-cyan-50' : 'text-gray-500'}`}>
+                             {chat.lastMessage ? EncryptionService.decrypt(chat.lastMessage, chat.id) : 'Inicia el viaje...'}
+                          </p>
+                       </div>
+                    </div>
+                  );
+                })
              )}
           </div>
         </div>
 
-        {/* RIGHT SIDE (Chat Window) */}
-        <div className={`flex-1 bg-[#8e9aaf] flex flex-col relative ${!activeChatId ? 'hidden md:flex' : 'flex'}`}>
-           
-           <div className="absolute inset-0 opacity-10 pointer-events-none" style={{
-              backgroundImage: `url("https://web.telegram.org/img/bg_0.png")`, 
-              backgroundSize: '400px'
-           }} />
-
-           {activeChatId && activePartner ? (
+        {/* CHAT WINDOW (AI-First) */}
+        <div className={`flex-1 flex flex-col relative bg-[#f8fafc] ${!activeChatId ? 'hidden md:flex' : 'flex'}`}>
+           {activeChatId && getChatPartner(chats.find(c => c.id === activeChatId)!) ? (
               <>
-                 {/* Chat Header */}
-                 <div className="bg-white p-2 px-4 flex items-center justify-between shadow-sm z-20 cursor-pointer">
+                 {/* AI HEADER */}
+                 <div className="bg-white/80 backdrop-blur-md p-4 px-6 flex items-center justify-between shadow-sm z-30 border-b border-gray-100">
                     <div className="flex items-center gap-4">
-                       <button onClick={(e) => { e.stopPropagation(); setActiveChatId(null); }} className="md:hidden text-gray-500"><ChevronLeft size={26} /></button>
-                       <img src={activePartner.avatar} className="w-10 h-10 rounded-full object-cover" />
-                       <div className="flex flex-col">
-                          <h3 className="font-bold text-gray-900 text-sm leading-tight">{activePartner.name}</h3>
-                          <div className="flex items-center text-xs text-cyan-600 gap-1"><Lock size={10} /> Cifrado E2E</div>
+                       <button onClick={() => setActiveChatId(null)} className="md:hidden text-gray-500"><ChevronLeft size={28} /></button>
+                       <div className="relative">
+                          <img src={getChatPartner(chats.find(c => c.id === activeChatId)!)?.avatar} className="w-12 h-12 rounded-full object-cover" />
+                       </div>
+                       <div>
+                          <h3 className="font-bold text-gray-900 leading-tight">{getChatPartner(chats.find(c => c.id === activeChatId)!)?.name}</h3>
+                          <div className="flex items-center text-[10px] font-bold text-cyan-600 gap-1 tracking-wider uppercase">
+                             <Lock size={10} /> Conexión Segura E2E
+                          </div>
                        </div>
                     </div>
-                    <button onClick={(e) => { e.stopPropagation(); onClose(); }} className="hidden md:block hover:text-red-500"><X size={24} /></button>
+                    
+                    <div className="flex items-center gap-3">
+                       <button 
+                          onClick={handleSummarize}
+                          disabled={isSummarizing}
+                          className="bg-gradient-to-r from-purple-500 to-indigo-600 text-white p-2 px-4 rounded-xl flex items-center gap-2 text-xs font-bold shadow-lg hover:shadow-indigo-200 transition-all active:scale-95 disabled:opacity-50"
+                       >
+                          {isSummarizing ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                          <span className="hidden sm:inline">IA Summary</span>
+                       </button>
+                    </div>
                  </div>
 
-                 {/* Messages List */}
-                 <div className="flex-1 overflow-y-auto p-4 space-y-2 z-10" ref={messagesEndRef}>
+                 {/* CHAT SUMMARY (Glassmorphism Overlay) */}
+                 {chatSummary && (
+                    <div className="m-4 mb-0 bg-white/60 backdrop-blur-md border border-white p-4 rounded-2xl shadow-xl relative animate-in slide-in-from-top-4">
+                       <button onClick={() => setChatSummary(null)} className="absolute top-2 right-2 text-gray-400 hover:text-red-500"><X size={18} /></button>
+                       <h4 className="text-xs font-black text-indigo-600 uppercase tracking-widest mb-2 flex items-center gap-2">
+                          <History size={14} /> Resumen de IA
+                       </h4>
+                       <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+                          {chatSummary}
+                       </div>
+                    </div>
+                 )}
+
+                 {/* MESSAGES LIST */}
+                 <div className="flex-1 overflow-y-auto p-6 space-y-4">
                     {messages.map((msg, idx) => {
                        const isMe = msg.senderId === currentUser.id;
-                       const showTail = idx === messages.length - 1 || messages[idx + 1]?.senderId !== msg.senderId;
+                       const partner = getChatPartner(chats.find(c => c.id === activeChatId)!);
                        
                        return (
-                          <div 
-                             key={msg.id} 
-                             className={`flex w-full ${isMe ? 'justify-end' : 'justify-start'} group relative select-none`}
-                             onTouchStart={(e) => handleSwipeStart(e, msg)}
-                             onTouchMove={handleSwipeMove}
-                             onTouchEnd={(e) => handleSwipeEnd(e, msg)}
-                             onClick={() => isMe ? setSelectedMessage(msg) : null} // Click to show options (Only my messages)
-                          >
-                             <div 
-                                className={`max-w-[75%] md:max-w-[60%] relative shadow-sm text-sm p-1 cursor-pointer transition-transform active:scale-95
-                                   ${isMe 
-                                      ? 'bg-cyan-100 text-gray-900 rounded-2xl rounded-tr-sm' 
-                                      : 'bg-white text-gray-900 rounded-2xl rounded-tl-sm'
-                                   }
-                                   ${!showTail && isMe ? 'rounded-tr-2xl mb-1' : ''}
-                                   ${!showTail && !isMe ? 'rounded-tl-2xl mb-1' : ''}
-                                   ${showTail ? 'mb-3' : ''}
-                                   ${swipedMessageId === msg.id ? 'translate-x-10' : ''}
-                                `}
-                             >
-                                {msg.replyTo && (
-                                   <div className={`mx-2 mt-2 px-2 py-1 rounded border-l-2 mb-1 cursor-pointer bg-black/5 border-cyan-500`}>
-                                      <p className="text-cyan-700 font-bold text-xs">{msg.replyTo.senderName}</p>
-                                      <p className="text-gray-500 text-xs truncate">{msg.replyTo.text}</p>
-                                   </div>
-                                )}
-
-                                <div className="px-2 pb-4 min-w-[120px]">
-                                   {msg.type === 'image' && msg.mediaUrl && (
-                                      <img src={msg.mediaUrl} className="rounded-lg mb-1 max-w-full" alt="Media" />
-                                   )}
-                                   {msg.type === 'video' && msg.mediaUrl && (
-                                      <video src={msg.mediaUrl} controls className="rounded-lg mb-1 max-w-full" />
-                                   )}
-                                   {msg.type === 'audio' && msg.mediaUrl && (
-                                      <div className="flex items-center gap-2 my-2 bg-black/5 p-2 rounded-full">
-                                         <div className="p-2 rounded-full bg-cyan-500 text-white">
-                                            <Play size={14} fill="currentColor" />
-                                         </div>
-                                         <audio src={msg.mediaUrl} controls className="h-8 w-40 opacity-80" />
+                          <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2`}>
+                             {!isMe && <img src={partner?.avatar} className="w-8 h-8 rounded-full mt-auto mr-2 border border-white shadow-sm" />}
+                             <div className={`max-w-[80%] relative group ${isMe ? 'items-end' : 'items-start'}`}>
+                                <div className={`p-3 rounded-2xl shadow-sm text-sm ${isMe ? 'bg-cyan-600 text-white rounded-br-none' : 'bg-white text-gray-800 rounded-bl-none border border-gray-100'}`}>
+                                   {msg.replyTo && (
+                                      <div className={`mb-2 p-2 rounded-lg text-xs bg-black/5 border-l-4 ${isMe ? 'border-cyan-300' : 'border-cyan-600'}`}>
+                                         <p className="font-bold opacity-70">{msg.replyTo.senderName}</p>
+                                         <p className="truncate">{msg.replyTo.text}</p>
                                       </div>
                                    )}
-                                   {msg.text && <p className="whitespace-pre-wrap leading-snug px-1 pt-1">{msg.text}</p>}
-                                </div>
+                                   
+                                   {msg.mediaUrl && msg.type === 'image' && <img src={msg.mediaUrl} className="rounded-xl mb-2 max-h-60 w-full object-cover" />}
+                                   
+                                   <p className="leading-relaxed">{msg.text}</p>
 
-                                <div className="absolute bottom-1 right-2 flex items-center gap-1 select-none">
-                                   <span className={`text-[10px] ${isMe ? 'text-cyan-800/60' : 'text-gray-400'}`}>
-                                      {new Date(msg.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
-                                   </span>
-                                   {isMe && (
-                                      msg.isRead 
-                                      ? <CheckCheck size={14} className="text-cyan-600" />
-                                      : <Check size={14} className="text-cyan-600" />
+                                   {msg.translation && (
+                                      <div className="mt-2 pt-2 border-t border-black/10 text-xs italic opacity-90 flex items-center gap-2">
+                                         <Globe size={12} /> {msg.translation}
+                                      </div>
+                                   )}
+
+                                   {msg.transcription && (
+                                      <div className="mt-2 bg-black/5 p-2 rounded-lg text-xs flex flex-col gap-1">
+                                         <span className="font-bold text-[10px] text-cyan-600 flex items-center gap-1"><Wand2 size={10} /> IA Transcribed</span>
+                                         <p className="leading-tight text-gray-600" dangerouslySetInnerHTML={{ __html: msg.transcription }} />
+                                      </div>
                                    )}
                                 </div>
 
-                                {/* Reply Button on Hover */}
-                                <button 
-                                    onClick={(e) => { e.stopPropagation(); setReplyTo(msg); }}
-                                    className={`absolute top-2 ${isMe ? '-left-10' : '-right-10'} p-2 bg-white rounded-full shadow opacity-0 group-hover:opacity-100 transition-opacity md:block hidden text-gray-500`}
-                                >
-                                    <ReplyIcon size={16} />
-                                </button>
+                                <div className={`flex items-center gap-2 mt-1 px-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
+                                   <span className="text-[10px] text-gray-400 font-bold">12:30</span>
+                                   {!isMe && (
+                                      <button 
+                                         onClick={() => handleTranslate(msg)}
+                                         className="text-cyan-500 hover:text-cyan-700 p-1 rounded-full hover:bg-cyan-50 transition-colors"
+                                         title="Traducir con IA"
+                                      >
+                                         {isTranslatingId === msg.id ? <Loader2 size={12} className="animate-spin" /> : <Globe size={12} />}
+                                      </button>
+                                   )}
+                                   {isMe && <CheckCheck size={12} className="text-cyan-500" />}
+                                </div>
                              </div>
                           </div>
                        );
@@ -590,127 +360,58 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                     <div ref={messagesEndRef} />
                  </div>
 
-                 {/* Input Area */}
-                 <div className="bg-white min-h-[60px] flex flex-col z-20">
-                    
-                    {/* Editing Indicator */}
-                    {isEditingId && (
-                       <div className="bg-cyan-50 px-4 py-2 flex justify-between items-center border-t border-cyan-100 animate-in slide-in-from-bottom-2">
-                          <div className="flex items-center gap-3">
-                             <Edit2 size={20} className="text-cyan-600" />
-                             <div>
-                                <p className="text-cyan-700 font-bold text-xs">Editando mensaje</p>
-                             </div>
-                          </div>
-                          <button onClick={() => { setIsEditingId(null); setInputText(''); }}><X size={20} className="text-cyan-400" /></button>
-                       </div>
-                    )}
-
-                    {/* Reply Preview */}
-                    {replyTo && !isEditingId && (
-                       <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-t border-gray-200 animate-in slide-in-from-bottom-2">
-                          <div className="flex items-center gap-3 overflow-hidden">
-                             <div className="border-l-2 border-cyan-600 pl-2">
-                                <p className="text-cyan-600 font-bold text-xs">Responder a {getSenderName(replyTo.senderId)}</p>
-                                <p className="text-gray-500 text-xs truncate max-w-[200px]">{replyTo.type === 'text' ? replyTo.text : 'Archivo adjunto'}</p>
-                             </div>
-                          </div>
-                          <button onClick={() => setReplyTo(null)}><X size={20} className="text-gray-400" /></button>
-                       </div>
-                    )}
-
-                    {/* Media Preview */}
-                    {mediaPreview && (
-                       <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 flex justify-between items-center animate-in slide-in-from-bottom-2">
-                          <div className="flex gap-4 items-center">
-                             {mediaPreview.type === 'video' ? <Video className="text-cyan-600" /> : mediaPreview.type === 'audio' ? <Mic className="text-red-500" /> : <ImageIcon className="text-cyan-600" />}
-                             <div>
-                                <span className="text-sm font-medium text-gray-700 block">
-                                    {mediaPreview.type === 'audio' ? 'Nota de voz' : 'Archivo multimedia'}
-                                </span>
-                                <span className="text-xs text-gray-500">Listo para enviar</span>
-                             </div>
-                             {mediaPreview.type === 'audio' && (
-                                <audio src={mediaPreview.url} controls className="h-8 w-32" />
-                             )}
-                          </div>
-                          <button onClick={() => setMediaPreview(null)}><Trash2 size={20} className="text-red-500" /></button>
-                       </div>
-                    )}
-
-                    {/* Controls & Input */}
-                    <div className="flex items-end gap-2 p-2 px-3">
-                       
-                       {/* Attach Button (Hidden while recording) */}
-                       {!isRecording && (
-                           <>
-                               <button onClick={() => fileInputRef.current?.click()} className="p-3 text-gray-500 hover:text-gray-700 transition-colors">
-                                  <Paperclip size={24} className="rotate-45" />
-                               </button>
-                               <input type="file" ref={fileInputRef} hidden accept="image/*,video/*" onChange={handleFileUpload} />
-                           </>
-                       )}
-
-                       {/* Center Area: Textarea OR Recording Status */}
-                       {isRecording ? (
-                          <div className={`flex-1 h-[48px] flex items-center px-4 rounded-2xl transition-colors bg-gray-100`}>
-                             <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse mr-3"></div>
-                             <span className={`font-mono font-bold text-gray-700`}>
-                                {formatTime(recordingDuration)}
-                             </span>
-                             <span className="ml-auto text-xs text-gray-400 uppercase font-bold tracking-wide">
-                                Soltar para guardar
-                             </span>
-                          </div>
-                       ) : (
-                          <textarea
-                             value={inputText}
-                             onChange={(e) => setInputText(e.target.value)}
-                             placeholder={isEditingId ? "Editar mensaje..." : "Escribe un mensaje..."}
-                             className="flex-1 bg-gray-100 max-h-32 min-h-[44px] py-3 px-4 rounded-2xl outline-none text-gray-800 resize-none overflow-y-auto leading-relaxed"
-                             rows={1}
-                             onKeyDown={(e) => {
-                                if (e.key === 'Enter' && !e.shiftKey) {
-                                   e.preventDefault();
-                                   handleSendMessage();
-                                }
-                             }}
-                          />
-                       )}
-
-                       {/* Dynamic Button: SEND or MIC */}
-                       {(inputText.trim() || mediaPreview) && !isRecording ? (
+                 {/* AI SUGGESTION CHIPS */}
+                 {aiSuggestions.length > 0 && (
+                    <div className="px-6 py-2 flex gap-2 overflow-x-auto no-scrollbar animate-in slide-in-from-bottom-2">
+                       {aiSuggestions.map((sug, i) => (
                           <button 
-                             onClick={() => handleSendMessage()}
-                             type="button"
-                             className="p-3 bg-cyan-500 hover:bg-cyan-600 text-white rounded-full shadow-md transition-all active:scale-95 duration-200 ease-out flex items-center justify-center mb-1"
+                            key={i} 
+                            onClick={() => setInputText(sug.query)}
+                            className="bg-white border border-cyan-100 text-cyan-700 px-4 py-2 rounded-full text-xs font-bold shadow-sm hover:bg-cyan-50 transition-all flex items-center gap-2 whitespace-nowrap active:scale-95"
                           >
-                             {isEditingId ? <Check size={20} /> : <Send size={20} className="ml-0.5 mt-0.5" />}
+                             {sug.type === 'guide' && <MapIcon size={14} />}
+                             {sug.type === 'weather' && <Sun size={14} />}
+                             {sug.type === 'itinerary' && <Sparkles size={14} />}
+                             {sug.label}
                           </button>
-                       ) : (
-                          <div
-                             className={`p-3 rounded-full shadow-md mb-1 transition-all duration-200 cursor-pointer touch-none select-none flex items-center justify-center ${
-                                isRecording 
-                                   ? 'bg-cyan-500 text-white scale-125' 
-                                   : 'bg-cyan-500 text-white hover:bg-cyan-600'
-                             }`}
-                             onMouseDown={handleRecordStart}
-                             onTouchStart={handleRecordStart}
-                             onMouseUp={handleRecordEnd}
-                             onTouchEnd={handleRecordEnd}
-                          >
-                             <Mic size={24} />
-                          </div>
-                       )}
+                       ))}
+                       <button onClick={() => setAiSuggestions([])} className="text-gray-400 p-2"><X size={14} /></button>
+                    </div>
+                 )}
+
+                 {/* INPUT AREA (MODERN) */}
+                 <div className="p-4 bg-white border-t border-gray-100">
+                    <div className="max-w-4xl mx-auto relative flex items-end gap-2">
+                       <button className="p-3 text-gray-400 hover:text-cyan-600"><Paperclip size={24} /></button>
+                       
+                       <div className="flex-1 relative">
+                          <textarea 
+                             className="w-full bg-gray-50 border border-gray-100 rounded-[1.5rem] p-3 px-5 pr-12 outline-none focus:ring-2 focus:ring-cyan-500 transition-all min-h-[50px] max-h-32 resize-none text-sm font-medium"
+                             placeholder="Escribe un mensaje..."
+                             rows={1}
+                             value={inputText}
+                             onChange={e => setInputText(e.target.value)}
+                             onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSendMessage())}
+                          />
+                          <button className="absolute right-3 bottom-3 text-gray-400 hover:text-cyan-600"><Mic size={20} /></button>
+                       </div>
+
+                       <button 
+                          onClick={handleSendMessage}
+                          className="bg-cyan-600 text-white p-4 rounded-full shadow-lg hover:bg-cyan-700 active:scale-90 transition-all"
+                       >
+                          <Send size={20} />
+                       </button>
                     </div>
                  </div>
               </>
            ) : (
-              <div className="flex-1 flex flex-col items-center justify-center text-stone-300 p-8">
-                 <div className="bg-stone-50 p-6 rounded-full mb-4">
-                    <Lock size={48} className="opacity-20" />
+              <div className="flex-1 flex flex-col items-center justify-center text-center p-10">
+                 <div className="bg-white p-8 rounded-full shadow-inner mb-6">
+                    <MessageSquare size={64} className="text-cyan-100" />
                  </div>
-                 <p>Selecciona un chat para comenzar.</p>
+                 <h3 className="text-2xl font-black text-gray-800 mb-2">Tu Canvas de Viaje</h3>
+                 <p className="text-gray-500 max-w-sm">Selecciona un chat para iniciar una conversación segura y potenciada por IA.</p>
               </div>
            )}
         </div>

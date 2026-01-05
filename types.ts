@@ -16,10 +16,10 @@ export interface User {
   bio?: string;
   followers: string[];
   following: string[];
-  points?: number; // Puntos de gamificación
-  badges?: Badge[]; // Insignias ganadas
-  lastLogin?: number; // Para bono diario
-  completedChallenges?: Record<string, number>; // ID del desafío -> Timestamp
+  points?: number;
+  badges?: Badge[];
+  lastLogin?: number;
+  completedChallenges?: Record<string, number>;
 }
 
 export interface Comment {
@@ -80,12 +80,18 @@ export interface Suggestion {
 
 // --- CHAT TYPES ---
 
+export interface ChatAISuggestion {
+  type: 'guide' | 'weather' | 'search' | 'itinerary';
+  label: string;
+  query: string;
+}
+
 export interface Message {
   id: string;
   senderId: string;
-  text: string; // Texto cifrado (o vacío si es solo media)
+  text: string; 
   type: 'text' | 'image' | 'video' | 'audio';
-  mediaUrl?: string; // URL/Base64 cifrada del archivo
+  mediaUrl?: string; 
   replyTo?: {
     id: string;
     text: string;
@@ -93,6 +99,14 @@ export interface Message {
   } | null;
   timestamp: number;
   isRead: boolean;
+  
+  // AI Metadata
+  translation?: string;
+  transcription?: string;
+  aiMetadata?: {
+    entities?: string[]; // Lugares o fechas detectados
+    sentiment?: string;
+  };
 }
 
 export interface Chat {
@@ -101,13 +115,13 @@ export interface Chat {
   lastMessage: string;
   lastTimestamp: number;
   updatedAt: number;
-  unreadCount?: number; // Calculado en cliente
+  unreadCount?: number;
+  aiContextSummary?: string; // Último resumen de IA
 }
 
 export interface Notification {
   id: string;
   userId: string;
-  // Se agregan todos los tipos posibles para evitar errores de TypeScript en comparaciones
   type: 'like' | 'comment' | 'follow' | 'system' | 'like_post' | 'new_post' | 'new_story';
   senderId?: string;
   senderName?: string;
@@ -136,14 +150,11 @@ export interface Destination {
   category: 'Playa' | 'Naturaleza' | 'Cultura' | 'Aventura' | 'Gastronomía' | 'Montaña' | 'Selva';
   rating: number; 
   priceLevel?: string;
-  
   isUserGenerated?: boolean;
   createdBy?: string; 
   ratings?: Record<string, number>; 
   reviewsCount?: number;
-  
-  isFeatured?: boolean; // Nuevo: Para destacar en Hero
-  
+  isFeatured?: boolean;
   coordinates?: {
     latitude: number;
     longitude: number;
@@ -173,13 +184,10 @@ export interface Challenge {
   points: number;
   icon: string;
   actionLabel: string;
-  // Para trivias
   question?: string;
   options?: string[];
   correctAnswer?: number;
 }
-
-// --- TRAVEL GROUPS & TEMPLATES ---
 
 export interface TravelTemplate {
   id: string;
@@ -188,9 +196,9 @@ export interface TravelTemplate {
   authorName: string;
   authorAvatar: string;
   title: string;
-  description: string; // Resumen del plan
-  duration: string; // ej: "3 Días"
-  budget: string; // ej: "$200"
+  description: string; 
+  duration: string; 
+  budget: string; 
   timestamp: number;
   likes: number;
   likedBy?: Record<string, boolean>;
@@ -201,9 +209,9 @@ export interface TravelGroup {
   name: string;
   description: string;
   imageUrl: string;
-  adminId: string; // Creador
+  adminId: string; 
   createdAt: number;
-  isPrivate: boolean; // Privacidad
-  members: Record<string, boolean>; // { userId: true }
-  templates?: Record<string, TravelTemplate>; // Colección de plantillas
+  isPrivate: boolean; 
+  members: Record<string, boolean>; 
+  templates?: Record<string, TravelTemplate>; 
 }
