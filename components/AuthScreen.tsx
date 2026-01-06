@@ -1,14 +1,16 @@
+
 import React, { useState, useRef } from 'react';
-import { Map, Mail, Lock, User, ArrowRight, Loader2, Info, Camera, Upload, KeyRound, ChevronLeft } from 'lucide-react';
+import { Map, Mail, Lock, User, ArrowRight, Loader2, Info, Camera, Upload, KeyRound, ChevronLeft, X } from 'lucide-react';
 import { AuthService } from '../services/authService';
 import { User as UserType } from '../types';
 import { resizeImage } from '../utils';
 
 interface AuthScreenProps {
   onLoginSuccess: (user: UserType) => void;
+  onDismiss?: () => void;
 }
 
-export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
+export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onDismiss }) => {
   const [view, setView] = useState<'login' | 'register' | 'forgot'>('login');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -64,12 +66,21 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
   };
 
   return (
-    <div className="min-h-screen bg-stone-50 flex items-center justify-center p-4 font-sans">
-      <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row min-h-[600px]">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-stone-900/90 backdrop-blur-md p-4 animate-in fade-in duration-300">
+      <div className="bg-white w-full max-w-4xl rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col md:flex-row min-h-[600px] relative">
         
-        <div className="md:w-1/2 bg-cyan-900 relative p-8 md:p-12 text-white flex flex-col justify-between">
+        {/* Close Button for Modal Mode */}
+        {onDismiss && (
+            <button 
+                onClick={onDismiss}
+                className="absolute top-6 right-6 md:top-8 md:right-8 z-[210] bg-white/20 hover:bg-white/40 p-2 rounded-full text-white md:text-stone-400 md:hover:bg-stone-100 md:hover:text-stone-600 transition-all"
+            >
+                <X size={24} />
+            </button>
+        )}
+
+        <div className="md:w-1/2 bg-cyan-900 relative p-8 md:p-12 text-white flex flex-col justify-between overflow-hidden">
           <div className="absolute inset-0 z-0">
-            {/* Real Ecuador Landscape Image */}
             <img 
               src="https://images.unsplash.com/photo-1574966601746-86d79860b8e9?q=80&w=800&auto=format&fit=crop" 
               className="w-full h-full object-cover opacity-50 mix-blend-overlay" 
@@ -100,7 +111,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
           </div>
         </div>
 
-        <div className="md:w-1/2 p-8 md:p-12 flex flex-col justify-center overflow-y-auto max-h-screen">
+        <div className="md:w-1/2 p-8 md:p-12 flex flex-col justify-center overflow-y-auto max-h-[90vh]">
           <div className="mb-2">
              {view === 'forgot' && (
                 <button onClick={() => setView('login')} className="flex items-center text-sm text-stone-400 hover:text-cyan-600 mb-4 transition-colors">

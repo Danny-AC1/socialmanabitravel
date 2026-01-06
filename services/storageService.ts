@@ -5,6 +5,9 @@ import { Post, Story, Destination, Suggestion, User, Chat, Message, TravelGroup,
 import { EncryptionService } from "./encryptionService";
 import { POINT_VALUES, checkNewBadges } from "../utils";
 
+// NOTA: La lectura (GET) ahora se hace en App.tsx con listeners en tiempo real.
+// Este servicio se encarga principalmente de las escrituras (WRITE).
+
 export const StorageService = {
   
   // --- GAMIFICATION SYSTEM ---
@@ -13,48 +16,91 @@ export const StorageService = {
     try {
         const userRef = ref(db, `users/${userId}`);
         const snapshot = await get(userRef);
+        
         if (snapshot.exists()) {
             const user = snapshot.val() as User;
             const currentPoints = user.points || 0;
             const newPoints = currentPoints + amount;
-            const newBadges = checkNewBadges({ ...user, points: newPoints }, actionType as any, 0);
+            
+            let actionCount = 0;
+            // Cálculo aproximado para insignias basado en puntos acumulados si no tenemos contadores específicos
+            if (actionType === 'post') actionCount = Math.floor(newPoints / POINT_VALUES.POST);
+            if (actionType === 'comment') actionCount = Math.floor(newPoints / POINT_VALUES.COMMENT);
+            
+            // Verificar nuevas insignias
+            const newBadges = checkNewBadges({ ...user, points: newPoints }, actionType as any, actionCount);
+            
+            // Fusionar insignias nuevas con las existentes evitando duplicados
             const currentBadgeIds = new Set((user.badges || []).map(b => b.id));
             const uniqueNewBadges = newBadges.filter(b => !currentBadgeIds.has(b.id));
             const updatedBadges = [...(user.badges || []), ...uniqueNewBadges];
-            await update(userRef, { points: newPoints, badges: updatedBadges });
+
+            await update(userRef, {
+                points: newPoints,
+                badges: updatedBadges
+            });
+
             return { newPoints, newBadges: uniqueNewBadges };
         }
-    } catch (e) { console.error(e); }
+    } catch (e) {
+        console.error("Error awarding points:", e);
+    }
   },
 
   checkDailyLogin: async (userId: string) => {
     try {
         const userRef = ref(db, `users/${userId}`);
         const snapshot = await get(userRef);
+        
         if (snapshot.exists()) {
             const user = snapshot.val() as User;
             const lastLogin = user.lastLogin || 0;
-            if (new Date(lastLogin).toDateString() !== new Date().toDateString()) {
+            const now = Date.now();
+
+            const lastDate = new Date(lastLogin).toDateString();
+            const currentDate = new Date(now).toDateString();
+
+            if (lastDate !== currentDate) {
                 await StorageService.awardPoints(userId, POINT_VALUES.LOGIN_DAILY, 'login');
-                await update(userRef, { lastLogin: Date.now() });
+                await update(userRef, { lastLogin: now });
                 return true;
             }
         }
         return false;
-    } catch (e) { return false; }
+    } catch (e) {
+        console.error("Error checking daily login:", e);
+        return false;
+    }
   },
 
   completeChallenge: async (userId: string, challengeId: string, points: number) => {
-    const userRef = ref(db, `users/${userId}`);
-    const snapshot = await get(userRef);
-    if (snapshot.exists()) {
-        const user = snapshot.val() as User;
-        const completed = user.completedChallenges || {};
-        if (completed[challengeId]) return false;
-        await update(userRef, { points: (user.points || 0) + points, completedChallenges: { ...completed, [challengeId]: Date.now() } });
-        return true;
+    try {
+        const userRef = ref(db, `users/${userId}`);
+        const snapshot = await get(userRef);
+        
+        if (snapshot.exists()) {
+            const user = snapshot.val() as User;
+            const completed = user.completedChallenges || {};
+            
+            if (completed[challengeId]) {
+                return false;
+            }
+
+            const newCompleted = { ...completed, [challengeId]: Date.now() };
+            const currentPoints = user.points || 0;
+            const newPoints = currentPoints + points;
+
+            await update(userRef, {
+                points: newPoints,
+                completedChallenges: newCompleted
+            });
+            return true;
+        }
+        return false;
+    } catch (e) {
+        console.error("Error completing challenge:", e);
+        return false;
     }
-    return false;
   },
 
   // --- CONTENT ---
@@ -74,13 +120,23 @@ export const StorageService = {
 
   toggleLikePost: async (post: Post, userId: string) => {
     const isLiked = post.isLiked;
-    await update(ref(db, `posts/${post.id}`), { likes: Math.max(0, isLiked ? post.likes - 1 : post.likes + 1) });
+    const newLikes = isLiked ? (post.likes - 1) : (post.likes + 1);
+    
+    // Optimistic update handled by UI, backend update here
+    // Note: A real implementation should use transactions for likes to avoid race conditions
+    await update(ref(db, `posts/${post.id}`), {
+      likes: Math.max(0, newLikes) // Prevent negative likes
+    });
   },
 
   addComment: async (postId: string, comments: any[]) => {
-    await update(ref(db, `posts/${postId}`), { comments });
+    await update(ref(db, `posts/${postId}`), {
+      comments: comments
+    });
     const newComment = comments[comments.length - 1];
-    if (newComment) await StorageService.awardPoints(newComment.userId, POINT_VALUES.COMMENT, 'comment');
+    if (newComment) {
+        await StorageService.awardPoints(newComment.userId, POINT_VALUES.COMMENT, 'comment');
+    }
   },
 
   saveStory: async (story: Story) => {
@@ -97,17 +153,28 @@ export const StorageService = {
   },
 
   toggleLikeStory: async (story: Story) => {
-    await update(ref(db, `stories/${story.id}`), { likes: (story.likes || 0) + 1 });
+    const currentLikes = story.likes || 0;
+    await update(ref(db, `stories/${story.id}`), {
+      likes: currentLikes + 1
+    });
   },
 
   markStoryViewed: async (storyId: string, user: User) => {
-    await update(ref(db, `stories/${storyId}/viewers/${user.id}`), { userId: user.id, userName: user.name, userAvatar: user.avatar, timestamp: Date.now() });
+    const viewerData = {
+      userId: user.id,
+      userName: user.name,
+      userAvatar: user.avatar,
+      timestamp: Date.now()
+    };
+    await update(ref(db, `stories/${storyId}/viewers/${user.id}`), viewerData);
   },
 
   // --- NOTIFICATIONS ---
 
   markNotificationRead: async (userId: string, notificationId: string) => {
-    await update(ref(db, `notifications/${userId}/${notificationId}`), { isRead: true });
+    await update(ref(db, `notifications/${userId}/${notificationId}`), {
+      isRead: true
+    });
   },
 
   clearNotifications: async (userId: string) => {
@@ -132,7 +199,9 @@ export const StorageService = {
 
   addDestination: async (destination: Destination) => {
     await set(ref(db, `destinations/${destination.id}`), destination);
-    if (destination.createdBy) await StorageService.awardPoints(destination.createdBy, POINT_VALUES.ADD_DESTINATION, 'destination');
+    if (destination.createdBy) {
+        await StorageService.awardPoints(destination.createdBy, POINT_VALUES.ADD_DESTINATION, 'destination');
+    }
   },
 
   deleteDestination: async (destinationId: string) => {
@@ -145,20 +214,34 @@ export const StorageService = {
 
   rateDestination: async (destinationId: string, userId: string, rating: number, currentRating: number, reviewCount: number = 0) => {
     await set(ref(db, `destinations/${destinationId}/ratings/${userId}`), rating);
+    
     const newCount = (reviewCount || 0) + 1;
     const newAvg = ((currentRating * (reviewCount || 0)) + rating) / newCount;
-    await update(ref(db, `destinations/${destinationId}`), { rating: newAvg, reviewsCount: newCount });
+
+    await update(ref(db, `destinations/${destinationId}`), {
+      rating: newAvg,
+      reviewsCount: newCount
+    });
   },
 
   addPhotoToDestinationGallery: async (destinationId: string, currentGallery: string[], newImageUrl: string, userId?: string) => {
-    await update(ref(db, `destinations/${destinationId}`), { gallery: [newImageUrl, ...(currentGallery || [])] });
-    if (userId) await StorageService.awardPoints(userId, POINT_VALUES.ADD_PHOTO, 'photo');
+    const updatedGallery = [newImageUrl, ...(currentGallery || [])];
+    await update(ref(db, `destinations/${destinationId}`), {
+      gallery: updatedGallery
+    });
+    if (userId) {
+        await StorageService.awardPoints(userId, POINT_VALUES.ADD_PHOTO, 'photo');
+    }
   },
 
-  // --- TRAVEL GROUPS ---
+  // --- TRAVEL GROUPS & TEMPLATES ---
 
   createTravelGroup: async (groupData: Omit<TravelGroup, 'members' | 'templates'>) => {
-      await set(ref(db, `travelGroups/${groupData.id}`), { ...groupData, members: { [groupData.adminId]: true } });
+      const newGroup: TravelGroup = {
+          ...groupData,
+          members: { [groupData.adminId]: true }, // Creator is the first member
+      };
+      await set(ref(db, `travelGroups/${groupData.id}`), newGroup);
   },
 
   updateTravelGroup: async (groupId: string, updates: Partial<TravelGroup>) => {
@@ -170,7 +253,10 @@ export const StorageService = {
   },
 
   joinTravelGroup: async (groupId: string, userId: string) => {
-      await update(ref(db, `travelGroups/${groupId}/members`), { [userId]: true });
+      // Direct join for public groups (logic checked in UI, here we just write)
+      await update(ref(db, `travelGroups/${groupId}/members`), {
+          [userId]: true
+      });
   },
 
   leaveTravelGroup: async (groupId: string, userId: string) => {
@@ -178,7 +264,9 @@ export const StorageService = {
   },
 
   addMemberToGroup: async (groupId: string, userId: string) => {
-      await update(ref(db, `travelGroups/${groupId}/members`), { [userId]: true });
+      await update(ref(db, `travelGroups/${groupId}/members`), {
+          [userId]: true
+      });
   },
 
   createTravelTemplate: async (template: TravelTemplate) => {
@@ -189,37 +277,72 @@ export const StorageService = {
       await remove(ref(db, `travelGroups/${groupId}/templates/${templateId}`));
   },
 
-  // --- CHAT SYSTEM (ENHANCED OPTION A) ---
+  // --- CHAT SYSTEM ---
 
-  getChatId: (userId1: string, userId2: string) => [userId1, userId2].sort().join('_'),
+  getChatId: (userId1: string, userId2: string) => {
+    return [userId1, userId2].sort().join('_');
+  },
 
   initiateChat: async (currentUserId: string, targetUserId: string) => {
     const chatId = StorageService.getChatId(currentUserId, targetUserId);
     const chatRef = ref(db, `chats/${chatId}`);
+    
     const snapshot = await get(chatRef);
     if (!snapshot.exists()) {
-      await set(chatRef, { id: chatId, participants: [currentUserId, targetUserId], lastMessage: '', lastTimestamp: Date.now(), updatedAt: Date.now() });
+      const newChat: Chat = {
+        id: chatId,
+        participants: [currentUserId, targetUserId],
+        lastMessage: '',
+        lastTimestamp: Date.now(),
+        updatedAt: Date.now()
+      };
+      await set(chatRef, newChat);
     }
     return chatId;
   },
 
-  sendMessage: async (chatId: string, senderId: string, text: string, type: Message['type'] = 'text', mediaUrl?: string | null, replyTo?: Message['replyTo']) => {
+  sendMessage: async (
+    chatId: string, 
+    senderId: string, 
+    text: string, 
+    type: 'text' | 'image' | 'video' | 'audio' = 'text',
+    mediaUrl?: string | null,
+    replyTo?: Message['replyTo']
+  ) => {
+    // 1. Encriptar contenido
     const encryptedText = text ? EncryptionService.encrypt(text, chatId) : '';
     const encryptedMedia = mediaUrl ? EncryptionService.encrypt(mediaUrl, chatId) : null;
+
+    // 2. Crear referencia
     const messageRef = push(ref(db, `chats/${chatId}/messages`));
-    const payload: any = { id: messageRef.key!, senderId, text: encryptedText, type, timestamp: Date.now(), isRead: false };
-    if (encryptedMedia) payload.mediaUrl = encryptedMedia;
-    if (replyTo) payload.replyTo = replyTo;
-    await set(messageRef, payload);
+    
+    // 3. Construir objeto LIMPIO
+    const messagePayload: any = {
+      id: messageRef.key!,
+      senderId,
+      text: encryptedText,
+      type,
+      timestamp: Date.now(),
+      isRead: false
+    };
 
-    let preview = encryptedText;
-    if (type === 'image') preview = EncryptionService.encrypt('📷 Foto', chatId);
-    if (type === 'audio') preview = EncryptionService.encrypt('🎤 Audio', chatId);
-    await update(ref(db, `chats/${chatId}`), { lastMessage: preview, lastTimestamp: Date.now(), updatedAt: Date.now() });
-  },
+    if (encryptedMedia) messagePayload.mediaUrl = encryptedMedia;
+    if (replyTo) messagePayload.replyTo = replyTo;
 
-  updateMessageAI: async (chatId: string, messageId: string, aiMetadata: Partial<Message>) => {
-    await update(ref(db, `chats/${chatId}/messages/${messageId}`), aiMetadata);
+    // 4. Guardar
+    await set(messageRef, messagePayload);
+
+    // 5. Actualizar último mensaje
+    let previewText = encryptedText;
+    if (type === 'image') previewText = EncryptionService.encrypt('📷 Foto', chatId);
+    if (type === 'video') previewText = EncryptionService.encrypt('🎥 Video', chatId);
+    if (type === 'audio') previewText = EncryptionService.encrypt('🎤 Nota de voz', chatId);
+
+    await update(ref(db, `chats/${chatId}`), {
+      lastMessage: previewText, 
+      lastTimestamp: Date.now(),
+      updatedAt: Date.now()
+    });
   },
 
   deleteMessage: async (chatId: string, messageId: string) => {
@@ -231,7 +354,10 @@ export const StorageService = {
   },
 
   editMessage: async (chatId: string, messageId: string, newText: string) => {
-    await update(ref(db, `chats/${chatId}/messages/${messageId}`), { text: EncryptionService.encrypt(newText, chatId) });
+    const encryptedText = EncryptionService.encrypt(newText, chatId);
+    await update(ref(db, `chats/${chatId}/messages/${messageId}`), {
+      text: encryptedText
+    });
   },
 
   markChatAsRead: async (chatId: string, currentUserId: string) => {
@@ -239,15 +365,36 @@ export const StorageService = {
     const snapshot = await get(messagesRef);
     if (snapshot.exists()) {
       const updates: any = {};
-      snapshot.forEach((child) => {
-        const msg = child.val();
-        if (!msg.isRead && msg.senderId !== currentUserId) updates[`${child.key}/isRead`] = true;
+      snapshot.forEach((childSnapshot) => {
+        const msg = childSnapshot.val();
+        if (!msg.isRead && msg.senderId !== currentUserId) {
+          updates[`${childSnapshot.key}/isRead`] = true;
+        }
       });
-      if (Object.keys(updates).length > 0) await update(messagesRef, updates);
+      if (Object.keys(updates).length > 0) {
+        await update(messagesRef, updates);
+      }
     }
   },
 
-  updateDestinationCover: async (id: string, url: string) => { await update(ref(db, `destinations/${id}`), { imageUrl: url }); },
-  removeDestinationPhoto: async (id: string, gallery: string[], url: string) => { await update(ref(db, `destinations/${id}`), { gallery: gallery.filter(u => u !== url) }); },
-  clearAll: async () => { await set(ref(db), null); localStorage.clear(); window.location.reload(); }
+  // --- ADMIN FUNCTIONS ---
+
+  updateDestinationCover: async (destinationId: string, newImageUrl: string) => {
+    await update(ref(db, `destinations/${destinationId}`), {
+      imageUrl: newImageUrl
+    });
+  },
+
+  removeDestinationPhoto: async (destinationId: string, currentGallery: string[], photoUrlToRemove: string) => {
+    const updatedGallery = currentGallery.filter(url => url !== photoUrlToRemove);
+    await update(ref(db, `destinations/${destinationId}`), {
+      gallery: updatedGallery
+    });
+  },
+  
+  clearAll: async () => {
+    await set(ref(db), null);
+    localStorage.clear();
+    window.location.reload();
+  }
 };
