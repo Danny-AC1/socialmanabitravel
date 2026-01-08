@@ -230,12 +230,24 @@ export const StorageService = {
 
   // --- TRAVEL GROUPS & TEMPLATES ---
 
-  createTravelGroup: async (groupData: Omit<TravelGroup, 'members' | 'templates'>) => {
+  createTravelGroup: async (groupData: Omit<TravelGroup, 'members' | 'templates'>, createLinkedChat: boolean = false) => {
+      let linkedChatId: string | undefined;
+      
+      if (createLinkedChat) {
+          linkedChatId = await StorageService.createGroupChat(
+              groupData.adminId, 
+              [], 
+              `Chat: ${groupData.name}`
+          );
+      }
+
       const newGroup: TravelGroup = {
           ...groupData,
+          chatId: linkedChatId,
           members: { [groupData.adminId]: true }, 
       };
       await set(ref(db, `travelGroups/${groupData.id}`), newGroup);
+      return newGroup;
   },
 
   updateTravelGroup: async (groupId: string, updates: Partial<TravelGroup>) => {
@@ -243,23 +255,50 @@ export const StorageService = {
   },
 
   deleteTravelGroup: async (groupId: string) => {
-      await remove(ref(db, `travelGroups/${groupId}`));
+      const groupRef = ref(db, `travelGroups/${groupId}`);
+      const snapshot = await get(groupRef);
+      if (snapshot.exists()) {
+          const group = snapshot.val() as TravelGroup;
+          if (group.chatId) {
+              await StorageService.deleteChat(group.chatId);
+          }
+      }
+      await remove(groupRef);
   },
 
   joinTravelGroup: async (groupId: string, userId: string) => {
       await update(ref(db, `travelGroups/${groupId}/members`), {
           [userId]: true
       });
+      
+      // Auto-añadir al chat vinculado si existe
+      const groupSnapshot = await get(ref(db, `travelGroups/${groupId}`));
+      if (groupSnapshot.exists()) {
+          const group = groupSnapshot.val() as TravelGroup;
+          if (group.chatId) {
+              await StorageService.addParticipantToChat(group.chatId, userId);
+          }
+      }
   },
 
   leaveTravelGroup: async (groupId: string, userId: string) => {
       await remove(ref(db, `travelGroups/${groupId}/members/${userId}`));
+      // Nota: No eliminamos del chat automáticamente por si quieren mantener el historial, 
+      // pero se podría añadir la lógica aquí si fuera necesario.
   },
 
   addMemberToGroup: async (groupId: string, userId: string) => {
       await update(ref(db, `travelGroups/${groupId}/members`), {
           [userId]: true
       });
+
+      const groupSnapshot = await get(ref(db, `travelGroups/${groupId}`));
+      if (groupSnapshot.exists()) {
+          const group = groupSnapshot.val() as TravelGroup;
+          if (group.chatId) {
+              await StorageService.addParticipantToChat(group.chatId, userId);
+          }
+      }
   },
 
   createTravelTemplate: async (template: TravelTemplate) => {

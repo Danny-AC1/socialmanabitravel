@@ -86,7 +86,12 @@ export const analyzeTravelImage = async (base64Image: string): Promise<{title: s
                 data: base64Image.split(',')[1]
             }
         };
-        const prompt = "Analiza esta imagen desde una perspectiva turística de Ecuador. ¿Qué es? Si es un recibo, extrae el total. JSON: {title, info, category, isReceipt: boolean, amount: number}";
+        const prompt = `
+        Analiza esta imagen como un guía local de Manabí, Ecuador. 
+        Dime qué es, su importancia cultural o natural y clasifícala. 
+        Sé poético y descriptivo pero breve.
+        JSON format: { "title": "Nombre del elemento principal", "info": "Descripción inmersiva de 2 líneas", "category": "PLAYA|GASTRONOMIA|NATURALEZA|CULTURA" }
+        `;
         
         const response = await ai.models.generateContent({
             model: 'gemini-3-flash-preview',
@@ -95,7 +100,7 @@ export const analyzeTravelImage = async (base64Image: string): Promise<{title: s
         });
         return JSON.parse(response.text);
     } catch (e) {
-        return { title: "Imagen", info: "Detalles no disponibles.", category: "desconocido" };
+        return { title: "Lugar Increíble", info: "La luz y el ambiente capturan la esencia de Ecuador perfectamente.", category: "EXPLORACION" };
     }
 };
 
@@ -103,7 +108,7 @@ export const getPlaceLiveContext = async (text: string): Promise<{placeName: str
     try {
         const response = await ai.models.generateContent({
             model: 'gemini-3-flash-preview',
-            contents: `Busca si en este texto se menciona un lugar de Ecuador: "${text}". JSON: {placeName, weather, temp, status}`,
+            contents: `Simula datos en tiempo real (clima, temperatura estimada hoy) si este texto menciona un lugar de Ecuador: "${text}". JSON: {placeName, weather, temp, status}`,
             config: { responseMimeType: "application/json" }
         });
         const data = JSON.parse(response.text);

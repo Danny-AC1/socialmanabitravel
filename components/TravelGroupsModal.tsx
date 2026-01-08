@@ -1,10 +1,10 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Users, Plus, Search, Map, Calendar, DollarSign, ArrowRight, ArrowLeft, Share2, Trash2, FileText, Loader2, Image as ImageIcon, Lock, Shield, UserPlus, Unlock, Globe, Sun, Sunset, Moon, PlusCircle, Camera, Edit2, Compass, Heart } from 'lucide-react';
+import { X, Users, Plus, Search, Map, Calendar, DollarSign, ArrowRight, ArrowLeft, Share2, Trash2, FileText, Loader2, Image as ImageIcon, Lock, Shield, UserPlus, Unlock, Globe, Sun, Sunset, Moon, PlusCircle, Camera, Edit2, Compass, Heart, MessageCircle } from 'lucide-react';
 import { User, TravelGroup, TravelTemplate } from '../types';
 import { StorageService } from '../services/storageService';
 import { db } from '../services/firebase';
-import { ref, onValue } from 'firebase/database';
+import { onValue, ref, set } from 'firebase/database';
 import { resizeImage } from '../utils';
 
 interface TravelGroupsModalProps {
@@ -13,9 +13,17 @@ interface TravelGroupsModalProps {
   currentUser: User;
   allUsers: User[];
   initialGroupId?: string | null;
+  onOpenChat?: (chatId: string) => void; // Prop opcional para disparar apertura de chat desde App
 }
 
-export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, onClose, currentUser, allUsers, initialGroupId }) => {
+export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ 
+    isOpen, 
+    onClose, 
+    currentUser, 
+    allUsers, 
+    initialGroupId,
+    onOpenChat
+}) => {
   const [view, setView] = useState<'list' | 'create' | 'detail' | 'create_template' | 'add_member'>('list');
   const [listTab, setListTab] = useState<'all' | 'joined'>('all');
   const [groups, setGroups] = useState<TravelGroup[]>([]);
@@ -26,6 +34,7 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
   const [newGroupDesc, setNewGroupDesc] = useState('');
   const [newGroupImage, setNewGroupImage] = useState<string | null>(null);
   const [isPrivateGroup, setIsPrivateGroup] = useState(false);
+  const [createLinkedChat, setCreateLinkedChat] = useState(true); // Nuevo: Opción de chat automático
   
   // Create Template Form
   const [templateTitle, setTemplateTitle] = useState('');
@@ -92,7 +101,6 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
           try {
               const resized = await resizeImage(file, 600);
               await StorageService.updateTravelGroup(selectedGroup.id, { imageUrl: resized });
-              // Firebase listener updates state automatically, but we can optimistically update
               setSelectedGroup({ ...selectedGroup, imageUrl: resized });
           } catch (e) {
               alert("Error al cambiar imagen");
@@ -103,7 +111,7 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
   const handleCreateGroup = async () => {
       if (!newGroupName || !newGroupDesc) return;
       setIsLoading(true);
-      const newGroup = {
+      const groupData = {
           id: `tg_${Date.now()}`,
           name: newGroupName,
           description: newGroupDesc,
@@ -112,7 +120,7 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
           createdAt: Date.now(),
           isPrivate: isPrivateGroup
       };
-      await StorageService.createTravelGroup(newGroup);
+      await StorageService.createTravelGroup(groupData, createLinkedChat);
       setIsLoading(false);
       setNewGroupName('');
       setNewGroupDesc('');
@@ -122,22 +130,17 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
       setListTab('joined');
   };
 
-  // Logic to build the final description string from the itinerary days
   const handleCreateTemplate = async () => {
       if (!selectedGroup || !templateTitle) return;
       setIsLoading(true);
 
-      // Build formatted description
       let finalDescription = templateDesc.trim();
-      
-      // Check if there is at least one activity filled
       const hasItinerary = itineraryDays.some(d => d.morning || d.afternoon || d.night);
 
       if (hasItinerary) {
           finalDescription += "\n\n✨ ITINERARIO DETALLADO ✨";
           itineraryDays.forEach((day, index) => {
               if (!day.morning && !day.afternoon && !day.night) return;
-              
               finalDescription += `\n\n📅 DÍA ${index + 1}`;
               if (day.morning) finalDescription += `\n☀️ Mañana: ${day.morning}`;
               if (day.afternoon) finalDescription += `\n🌤️ Tarde: ${day.afternoon}`;
@@ -160,8 +163,6 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
       };
       await StorageService.createTravelTemplate(newTemplate);
       setIsLoading(false);
-      
-      // Reset form
       setTemplateTitle('');
       setTemplateDesc('');
       setItineraryDays([{ morning: '', afternoon: '', night: '' }]);
@@ -169,7 +170,6 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
   };
 
   const handleJoin = async (group: TravelGroup) => {
-      // Si es privado, no se puede unir directamente (debe ser añadido)
       if (group.isPrivate) return;
       await StorageService.joinTravelGroup(group.id, currentUser.id);
   };
@@ -198,7 +198,7 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
   const handleAddMember = async (userId: string) => {
       if (selectedGroup) {
           await StorageService.addMemberToGroup(selectedGroup.id, userId);
-          alert("Usuario agregado correctamente.");
+          alert("Usuario agregado correctamente al grupo y al chat.");
           setView('detail');
       }
   };
@@ -211,10 +211,16 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
       }
   };
 
-  // ITINERARY BUILDER HELPERS
+  const handleOpenChat = () => {
+      if (selectedGroup?.chatId) {
+          onClose(); // Cerramos el modal de grupos
+          if (onOpenChat) onOpenChat(selectedGroup.chatId);
+          else alert("Chat abierto: " + selectedGroup.chatId);
+      }
+  };
+
   const addDay = () => {
       setItineraryDays([...itineraryDays, { morning: '', afternoon: '', night: '' }]);
-      // Update duration automatically
       setTemplateDuration(`${itineraryDays.length + 1} Días`);
   };
 
@@ -239,7 +245,6 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
         const isMember = g.members && g.members[currentUser.id];
         const isAdmin = g.adminId === currentUser.id;
         if (listTab === 'joined') return isMember || isAdmin;
-        // Explorar muestra todos los públicos o los que ya soy parte
         return !g.isPrivate || isMember || isAdmin;
     });
 
@@ -292,18 +297,8 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
                                   <div className="flex items-center gap-4 text-xs text-stone-400 font-bold uppercase tracking-wider">
                                       <span className="flex items-center gap-1"><Users size={14} className="text-cyan-600" /> {memberCount}</span>
                                       <span className="flex items-center gap-1"><FileText size={14} className="text-cyan-600" /> {(group.templates ? Object.keys(group.templates).length : 0)}</span>
+                                      {group.chatId && <span className="flex items-center gap-1"><MessageCircle size={14} className="text-emerald-600" /> Chat</span>}
                                   </div>
-                                  
-                                  {!isMember && !isAdmin && !group.isPrivate && (
-                                      <div className="mt-4">
-                                          <button 
-                                            onClick={(e) => { e.stopPropagation(); handleJoin(group); }} 
-                                            className="w-full bg-cyan-50 text-cyan-700 text-xs font-black py-2.5 rounded-xl hover:bg-cyan-100 transition-colors uppercase tracking-widest"
-                                          >
-                                              Unirme a la comunidad
-                                          </button>
-                                      </div>
-                                  )}
                               </div>
                           </div>
                       );
@@ -318,11 +313,6 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
                       <p className="font-black text-sm uppercase tracking-widest">
                           {listTab === 'joined' ? 'No perteneces a ningún grupo aún' : 'No hay grupos públicos disponibles'}
                       </p>
-                      {listTab === 'joined' && (
-                        <button onClick={() => setListTab('all')} className="mt-4 text-cyan-600 font-bold text-xs hover:underline">
-                            Explorar grupos públicos
-                        </button>
-                      )}
                   </div>
               )}
           </div>
@@ -352,25 +342,37 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
               <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={handleImageUpload} />
           </div>
 
-          <input type="text" placeholder="Nombre del Grupo (ej: Mochileros Ecuador)" className="w-full p-3 bg-stone-50 rounded-xl border border-stone-200 outline-none focus:ring-2 focus:ring-cyan-500 font-bold" value={newGroupName} onChange={e => setNewGroupName(e.target.value)} />
+          <input type="text" placeholder="Nombre del Grupo" className="w-full p-3 bg-stone-50 rounded-xl border border-stone-200 outline-none focus:ring-2 focus:ring-cyan-500 font-bold" value={newGroupName} onChange={e => setNewGroupName(e.target.value)} />
           <textarea placeholder="Descripción del grupo..." className="w-full p-3 bg-stone-50 rounded-xl border border-stone-200 outline-none focus:ring-2 focus:ring-cyan-500 resize-none h-24" value={newGroupDesc} onChange={e => setNewGroupDesc(e.target.value)} />
           
-          <div 
-             className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${isPrivateGroup ? 'bg-orange-50 border-orange-200' : 'bg-green-50 border-green-200'}`} 
-             onClick={() => setIsPrivateGroup(!isPrivateGroup)}
-          >
-              <div className={`p-2 rounded-full ${isPrivateGroup ? 'bg-orange-100 text-orange-600' : 'bg-green-100 text-green-600'}`}>
-                  {isPrivateGroup ? <Lock size={20} /> : <Globe size={20} />}
+          <div className="space-y-2">
+              <div 
+                className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${isPrivateGroup ? 'bg-orange-50 border-orange-200' : 'bg-green-50 border-green-200'}`} 
+                onClick={() => setIsPrivateGroup(!isPrivateGroup)}
+              >
+                  <div className={`p-2 rounded-full ${isPrivateGroup ? 'bg-orange-100 text-orange-600' : 'bg-green-100 text-green-600'}`}>
+                      {isPrivateGroup ? <Lock size={20} /> : <Globe size={20} />}
+                  </div>
+                  <div className="flex-1">
+                      <p className={`text-sm font-bold ${isPrivateGroup ? 'text-orange-800' : 'text-green-800'}`}>
+                          {isPrivateGroup ? 'Grupo Privado' : 'Grupo Público'}
+                      </p>
+                  </div>
               </div>
-              <div className="flex-1">
-                  <p className={`text-sm font-bold ${isPrivateGroup ? 'text-orange-800' : 'text-green-800'}`}>
-                      {isPrivateGroup ? 'Grupo Privado' : 'Grupo Público'}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                      {isPrivateGroup 
-                        ? 'Solo tú puedes agregar miembros. No aparecerá en búsquedas.' 
-                        : 'Cualquier usuario puede unirse y ver el contenido.'}
-                  </p>
+
+              <div 
+                className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${createLinkedChat ? 'bg-cyan-50 border-cyan-200' : 'bg-stone-50 border-stone-200'}`} 
+                onClick={() => setCreateLinkedChat(!createLinkedChat)}
+              >
+                  <div className={`p-2 rounded-full ${createLinkedChat ? 'bg-cyan-100 text-cyan-600' : 'bg-stone-100 text-stone-400'}`}>
+                      <MessageCircle size={20} />
+                  </div>
+                  <div className="flex-1">
+                      <p className={`text-sm font-bold ${createLinkedChat ? 'text-cyan-800' : 'text-stone-600'}`}>
+                          {createLinkedChat ? 'Vincular Chat Grupal' : 'Sin Chat Grupal'}
+                      </p>
+                      <p className="text-[10px] text-stone-400">Crea automáticamente una sala de chat para los miembros.</p>
+                  </div>
               </div>
           </div>
 
@@ -392,8 +394,6 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
                   <ArrowLeft size={16} /> Volver al grupo
              </button>
              <h2 className="text-xl font-bold text-gray-800">Agregar Miembros</h2>
-             <p className="text-xs text-stone-500">Busca usuarios para añadir a "{selectedGroup?.name}".</p>
-             
              <div className="relative">
                 <Search className="absolute left-3 top-3 text-stone-400" size={18} />
                 <input 
@@ -404,23 +404,18 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
                     onChange={e => setMemberSearch(e.target.value)}
                 />
              </div>
-
              <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                 {filteredUsers.length > 0 ? (
-                     filteredUsers.map(u => (
-                         <div key={u.id} className="flex justify-between items-center p-3 border border-stone-100 rounded-xl hover:bg-stone-50">
-                             <div className="flex items-center gap-3">
-                                 <img src={u.avatar} className="w-10 h-10 rounded-full object-cover" />
-                                 <span className="font-bold text-sm text-gray-800">{u.name}</span>
-                             </div>
-                             <button onClick={() => handleAddMember(u.id)} className="text-cyan-600 hover:bg-cyan-50 p-2 rounded-full">
-                                 <Plus size={20} />
-                             </button>
+                 {filteredUsers.map(u => (
+                     <div key={u.id} className="flex justify-between items-center p-3 border border-stone-100 rounded-xl hover:bg-stone-50">
+                         <div className="flex items-center gap-3">
+                             <img src={u.avatar} className="w-10 h-10 rounded-full object-cover" />
+                             <span className="font-bold text-sm text-gray-800">{u.name}</span>
                          </div>
-                     ))
-                 ) : (
-                     <div className="text-center py-8 text-gray-400 text-sm">No se encontraron usuarios disponibles.</div>
-                 )}
+                         <button onClick={() => handleAddMember(u.id)} className="text-cyan-600 hover:bg-cyan-50 p-2 rounded-full">
+                             <Plus size={20} />
+                         </button>
+                     </div>
+                 ))}
              </div>
         </div>
       );
@@ -443,13 +438,12 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
                     <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
                         <Lock size={48} className="mb-2" />
                         <h2 className="text-2xl font-bold">{selectedGroup.name}</h2>
-                        <p className="text-sm font-medium bg-black/40 px-3 py-1 rounded-full mt-2">Grupo Privado</p>
                     </div>
                  </div>
                  <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-stone-500">
                     <Shield size={64} className="mb-4 text-stone-300" />
-                    <h3 className="text-lg font-bold text-stone-700">Contenido Restringido</h3>
-                    <p className="text-sm max-w-xs mt-2">Este grupo es privado. Solo los miembros añadidos por el administrador pueden ver las plantillas y el contenido.</p>
+                    <h3 className="text-lg font-bold text-stone-700">Grupo Privado</h3>
+                    <p className="text-sm mt-2">Solo los miembros añadidos pueden ver este contenido.</p>
                  </div>
               </div>
           );
@@ -457,71 +451,51 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
 
       return (
           <div className="flex flex-col h-full overflow-hidden">
-             {/* Cover */}
-             <div className="h-48 shrink-0 relative group">
+             <div className="h-56 shrink-0 relative group">
                  <img src={selectedGroup.imageUrl} className="w-full h-full object-cover" />
-                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+                 <div className="absolute inset-0 bg-gradient-to-t from-black/90 to-transparent"></div>
                  
                  <button onClick={() => setView('list')} className="absolute top-4 left-4 bg-black/40 text-white p-2 rounded-full hover:bg-black/60 transition-colors z-20">
                      <ArrowLeft size={20} />
                  </button>
                  
-                 {/* Admin Actions (Top Right) */}
                  {isAdminOfGroup && (
                      <div className="absolute top-4 right-4 flex gap-2 z-20">
-                         <button 
-                            onClick={toggleGroupPrivacy}
-                            className="bg-black/40 text-white p-2 rounded-full hover:bg-black/60 transition-colors backdrop-blur-md"
-                            title={selectedGroup.isPrivate ? "Hacer Público" : "Hacer Privado"}
-                         >
+                         <button onClick={toggleGroupPrivacy} className="bg-black/40 text-white p-2 rounded-full hover:bg-black/60 transition-colors backdrop-blur-md">
                              {selectedGroup.isPrivate ? <Unlock size={20} /> : <Lock size={20} />}
                          </button>
-                         <button 
-                            onClick={handleDeleteGroup}
-                            className="bg-red-600/60 text-white p-2 rounded-full hover:bg-red-600 transition-colors backdrop-blur-md"
-                            title="Eliminar Grupo"
-                         >
+                         <button onClick={handleDeleteGroup} className="bg-red-600/60 text-white p-2 rounded-full hover:bg-red-600 transition-colors backdrop-blur-md">
                              <Trash2 size={20} />
                          </button>
                      </div>
                  )}
 
-                 {/* Edit Photo Button (Center Overlay for Admin) */}
-                 {isAdminOfGroup && (
-                     <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                         <button 
-                            onClick={() => editImageInputRef.current?.click()}
-                            className="bg-black/50 hover:bg-black/70 text-white px-4 py-2 rounded-full font-bold flex items-center gap-2 backdrop-blur-sm"
-                         >
-                             <Camera size={20} /> Editar Foto
-                         </button>
-                         <input type="file" ref={editImageInputRef} hidden accept="image/*" onChange={handleEditGroupImage} />
-                     </div>
-                 )}
-
-                 <div className="absolute bottom-4 left-4 text-white z-20 pointer-events-none">
-                     <h2 className="text-2xl font-bold leading-tight flex items-center gap-2">
+                 <div className="absolute bottom-4 left-4 text-white z-20 pointer-events-none pr-32">
+                     <h2 className="text-2xl font-black leading-tight flex items-center gap-2">
                          {selectedGroup.name}
                          {selectedGroup.isPrivate && <Lock size={16} className="text-stone-300" />}
                      </h2>
-                     <p className="text-white/80 text-sm line-clamp-1">{selectedGroup.description}</p>
+                     <p className="text-white/80 text-xs font-medium line-clamp-2 mt-1">{selectedGroup.description}</p>
                  </div>
                  
-                 <div className="absolute bottom-4 right-4 flex gap-2 z-20">
-                     {isAdminOfGroup && (
-                         <button onClick={() => setView('add_member')} className="bg-white/20 hover:bg-white/40 text-white text-xs font-bold px-3 py-1.5 rounded-full border border-white/30 backdrop-blur-md flex items-center gap-1">
-                             <UserPlus size={12} /> Agregar
+                 <div className="absolute bottom-4 right-4 flex flex-col gap-2 z-20">
+                     {(isMember || isAdminOfGroup) && selectedGroup.chatId && (
+                         <button 
+                            onClick={handleOpenChat}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-black shadow-lg flex items-center gap-2 transition-all active:scale-95"
+                         >
+                            <MessageCircle size={16} /> Abrir Chat
                          </button>
                      )}
-                     {isMember ? (
-                         <button onClick={() => handleLeave(selectedGroup)} className="bg-red-500/80 hover:bg-red-600 text-white text-xs font-bold px-3 py-1.5 rounded-full border border-red-400 backdrop-blur-md">Salir</button>
-                     ) : (
-                         <button onClick={() => handleJoin(selectedGroup)} className="bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold px-6 py-2 rounded-full shadow-lg border border-cyan-400">Unirme</button>
+                     {!isMember && !isAdminOfGroup && (
+                         <button onClick={() => handleJoin(selectedGroup)} className="bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-black px-6 py-2 rounded-xl shadow-lg">Unirme</button>
+                     )}
+                     {isMember && !isAdminOfGroup && (
+                         <button onClick={() => handleLeave(selectedGroup)} className="bg-red-500/80 hover:bg-red-600 text-white text-[10px] font-black px-3 py-1.5 rounded-lg border border-red-400 backdrop-blur-md">Salir</button>
                      )}
                  </div>
              </div>
 
-             {/* Content */}
              <div className="flex-1 overflow-y-auto bg-stone-50 p-6 pb-24 md:pb-6">
                  <div className="flex justify-between items-center mb-4">
                      <h3 className="font-bold text-gray-800 flex items-center gap-2">
@@ -529,7 +503,7 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
                      </h3>
                      {isMember && (
                          <button onClick={() => setView('create_template')} className="text-cyan-600 text-xs font-bold bg-cyan-50 px-3 py-1.5 rounded-full hover:bg-cyan-100 transition-colors flex items-center gap-1">
-                             <Plus size={14} /> Compartir Plantilla
+                             <Plus size={14} /> Compartir Itinerario
                          </button>
                      )}
                  </div>
@@ -558,9 +532,6 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
                                                  <Trash2 size={16} />
                                              </button>
                                          )}
-                                         <button onClick={() => alert("Copiado al portapapeles")} className="text-stone-300 hover:text-cyan-600">
-                                             <Share2 size={16} />
-                                         </button>
                                      </div>
                                  </div>
                              </div>
@@ -568,9 +539,26 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
                      </div>
                  ) : (
                      <div className="text-center py-10 text-stone-400 border-2 border-dashed border-stone-200 rounded-xl">
-                         <Map size={32} className="mx-auto mb-2 opacity-30" />
-                         <p className="text-sm">Aún no hay plantillas.</p>
-                         {isMember && <p className="text-xs">¡Comparte tu itinerario favorito!</p>}
+                         <Compass size={32} className="mx-auto mb-2 opacity-30" />
+                         <p className="text-sm">Aún no hay itinerarios aquí.</p>
+                     </div>
+                 )}
+
+                 {(isMember || isAdminOfGroup) && (
+                     <div className="mt-8 border-t border-stone-200 pt-6">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="font-bold text-gray-800 text-sm uppercase tracking-widest">Miembros Activos</h3>
+                            {isAdminOfGroup && (
+                                <button onClick={() => setView('add_member')} className="text-cyan-600 text-xs font-black hover:underline">Invitar +</button>
+                            )}
+                        </div>
+                        <div className="flex -space-x-3 overflow-hidden">
+                            {Object.keys(selectedGroup.members || {}).slice(0, 8).map(uid => {
+                                const u = allUsers.find(user => user.id === uid);
+                                if (!u) return null;
+                                return <img key={uid} src={u.avatar} className="w-10 h-10 rounded-full border-2 border-white object-cover" title={u.name} />;
+                            })}
+                        </div>
                      </div>
                  )}
              </div>
@@ -583,85 +571,39 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
           <button onClick={() => setView('detail')} className="text-sm text-gray-500 hover:text-cyan-600 flex items-center gap-1 font-bold mb-2">
               <ArrowLeft size={16} /> Cancelar
           </button>
-          <h2 className="text-xl font-bold text-gray-800">Compartir Plantilla de Viaje</h2>
-          <p className="text-xs text-stone-500">Ayuda a otros viajeros con tu experiencia.</p>
+          <h2 className="text-xl font-bold text-gray-800">Compartir Itinerario</h2>
 
           <input type="text" placeholder="Título (ej: Ruta del Sol 3 Días)" className="w-full p-3 bg-stone-50 rounded-xl border border-stone-200 outline-none focus:ring-2 focus:ring-cyan-500 font-bold" value={templateTitle} onChange={e => setTemplateTitle(e.target.value)} />
           
           <div className="grid grid-cols-2 gap-4">
-              <div>
-                  <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Duración</label>
-                  <div className="relative">
-                      <Calendar className="absolute left-3 top-3 text-stone-400" size={16} />
-                      <input type="text" className="w-full p-3 pl-9 bg-stone-50 rounded-xl border border-stone-200 outline-none text-sm" value={templateDuration} onChange={e => setTemplateDuration(e.target.value)} />
-                  </div>
-              </div>
-              <div>
-                  <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Presupuesto Aprox.</label>
-                  <div className="relative">
-                      <DollarSign className="absolute left-3 top-3 text-stone-400" size={16} />
-                      <input type="text" className="w-full p-3 pl-9 bg-stone-50 rounded-xl border border-stone-200 outline-none text-sm" value={templateBudget} onChange={e => setTemplateBudget(e.target.value)} />
-                  </div>
-              </div>
+              <input type="text" className="w-full p-3 bg-stone-50 rounded-xl border border-stone-200 outline-none text-sm" value={templateDuration} onChange={e => setTemplateDuration(e.target.value)} placeholder="Duración" />
+              <input type="text" className="w-full p-3 bg-stone-50 rounded-xl border border-stone-200 outline-none text-sm" value={templateBudget} onChange={e => setTemplateBudget(e.target.value)} placeholder="Presupuesto" />
           </div>
 
-          <div>
-              <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Intro / Resumen</label>
-              <textarea placeholder="Breve introducción o consejos generales..." className="w-full p-3 bg-stone-50 rounded-xl border border-stone-200 outline-none focus:ring-2 focus:ring-cyan-500 resize-none h-24 text-sm leading-relaxed" value={templateDesc} onChange={e => setTemplateDesc(e.target.value)} />
-          </div>
+          <textarea placeholder="Resumen consejos generales..." className="w-full p-3 bg-stone-50 rounded-xl border border-stone-200 outline-none focus:ring-2 focus:ring-cyan-500 resize-none h-24 text-sm" value={templateDesc} onChange={e => setTemplateDesc(e.target.value)} />
 
-          {/* ITINERARY BUILDER */}
           <div className="border-t border-stone-200 pt-4">
                <div className="flex justify-between items-center mb-3">
-                   <h3 className="font-bold text-gray-700 text-sm uppercase">Itinerario Detallado</h3>
-                   <button onClick={addDay} className="text-cyan-600 text-xs font-bold flex items-center gap-1 hover:bg-cyan-50 px-2 py-1 rounded transition-colors">
+                   <h3 className="font-bold text-gray-700 text-sm uppercase">Cronograma</h3>
+                   <button onClick={addDay} className="text-cyan-600 text-xs font-bold flex items-center gap-1 hover:bg-cyan-50 px-2 py-1 rounded">
                        <PlusCircle size={14} /> Agregar Día
                    </button>
                </div>
-
                <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2">
                    {itineraryDays.map((day, idx) => (
-                       <div key={idx} className="bg-stone-50 p-3 rounded-xl border border-stone-200 relative group">
+                       <div key={idx} className="bg-stone-50 p-3 rounded-xl border border-stone-200 relative">
                            <div className="flex justify-between items-center mb-2">
-                               <span className="font-bold text-sm text-stone-600 bg-white px-2 py-0.5 rounded border">Día {idx + 1}</span>
+                               <span className="font-bold text-sm text-stone-600 bg-white px-2 py-0.5 rounded">Día {idx + 1}</span>
                                {itineraryDays.length > 1 && (
                                    <button onClick={() => removeDay(idx)} className="text-stone-300 hover:text-red-500">
                                        <Trash2 size={14} />
                                    </button>
                                )}
                            </div>
-                           
                            <div className="space-y-2">
-                               <div className="flex items-center gap-2">
-                                   <Sun size={16} className="text-orange-400 shrink-0" />
-                                   <input 
-                                     type="text" 
-                                     placeholder="Actividades de la mañana..." 
-                                     className="w-full bg-white text-sm p-2 rounded-lg border border-stone-200 outline-none focus:border-cyan-400"
-                                     value={day.morning}
-                                     onChange={(e) => updateDay(idx, 'morning', e.target.value)}
-                                   />
-                               </div>
-                               <div className="flex items-center gap-2">
-                                   <Sunset size={16} className="text-blue-400 shrink-0" />
-                                   <input 
-                                     type="text" 
-                                     placeholder="Actividades de la tarde..." 
-                                     className="w-full bg-white text-sm p-2 rounded-lg border border-stone-200 outline-none focus:border-cyan-400"
-                                     value={day.afternoon}
-                                     onChange={(e) => updateDay(idx, 'afternoon', e.target.value)}
-                                   />
-                               </div>
-                               <div className="flex items-center gap-2">
-                                   <Moon size={16} className="text-indigo-400 shrink-0" />
-                                   <input 
-                                     type="text" 
-                                     placeholder="Actividades de la noche..." 
-                                     className="w-full bg-white text-sm p-2 rounded-lg border border-stone-200 outline-none focus:border-cyan-400"
-                                     value={day.night}
-                                     onChange={(e) => updateDay(idx, 'night', e.target.value)}
-                                   />
-                               </div>
+                               <input type="text" placeholder="Mañana..." className="w-full bg-white text-sm p-2 rounded-lg border border-stone-200 outline-none" value={day.morning} onChange={(e) => updateDay(idx, 'morning', e.target.value)} />
+                               <input type="text" placeholder="Tarde..." className="w-full bg-white text-sm p-2 rounded-lg border border-stone-200 outline-none" value={day.afternoon} onChange={(e) => updateDay(idx, 'afternoon', e.target.value)} />
+                               <input type="text" placeholder="Noche..." className="w-full bg-white text-sm p-2 rounded-lg border border-stone-200 outline-none" value={day.night} onChange={(e) => updateDay(idx, 'night', e.target.value)} />
                            </div>
                        </div>
                    ))}
@@ -669,7 +611,7 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
           </div>
 
           <button onClick={handleCreateTemplate} disabled={isLoading || !templateTitle} className="w-full bg-cyan-600 text-white font-bold py-3 rounded-xl shadow-lg flex items-center justify-center gap-2">
-              {isLoading ? <Loader2 className="animate-spin" /> : 'Publicar Plantilla'}
+              {isLoading ? <Loader2 className="animate-spin" /> : 'Publicar'}
           </button>
       </div>
   );
@@ -677,7 +619,6 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
   return (
     <div className="fixed inset-0 z-[300] flex items-center justify-center bg-stone-900/90 backdrop-blur-md p-0 md:p-4 animate-in fade-in duration-200">
       <div className="bg-white w-full h-full md:max-w-2xl md:h-auto md:max-h-[90vh] md:rounded-3xl overflow-hidden shadow-2xl flex flex-col">
-          {/* Header (Only for List view essentially, others have custom headers) */}
           {view === 'list' && (
               <div className="bg-white p-4 border-b border-stone-100 flex justify-between items-center shrink-0">
                   <div className="flex items-center gap-2 text-cyan-700">
@@ -689,7 +630,6 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
                   </button>
               </div>
           )}
-
           <div className="flex-1 overflow-y-auto bg-stone-50">
               {view === 'list' && renderList()}
               {view === 'create' && renderCreateGroup()}

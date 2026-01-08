@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Map as MapIcon, Compass, Camera, Search, LogOut, ChevronLeft, PlusCircle, Globe, Filter, Edit3, X, Lightbulb, MapPin, Plus, MessageCircle, Users, Bell, LayoutGrid, Award, Home, Sparkles, Trophy, CheckCircle, Navigation, Lock, User as UserIcon, AlertTriangle, ShieldAlert, Zap, Calendar, Settings, ChevronRight, Star, UserPlus, UserCheck, Play, Palmtree, Mountain, Tent, Waves, ChevronDown, ChevronUp } from 'lucide-react';
+import { Map as MapIcon, Compass, Camera, Search, LogOut, ChevronLeft, PlusCircle, Globe, Filter, Edit3, X, Lightbulb, MapPin, Plus, MessageCircle, Users, Bell, LayoutGrid, Award, Home, Sparkles, Trophy, CheckCircle, Navigation, Lock, User as UserIcon, AlertTriangle, ShieldAlert, Zap, Calendar, Settings, ChevronRight, Star, UserPlus, UserCheck, Play, Palmtree, Mountain, Tent, Waves, ChevronDown, ChevronUp, PlaySquare, Layout } from 'lucide-react';
 import { HeroSection } from './components/HeroSection';
 import { PostCard } from './components/PostCard';
 import { CreatePostModal } from './components/CreatePostModal';
@@ -21,16 +21,16 @@ import { AdminUsersModal } from './components/AdminUsersModal';
 import { AddDestinationModal } from './components/AddDestinationModal';
 import { ItineraryGeneratorModal } from './components/ItineraryGeneratorModal';
 import { LifeMap } from './components/LifeMap';
+import { PortalsView } from './components/PortalsView';
 import { ALL_DESTINATIONS as STATIC_DESTINATIONS, APP_VERSION } from './constants';
-import { Post, Story, Destination, User, Notification, Challenge, Suggestion, EcuadorRegion, Badge, TravelGroup } from './types';
+import { Post, Story, Destination, User, Notification, Challenge, Suggestion, EcuadorRegion, Badge, TravelGroup, Tab } from './types';
 import { StorageService } from './services/storageService';
 import { AuthService } from './services/authService';
 import { getDailyChallenge, isAdmin, getUserLevel, getNextLevel, BADGES } from './utils';
 import { db } from './services/firebase';
-import { ref, onValue } from 'firebase/database';
+import { onValue, ref } from 'firebase/database';
 import { Helmet } from 'react-helmet-async';
 
-type Tab = 'home' | 'explore' | 'search' | 'profile';
 type ProfileSubTab = 'grid' | 'badges' | 'map';
 type SearchCategory = 'all' | 'destinations' | 'users' | 'groups';
 
@@ -44,6 +44,7 @@ export default function App() {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [destinations, setDestinations] = useState<Destination[]>(STATIC_DESTINATIONS);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
   
   // Modal States
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -69,6 +70,7 @@ export default function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchCategory, setSearchCategory] = useState<SearchCategory>('all');
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [initialChatId, setInitialChatId] = useState<string | null>(null);
 
   // Perfil de otros usuarios
   const [viewingUserId, setViewingUserId] = useState<string | null>(null);
@@ -98,6 +100,11 @@ export default function App() {
   const handleGroupClick = (groupId: string) => {
     setSelectedGroupId(groupId);
     setIsGroupsOpen(true);
+  };
+
+  const handleOpenLinkedChat = (chatId: string) => {
+      setInitialChatId(chatId);
+      setIsChatOpen(true);
   };
 
   const toggleRegionCollapse = (region: string) => {
@@ -190,6 +197,32 @@ export default function App() {
       });
     }
   }, [userIsAdmin, selectedDestination?.id]);
+
+  useEffect(() => {
+    if (!user) {
+      setUnreadMessagesCount(0);
+      return;
+    }
+
+    const chatsRef = ref(db, 'chats');
+    return onValue(chatsRef, (snapshot) => {
+      const data = snapshot.val();
+      if (!data) {
+        setUnreadMessagesCount(0);
+        return;
+      }
+
+      let totalUnread = 0;
+      Object.values(data).forEach((chat: any) => {
+        if (chat.participants?.includes(user.id)) {
+          const messages = chat.messages ? Object.values(chat.messages) : [];
+          const unreadInChat = messages.filter((m: any) => !m.isRead && m.senderId !== user.id).length;
+          totalUnread += unreadInChat;
+        }
+      });
+      setUnreadMessagesCount(totalUnread);
+    });
+  }, [user?.id]);
 
   const handleCreateContent = (image: string, caption: string, location: string, type: 'post' | 'story', mediaType: 'image' | 'video') => requireAuth(async () => {
     try {
@@ -299,35 +332,52 @@ export default function App() {
         <title>Explora | Ecuador Travel</title>
       </Helmet>
 
-      <nav className="sticky top-0 z-[100] bg-white border-b border-stone-100 shadow-sm px-4 py-2">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-1 cursor-pointer" onClick={() => { setActiveTab('home'); setViewingUserId(null); }}>
-              <span className="text-lg md:text-xl font-black text-manabi-600 tracking-tighter">ECUADOR</span>
-              <span className="text-lg md:text-xl font-light text-stone-400">TRAVEL</span>
+      {activeTab !== 'portals' && (
+        <nav className="sticky top-0 z-[100] bg-white border-b border-stone-100 shadow-sm px-4 py-2">
+            <div className="max-w-7xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-4">
+                <div className="flex items-center gap-1 cursor-pointer" onClick={() => { setActiveTab('home'); setViewingUserId(null); }}>
+                <span className="text-lg md:text-xl font-black text-manabi-600 tracking-tighter">ECUADOR</span>
+                <span className="text-lg md:text-xl font-light text-stone-400">TRAVEL</span>
+                </div>
             </div>
-          </div>
 
-          <div className="flex items-center gap-1 md:gap-5">
-            <div className="flex items-center gap-1 md:gap-4 text-stone-500">
-               <button onClick={() => requireAuth(() => setIsNotificationsOpen(true))} className="p-2 hover:bg-stone-50 rounded-full transition-colors relative">
-                 <Bell size={22} />
-                 {notifications.length > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>}
-               </button>
-               <button onClick={() => requireAuth(() => setIsChatOpen(true))} className="p-2 hover:bg-stone-50 rounded-full transition-colors"><MessageCircle size={22} /></button>
-               {userIsAdmin && (
-                 <button onClick={() => setIsAdminUsersOpen(true)} className="p-2 bg-manabi-50 text-manabi-600 rounded-full"><Users size={22} /></button>
-               )}
+            <div className="flex items-center gap-1 md:gap-5">
+                <div className="flex items-center gap-1 md:gap-4 text-stone-500">
+                <button onClick={() => requireAuth(() => setIsNotificationsOpen(true))} className="p-2 hover:bg-stone-50 rounded-full transition-colors relative">
+                    <Bell size={22} />
+                    {notifications.length > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>}
+                </button>
+                <button onClick={() => requireAuth(() => { setIsChatOpen(true); setInitialChatId(null); })} className="p-2 hover:bg-stone-50 rounded-full transition-colors relative">
+                    <MessageCircle size={22} />
+                    {unreadMessagesCount > 0 && (
+                    <span className="absolute top-1.5 right-1.5 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center border-2 border-white px-1">
+                        {unreadMessagesCount > 99 ? '99+' : unreadMessagesCount}
+                    </span>
+                    )}
+                </button>
+                {userIsAdmin && (
+                    <button onClick={() => setIsAdminUsersOpen(true)} className="p-2 bg-manabi-50 text-manabi-600 rounded-full"><Users size={22} /></button>
+                )}
+                </div>
+                <button onClick={() => requireAuth(() => setIsCreateModalOpen(true))} className="hidden md:flex bg-manabi-600 text-white px-5 py-2 rounded-xl font-bold text-sm shadow-md hover:bg-manabi-700 transition-all items-center gap-2"><Camera size={18} /> Publicar</button>
+                {user && <img src={user.avatar} className="hidden md:block w-10 h-10 rounded-full border-2 border-manabi-500 cursor-pointer object-cover" onClick={() => { setViewingUserId(null); setActiveTab('profile'); setProfileSubTab('grid'); }} />}
             </div>
-            <button onClick={() => requireAuth(() => setIsCreateModalOpen(true))} className="hidden md:flex bg-manabi-600 text-white px-5 py-2 rounded-xl font-bold text-sm shadow-md hover:bg-manabi-700 transition-all items-center gap-2"><Camera size={18} /> Publicar</button>
-            {user && <img src={user.avatar} className="hidden md:block w-10 h-10 rounded-full border-2 border-manabi-500 cursor-pointer object-cover" onClick={() => { setViewingUserId(null); setActiveTab('profile'); setProfileSubTab('grid'); }} />}
-          </div>
-        </div>
-      </nav>
+            </div>
+        </nav>
+      )}
 
-      <main className="max-w-7xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-12 gap-8 pb-24 md:pb-6">
-        <div className="lg:col-span-8">
-          {activeTab === 'explore' ? (
+      <main className={`max-w-7xl mx-auto px-4 py-6 ${activeTab === 'portals' ? 'p-0 max-w-full' : 'grid grid-cols-1 lg:grid-cols-12 gap-8 pb-24 md:pb-6'}`}>
+        <div className={activeTab === 'portals' ? 'w-full' : 'lg:col-span-8'}>
+          {activeTab === 'portals' ? (
+              <PortalsView 
+                posts={posts} 
+                currentUser={user} 
+                onLike={(p) => StorageService.toggleLikePost(p, user?.id || 'guest')} 
+                onComment={(id) => setViewingPost(posts.find(p => p.id === id) || null)} 
+                onUserClick={handleUserClick} 
+              />
+          ) : activeTab === 'explore' ? (
             <div className="animate-in fade-in slide-in-from-bottom-4 space-y-8">
                <div className="grid grid-cols-3 gap-3">
                   <button onClick={() => setIsNearbyModalOpen(true)} className="flex flex-col items-center justify-center p-4 bg-white rounded-3xl border border-stone-100 shadow-sm hover:shadow-md transition-all group">
@@ -607,7 +657,7 @@ export default function App() {
                     </button>
                     <button onClick={() => setIsItineraryOpen(true)} className="bg-white p-6 rounded-3xl border border-stone-100 shadow-sm hover:shadow-md transition-all flex flex-col items-center gap-3 text-center group">
                         <div className="bg-blue-50 text-blue-600 p-4 rounded-2xl group-hover:scale-110 transition-transform"><Calendar size={28} /></div>
-                        <span className="block text-sm font-black text-stone-800 leading-none">Viajes IA</span>
+                        <span className="block text-sm font-black text-stone-800 leading-none">Planificar Viaje</span>
                     </button>
                     <button onClick={() => setIsSuggestionsOpen(true)} className="bg-white p-6 rounded-3xl border border-stone-100 shadow-sm hover:shadow-md transition-all flex flex-col items-center gap-3 text-center group">
                         <div className="bg-amber-50 text-amber-600 p-4 rounded-2xl group-hover:scale-110 transition-transform"><Lightbulb size={28} /></div>
@@ -735,32 +785,67 @@ export default function App() {
           )}
         </div>
 
-        <div className="hidden lg:block lg:col-span-4 space-y-6">
-          <div className="bg-white rounded-3xl p-6 shadow-sm border border-stone-100 sticky top-24">
-             <div className="flex items-center gap-2 mb-4">
-                <Trophy className="text-manabi-600" size={20} />
-                <h3 className="font-bold text-gray-800 uppercase text-xs tracking-widest">Recomendados</h3>
-             </div>
-             <div className="space-y-4">
-                {destinations.slice(0, 4).map(dest => (
-                  <div key={dest.id} className="flex gap-3 group cursor-pointer" onClick={() => setSelectedDestination(dest)}>
-                     <img src={dest.imageUrl} className="w-16 h-16 rounded-xl object-cover" />
-                     <div className="flex-1">
-                        <h4 className="font-bold text-sm text-gray-800 group-hover:text-manabi-600 transition-colors">{dest.name}</h4>
-                        <p className="text-[10px] text-stone-400 flex items-center gap-1"><MapPin size={10} /> {dest.province}</p>
-                     </div>
-                  </div>
-                ))}
-             </div>
-          </div>
-        </div>
+        {activeTab !== 'portals' && (
+            <div className="hidden lg:block lg:col-span-4 space-y-6">
+            <div className="bg-white rounded-3xl p-6 shadow-sm border border-stone-100 sticky top-24">
+                <div className="flex items-center gap-2 mb-4">
+                    <Trophy className="text-manabi-600" size={20} />
+                    <h3 className="font-bold text-gray-800 uppercase text-xs tracking-widest">Recomendados</h3>
+                </div>
+                <div className="space-y-4">
+                    {destinations.slice(0, 4).map(dest => (
+                    <div key={dest.id} className="flex gap-3 group cursor-pointer" onClick={() => setSelectedDestination(dest)}>
+                        <img src={dest.imageUrl} className="w-16 h-16 rounded-xl object-cover" />
+                        <div className="flex-1">
+                            <h4 className="font-bold text-sm text-gray-800 group-hover:text-manabi-600 transition-colors">{dest.name}</h4>
+                            <p className="text-[10px] text-stone-400 flex items-center gap-1"><MapPin size={10} /> {dest.province}</p>
+                        </div>
+                    </div>
+                    ))}
+                </div>
+            </div>
+            </div>
+        )}
       </main>
 
+      {/* PANEL INFERIOR DINÁMICO REORDENADO */}
       <div className="fixed bottom-0 w-full bg-white border-t border-stone-100 flex justify-around items-center p-2.5 md:hidden z-[150] shadow-2xl">
-        <button onClick={() => { setActiveTab('home'); setViewingUserId(null); }} className={`flex flex-col items-center gap-1 ${activeTab === 'home' ? 'text-manabi-600' : 'text-stone-400'}`}><Home size={22} /><span className="text-[10px] font-bold">Inicio</span></button>
-        <button onClick={() => setActiveTab('explore')} className={`flex flex-col items-center gap-1 ${activeTab === 'explore' ? 'text-manabi-600' : 'text-stone-400'}`}><Compass size={22} /><span className="text-[10px] font-bold">Explorar</span></button>
-        <button onClick={() => requireAuth(() => setIsCreateModalOpen(true))} className="relative -top-5 bg-manabi-600 text-white rounded-2xl p-4 shadow-xl border-4 border-white transition-transform active:scale-90"><Camera size={26} /></button>
-        <button onClick={() => setActiveTab('search')} className={`flex flex-col items-center gap-1 ${activeTab === 'search' ? 'text-manabi-600' : 'text-stone-400'}`}><Search size={22} /><span className="text-[10px] font-bold">Buscar</span></button>
+        {/* Slot 1: Alternador dinámico Inicio <-> Portales */}
+        <button 
+          onClick={() => {
+            setViewingUserId(null);
+            setActiveTab(activeTab === 'portals' ? 'home' : 'portals');
+          }} 
+          className={`flex flex-col items-center gap-1 ${activeTab === 'home' || activeTab === 'portals' ? 'text-manabi-600' : 'text-stone-400'}`}
+        >
+          {activeTab === 'portals' ? <Layout size={22} /> : <PlaySquare size={22} />}
+          <span className="text-[10px] font-bold">{activeTab === 'portals' ? 'Muro' : 'Portales'}</span>
+        </button>
+
+        {/* Slot 2: Explorar */}
+        <button 
+          onClick={() => { setViewingUserId(null); setActiveTab('explore'); }} 
+          className={`flex flex-col items-center gap-1 ${activeTab === 'explore' ? 'text-manabi-600' : 'text-stone-400'}`}
+        >
+          <Compass size={22} />
+          <span className="text-[10px] font-bold">Explorar</span>
+        </button>
+
+        {/* Slot 3: Cámara (Crear) */}
+        <button onClick={() => requireAuth(() => setIsCreateModalOpen(true))} className="relative -top-5 bg-manabi-600 text-white rounded-2xl p-4 shadow-xl border-4 border-white transition-transform active:scale-90">
+          <Camera size={26} />
+        </button>
+
+        {/* Slot 4: Buscar */}
+        <button 
+          onClick={() => { setViewingUserId(null); setActiveTab('search'); }} 
+          className={`flex flex-col items-center gap-1 ${activeTab === 'search' ? 'text-manabi-600' : 'text-stone-400'}`}
+        >
+          <Search size={22} />
+          <span className="text-[10px] font-bold">Buscar</span>
+        </button>
+
+        {/* Slot 5: Perfil */}
         <button onClick={() => { setViewingUserId(null); setActiveTab('profile'); setProfileSubTab('grid'); }} className={`flex flex-col items-center gap-1 ${activeTab === 'profile' && !viewingUserId ? 'text-manabi-600' : 'text-stone-400'}`}>
           {user ? (
             <img 
@@ -778,10 +863,17 @@ export default function App() {
       <CreatePostModal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} onSubmit={handleCreateContent} />
       <NearbyModal isOpen={isNearbyModalOpen} onClose={() => setIsNearbyModalOpen(false)} isLoading={false} data={null} />
       <SuggestionsModal isOpen={isSuggestionsOpen} onClose={() => setIsSuggestionsOpen(false)} currentUser={user || {id:'guest'} as any} isAdmin={userIsAdmin} suggestions={suggestions} />
-      <ChatModal isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} currentUser={user || {id:'guest'} as any} allUsers={allUsersList} />
+      <ChatModal isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} currentUser={user || {id:'guest'} as any} allUsers={allUsersList} initialChatId={null} />
       <AddDestinationModal isOpen={isAddDestModalOpen} onClose={() => setIsAddDestModalOpen(false)} onSubmit={(d) => StorageService.addDestination({ ...d, id: `dest_${Date.now()}`, createdBy: user?.id })} existingDestinations={destinations} />
       <ItineraryGeneratorModal isOpen={isItineraryOpen} onClose={() => setIsItineraryOpen(false)} />
-      <TravelGroupsModal isOpen={isGroupsOpen} onClose={() => { setIsGroupsOpen(false); setSelectedGroupId(null); }} currentUser={user || {id:'guest'} as any} allUsers={allUsersList} initialGroupId={selectedGroupId} />
+      <TravelGroupsModal 
+        isOpen={isGroupsOpen} 
+        onClose={() => { setIsGroupsOpen(false); setSelectedGroupId(null); }} 
+        currentUser={user || {id:'guest'} as any} 
+        allUsers={allUsersList} 
+        initialGroupId={selectedGroupId}
+        onOpenChat={handleOpenLinkedChat}
+      />
       
       {selectedDestination && (
         <TravelGuideModal 

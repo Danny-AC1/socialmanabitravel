@@ -122,6 +122,7 @@ export interface Notification {
 }
 
 export type EcuadorRegion = 'Costa' | 'Sierra' | 'Amazonía' | 'Insular';
+export type Tab = 'home' | 'portals' | 'explore' | 'search' | 'profile';
 
 export interface Destination {
   id: string;
@@ -208,4 +209,5 @@ export interface TravelGroup {
   isPrivate: boolean; // Privacidad
   members: Record<string, boolean>; // { userId: true }
   templates?: Record<string, TravelTemplate>; // Colección de plantillas
+  chatId?: string; // Nuevo: ID del chat grupal vinculado
 }

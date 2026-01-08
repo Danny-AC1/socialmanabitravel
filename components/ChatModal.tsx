@@ -5,7 +5,7 @@ import {
   Mic, Paperclip, Trash2, Check, CheckCheck, 
   Play, Video, Reply as ReplyIcon, Edit2, AlertTriangle, User as UserIcon,
   Sparkles, Zap, Wand2, FileText, Brain, Loader2, Languages, Volume2, 
-  Briefcase, Layout, Plus, DollarSign, MapPin, Calculator, ClipboardList, Scan, Globe, CloudSun, Navigation, FolderHeart, Calendar, Maximize2, Minimize2, Map as MapIcon, BarChart3, PieChart, Users2, Info, ChevronDown, PlusCircle, CheckSquare, Square, CreditCard, History, Waves, Pause, UserPlus
+  Briefcase, Layout, Plus, DollarSign, MapPin, Calculator, ClipboardList, Scan, Globe, CloudSun, Navigation, FolderHeart, Calendar, Maximize2, Minimize2, Map as MapIcon, BarChart3, PieChart, Users2, Info, ChevronDown, PlusCircle, CheckSquare, Square, CreditCard, History, Waves, Pause, UserPlus, Download
 } from 'lucide-react';
 import { User, Chat, Message } from '../types';
 import { StorageService } from '../services/storageService';
@@ -23,7 +23,7 @@ import {
 } from '../services/geminiService';
 import { db } from '../services/firebase';
 import { onValue, ref, set, update, push, remove } from 'firebase/database';
-import { resizeImage } from '../utils';
+import { resizeImage, downloadMedia } from '../utils';
 
 interface ChatModalProps {
   isOpen: boolean;
@@ -82,8 +82,12 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   const [isProcessingVoice, setIsProcessingVoice] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
+  
+  // Image Viewer State
+  const [viewingImage, setViewingImage] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const isFirstLoadRef = useRef(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -125,6 +129,28 @@ export const ChatModal: React.FC<ChatModalProps> = ({
       setCatchUpSummary(summary);
       setIsProcessingAI(false);
   };
+
+  // --- SCROLL LOGIC ---
+  useEffect(() => {
+    if (messages.length > 0) {
+      const scrollOptions: ScrollIntoViewOptions = {
+        behavior: isFirstLoadRef.current ? 'auto' : 'smooth'
+      };
+      
+      // Pequeño timeout para asegurar que las imágenes o contenido pesado se hayan renderizado
+      const timer = setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView(scrollOptions);
+        isFirstLoadRef.current = false;
+      }, 100);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [messages, activeChatId]);
+
+  // Restablecer flag de carga al cambiar de chat
+  useEffect(() => {
+    isFirstLoadRef.current = true;
+  }, [activeChatId]);
 
   // --- GROUP ACTIONS ---
 
@@ -343,7 +369,9 @@ export const ChatModal: React.FC<ChatModalProps> = ({
         const sorted = loadedMessages.sort((a, b) => a.timestamp - b.timestamp);
         setMessages(sorted);
         fetchAISuggestions(sorted);
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        
+        // Marcar como leído al recibir nuevos mensajes si el chat está activo
+        StorageService.markChatAsRead(currentId, currentUser.id);
       } else {
         setMessages([]);
       }
@@ -492,11 +520,27 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                                                 </div>
                                             )}
 
-                                            {msg.mediaUrl && msg.type === 'image' && <img src={msg.mediaUrl} className="rounded-xl md:rounded-2xl mb-2 w-full object-cover max-h-60" />}
+                                            {msg.mediaUrl && msg.type === 'image' && (
+                                                <img 
+                                                    src={msg.mediaUrl} 
+                                                    onClick={() => setViewingImage(msg.mediaUrl!)}
+                                                    className="rounded-xl md:rounded-2xl mb-2 w-full object-cover max-h-60 cursor-pointer hover:opacity-90 transition-opacity" 
+                                                />
+                                            )}
+                                            
                                             <p className={`text-xs md:text-sm font-medium leading-relaxed ${msg.type === 'audio' ? 'italic opacity-90' : ''}`}>{msg.text}</p>
                                             <div className="mt-1 text-[8px] md:text-[9px] opacity-40 text-right flex items-center justify-end gap-1">
                                                 {msg.id.includes('edited_') && <span className="uppercase text-[7px] font-black opacity-60">editado</span>}
                                                 {new Date(msg.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
+                                                {isMe && (
+                                                    <span className="ml-1 flex items-center">
+                                                        {msg.isRead ? (
+                                                            <CheckCheck size={14} className="text-cyan-200" strokeWidth={3} />
+                                                        ) : (
+                                                            <Check size={14} className="text-white/60" strokeWidth={3} />
+                                                        )}
+                                                    </span>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
@@ -516,6 +560,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                                 </div>
                             );
                         })}
+                        <div ref={messagesEndRef} />
                     </div>
 
                     {/* Footer Input Area */}
@@ -725,7 +770,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                             </div>
                             <div className="grid grid-cols-3 gap-2">
                                 {vaultImages.map((img, i) => (
-                                    <img key={i} src={img} className="w-full aspect-square object-cover rounded-xl shadow-sm border border-white hover:scale-105 transition-transform cursor-pointer" />
+                                    <img key={i} src={img} onClick={() => setViewingImage(img)} className="w-full aspect-square object-cover rounded-xl shadow-sm border border-white hover:scale-105 transition-transform cursor-pointer" />
                                 ))}
                                 {vaultImages.length === 0 && (
                                     <div className="col-span-3 py-20 text-center text-stone-300">
@@ -823,6 +868,42 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                 >
                     Crear Grupo de Viaje
                 </button>
+            </div>
+        )}
+
+        {/* FULLSCREEN IMAGE VIEWER OVERLAY */}
+        {viewingImage && (
+            <div 
+                className="fixed inset-0 z-[500] bg-black/95 flex flex-col items-center justify-center animate-in fade-in duration-200"
+                onClick={() => setViewingImage(null)}
+            >
+                <div className="absolute top-4 right-4 flex gap-4 z-[510]">
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); downloadMedia(viewingImage, `chat-photo-${Date.now()}.jpg`); }}
+                        className="p-3 bg-white/10 hover:bg-white/20 text-white rounded-full backdrop-blur-md transition-all border border-white/10"
+                        title="Descargar"
+                    >
+                        <Download size={24} />
+                    </button>
+                    <button 
+                        onClick={() => setViewingImage(null)}
+                        className="p-3 bg-white/10 hover:bg-white/20 text-white rounded-full backdrop-blur-md transition-all border border-white/10"
+                        title="Cerrar"
+                    >
+                        <X size={24} />
+                    </button>
+                </div>
+                
+                <img 
+                    src={viewingImage} 
+                    className="max-w-full max-h-full object-contain select-none p-4" 
+                    onClick={(e) => e.stopPropagation()}
+                    alt="Chat detail"
+                />
+                
+                <div className="absolute bottom-10 px-6 py-3 bg-white/5 backdrop-blur-md rounded-2xl border border-white/5 pointer-events-none">
+                    <p className="text-white/40 text-[10px] font-black uppercase tracking-widest">Visualización de Memoria</p>
+                </div>
             </div>
         )}
       </div>
