@@ -294,6 +294,48 @@ export const StorageService = {
     return chatId;
   },
 
+  createGroupChat: async (creatorId: string, participantIds: string[], name: string) => {
+    const chatId = `grp_${Date.now()}`;
+    const participants = Array.from(new Set([creatorId, ...participantIds]));
+    const chatRef = ref(db, `chats/${chatId}`);
+    
+    const newChat: Chat = {
+      id: chatId,
+      participants: participants,
+      name: name,
+      isGroup: true,
+      lastMessage: EncryptionService.encrypt('¡Nuevo grupo creado!', chatId),
+      lastTimestamp: Date.now(),
+      updatedAt: Date.now()
+    };
+    
+    await set(chatRef, newChat);
+    return chatId;
+  },
+
+  addParticipantToChat: async (chatId: string, userId: string, name?: string) => {
+    const chatRef = ref(db, `chats/${chatId}`);
+    const snapshot = await get(chatRef);
+    
+    if (snapshot.exists()) {
+      const chat = snapshot.val() as Chat;
+      const participants = Array.from(new Set([...(chat.participants || []), userId]));
+      
+      const updates: any = {
+        participants: participants,
+        updatedAt: Date.now()
+      };
+
+      // Si se convierte de P2P a Grupo
+      if (!chat.isGroup && participants.length > 2) {
+        updates.isGroup = true;
+        if (name) updates.name = name;
+      }
+
+      await update(chatRef, updates);
+    }
+  },
+
   sendMessage: async (
     chatId: string, 
     senderId: string, 

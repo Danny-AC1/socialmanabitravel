@@ -98,6 +98,8 @@ export interface Message {
 export interface Chat {
   id: string; 
   participants: string[];
+  name?: string; // Nombre opcional para grupos
+  isGroup?: boolean; // Flag para identificar grupos
   lastMessage: string;
   lastTimestamp: number;
   updatedAt: number;

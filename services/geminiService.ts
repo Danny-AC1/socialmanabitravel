@@ -21,7 +21,6 @@ Tu objetivo es ayudar a los viajeros a descubrir los maravillosos destinos de la
 const CHAT_COPILOT_INSTRUCTION = `
 Eres el "Copiloto IA de Manabí Social". Tu función es leer el contexto de un chat y sugerir acciones rápidas.
 Analiza si están hablando de tomar decisiones y ofrece opciones para una encuesta.
-Asigna roles a los usuarios según su comportamiento (ej: si manda fotos es 'Fotógrafo', si organiza es 'Líder').
 `;
 
 export const getTravelAdvice = async (query: string): Promise<string> => {
@@ -76,20 +75,6 @@ export const getChatCatchUp = async (messages: string[]): Promise<string> => {
         return response.text || "No hay mucho que resumir.";
     } catch (e) {
         return "Error al generar resumen.";
-    }
-};
-
-export const analyzeGroupRoles = async (messages: string[]): Promise<Record<string, string>> => {
-    try {
-        const history = messages.join("\n");
-        const response = await ai.models.generateContent({
-            model: 'gemini-3-flash-preview',
-            contents: `Analiza quién es quién en este viaje según sus mensajes: \n${history}. Devuelve un JSON de userId: RoleName. Roles: Planificador, Fotógrafo, Sibarita, Explorador, Animador.`,
-            config: { responseMimeType: "application/json" }
-        });
-        return JSON.parse(response.text);
-    } catch (e) {
-        return {};
     }
 };
 

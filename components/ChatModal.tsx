@@ -5,7 +5,7 @@ import {
   Mic, Paperclip, Trash2, Check, CheckCheck, 
   Play, Video, Reply as ReplyIcon, Edit2, AlertTriangle, User as UserIcon,
   Sparkles, Zap, Wand2, FileText, Brain, Loader2, Languages, Volume2, 
-  Briefcase, Layout, Plus, DollarSign, MapPin, Calculator, ClipboardList, Scan, Globe, CloudSun, Navigation, FolderHeart, Calendar, Maximize2, Minimize2, Map as MapIcon, BarChart3, PieChart, Users2, Info, ChevronDown, PlusCircle
+  Briefcase, Layout, Plus, DollarSign, MapPin, Calculator, ClipboardList, Scan, Globe, CloudSun, Navigation, FolderHeart, Calendar, Maximize2, Minimize2, Map as MapIcon, BarChart3, PieChart, Users2, Info, ChevronDown, PlusCircle, CheckSquare, Square, CreditCard, History, Waves, Pause, UserPlus
 } from 'lucide-react';
 import { User, Chat, Message } from '../types';
 import { StorageService } from '../services/storageService';
@@ -19,11 +19,10 @@ import {
     translateTravelMessage,
     processVoiceAction,
     getPlaceLiveContext,
-    getChatCatchUp,
-    analyzeGroupRoles
+    getChatCatchUp
 } from '../services/geminiService';
 import { db } from '../services/firebase';
-import { onValue, ref, set, update } from 'firebase/database';
+import { onValue, ref, set, update, push, remove } from 'firebase/database';
 import { resizeImage } from '../utils';
 
 interface ChatModalProps {
@@ -45,16 +44,21 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   const [chats, setChats] = useState<Chat[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   
+  // Logistics State
+  const [checklist, setChecklist] = useState<any[]>([]);
+  const [expenses, setExpenses] = useState<any[]>([]);
+  const [newItemText, setNewItemText] = useState('');
+  const [newExpenseDesc, setNewExpenseDesc] = useState('');
+  const [newExpenseAmount, setNewExpenseAmount] = useState('');
+
   const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
   const [chatSentiment, setChatSentiment] = useState<string>('calm');
   const [chatTheme, setChatTheme] = useState<string>('ocean');
   const [isProcessingAI, setIsProcessingAI] = useState(false);
-  const [transcriptions, setTranscriptions] = useState<Record<string, {transcription: string, summary: string}>>({});
   const [liveCards, setLiveCards] = useState<Record<string, {placeName: string, weather: string, temp: string, status: string}>>({});
   const [catchUpSummary, setCatchUpSummary] = useState<string | null>(null);
-  const [userRoles, setUserRoles] = useState<Record<string, string>>({});
   
-  const [polls, setPolls] = useState<Record<string, {question: string, options: string[], votes: Record<string, number>}>>({});
+  const [polls, setPolls] = useState<Record<string, any>>({});
   const [isCreatingPoll, setIsCreatingPoll] = useState(false);
   const [pollQuestion, setPollQuestion] = useState('');
   const [pollOptions, setPollOptions] = useState(['', '']);
@@ -63,20 +67,36 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   const [showLogistics, setShowLogistics] = useState(false);
   const [logisticsTab, setLogisticsTab] = useState<'checklist' | 'expenses' | 'vault'>('checklist');
 
+  // New States for Groups
+  const [isAddingParticipants, setIsAddingParticipants] = useState(false);
+  const [participantSearch, setParticipantSearch] = useState('');
+  const [isCreatingNewGroup, setIsCreatingNewGroup] = useState(false);
+  const [newGroupSelectedUsers, setNewGroupSelectedUsers] = useState<string[]>([]);
+  const [newGroupName, setNewGroupName] = useState('');
+
   const [inputText, setInputText] = useState('');
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [mediaPreview, setMediaPreview] = useState<{type: 'image'|'video'|'audio', url: string} | null>(null);
+  const [stagedAudio, setStagedAudio] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [isProcessingVoice, setIsProcessingVoice] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
+  const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<any>(null);
+  const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
 
   const getChatPartner = (chat: Chat) => {
     const partnerId = chat.participants.find(id => id !== currentUser.id);
     return allUsers.find(u => u.id === partnerId);
+  };
+
+  const getChatPartners = (chat: Chat) => {
+      return (chat.participants || []).filter(id => id !== currentUser.id).map(id => allUsers.find(u => u.id === id)).filter(Boolean) as User[];
   };
 
   const getSenderName = (id: string) => {
@@ -90,11 +110,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({
     if (lastMsg.text && !liveCards[lastMsg.id]) {
         const liveContext = await getPlaceLiveContext(lastMsg.text);
         if (liveContext) setLiveCards(prev => ({ ...prev, [lastMsg.id]: liveContext }));
-    }
-
-    if (msgs.length % 5 === 0) {
-        const roles = await analyzeGroupRoles(msgs.slice(-20).map(m => m.text));
-        setUserRoles(roles);
     }
 
     const result = await getChatCopilotSuggestions(msgs.slice(-5).map(m => m.text));
@@ -111,25 +126,196 @@ export const ChatModal: React.FC<ChatModalProps> = ({
       setIsProcessingAI(false);
   };
 
-  const handleCreatePoll = async () => {
-      if (!pollQuestion || pollOptions.filter(o => o.trim()).length < 2 || !activeChatId) return;
-      const pollId = `poll_${Date.now()}`;
-      await set(ref(db, `chats/${activeChatId}/polls/${pollId}`), {
-          question: pollQuestion,
-          options: pollOptions.filter(o => o.trim()),
-          votes: {}
-      });
-      setIsCreatingPoll(false);
-      setPollQuestion('');
-      setPollOptions(['', '']);
+  // --- GROUP ACTIONS ---
+
+  const handleAddParticipant = async (userId: string) => {
+      if (!activeChatId) return;
+      const chat = chats.find(c => c.id === activeChatId);
+      if (!chat) return;
+
+      if (!chat.isGroup) {
+          const gName = prompt("¿Cómo se llamará este nuevo grupo de viaje?");
+          if (gName === null) return;
+          await StorageService.addParticipantToChat(activeChatId, userId, gName || "Grupo de Viaje");
+      } else {
+          await StorageService.addParticipantToChat(activeChatId, userId);
+      }
+      setIsAddingParticipants(false);
+      setParticipantSearch('');
+  };
+
+  const handleCreateNewGroupFromScratch = async () => {
+      if (!newGroupName.trim() || newGroupSelectedUsers.length === 0) return;
+      setIsProcessingAI(true);
+      const newId = await StorageService.createGroupChat(currentUser.id, newGroupSelectedUsers, newGroupName);
+      setActiveChatId(newId);
+      setIsCreatingNewGroup(false);
+      setNewGroupName('');
+      setNewGroupSelectedUsers([]);
+      setIsProcessingAI(false);
+  };
+
+  // --- LOGISTICS ACTIONS ---
+
+  const handleAddChecklistItem = async (text: string) => {
+      if (!text.trim() || !activeChatId) return;
+      const item = { id: Date.now().toString(), text: text, completed: false, userId: currentUser.id };
+      const updated = [...checklist, item];
+      await StorageService.updateChecklist(activeChatId, updated);
+      setNewItemText('');
+  };
+
+  const toggleChecklistItem = async (id: string) => {
+      if (!activeChatId) return;
+      const updated = checklist.map(item => item.id === id ? { ...item, completed: !item.completed } : item);
+      await StorageService.updateChecklist(activeChatId, updated);
+  };
+
+  const removeChecklistItem = async (id: string) => {
+      if (!activeChatId) return;
+      const updated = checklist.filter(item => item.id !== id);
+      await StorageService.updateChecklist(activeChatId, updated);
+  };
+
+  const handleAddExpense = async (desc: string, amount: number) => {
+      if (!desc.trim() || isNaN(amount) || !activeChatId) return;
+      const expense = { 
+          id: Date.now().toString(), 
+          desc: desc, 
+          amount: amount, 
+          userId: currentUser.id, 
+          timestamp: Date.now() 
+      };
+      const updated = [...expenses, expense];
+      await StorageService.updateExpenses(activeChatId, updated);
+      setNewExpenseDesc('');
+      setNewExpenseAmount('');
+  };
+
+  const removeExpense = async (id: string) => {
+      if (!activeChatId) return;
+      const updated = expenses.filter(e => e.id !== id);
+      await StorageService.updateExpenses(activeChatId, updated);
+  };
+
+  const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
+
+  // --- VOICE LOGIC ---
+
+  const startRecording = async () => {
+      try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          const recorder = new MediaRecorder(stream);
+          audioChunksRef.current = [];
+          
+          recorder.ondataavailable = (e) => {
+              if (e.data.size > 0) audioChunksRef.current.push(e.data);
+          };
+
+          recorder.onstop = async () => {
+              setIsProcessingVoice(true);
+              const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+              const reader = new FileReader();
+              reader.readAsDataURL(audioBlob);
+              reader.onloadend = async () => {
+                  const base64Audio = reader.result as string;
+                  setStagedAudio(base64Audio);
+                  
+                  try {
+                      const { transcription } = await transcribeAndSummarizeAudio(base64Audio);
+                      if (transcription && transcription !== "Error") {
+                          setInputText(transcription);
+                      }
+                  } catch (err) { console.error("Error transcribiendo staged audio", err); }
+                  
+                  setIsProcessingVoice(false);
+              };
+          };
+
+          recorder.start();
+          mediaRecorderRef.current = recorder;
+          setIsRecording(true);
+          setRecordingDuration(0);
+          recordingTimerRef.current = setInterval(() => setRecordingDuration(p => p + 1), 1000);
+      } catch (e) {
+          alert("Permiso de micrófono denegado.");
+          setIsRecording(false);
+      }
+  };
+
+  const stopRecording = () => {
+      if (mediaRecorderRef.current && isRecording) {
+          mediaRecorderRef.current.stop();
+          mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
+          if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+          setIsRecording(false);
+      }
+  };
+
+  const handleMicToggle = (e: React.MouseEvent) => {
+      e.preventDefault();
+      if (isRecording) {
+          stopRecording();
+      } else {
+          setStagedAudio(null);
+          startRecording();
+      }
+  };
+
+  const handlePlayAudio = (id: string, url: string) => {
+      if (playingAudioId === id) {
+          audioPlayerRef.current?.pause();
+          setPlayingAudioId(null);
+      } else {
+          if (audioPlayerRef.current) {
+              audioPlayerRef.current.pause();
+          }
+          const audio = new Audio(url);
+          audio.onended = () => setPlayingAudioId(null);
+          audio.play();
+          audioPlayerRef.current = audio;
+          setPlayingAudioId(id);
+      }
+  };
+
+  const handleSendMessage = async (text?: string) => {
+      const t = text || inputText;
+      if (!t.trim() && !mediaPreview && !stagedAudio || !activeChatId) return;
+      
+      if (editingMessageId) {
+          await StorageService.editMessage(activeChatId, editingMessageId, t);
+          setEditingMessageId(null);
+      } else if (stagedAudio) {
+          await StorageService.sendMessage(activeChatId, currentUser.id, t || "Nota de voz", 'audio', stagedAudio);
+          setStagedAudio(null);
+      } else {
+          await StorageService.sendMessage(activeChatId, currentUser.id, t, mediaPreview ? mediaPreview.type : 'text', mediaPreview?.url);
+      }
+      
+      setInputText(''); 
+      setMediaPreview(null); 
       setIsActionMenuOpen(false);
   };
 
-  const handleVote = async (pollId: string, optionIdx: number) => {
-      if (!activeChatId) return;
-      await update(ref(db, `chats/${activeChatId}/polls/${pollId}/votes`), {
-          [currentUser.id]: optionIdx
-      });
+  // --- MESSAGE MANAGEMENT ---
+
+  const handleDeleteMessage = async (msgId: string) => {
+      if (confirm("¿Eliminar este mensaje permanentemente?")) {
+          await StorageService.deleteMessage(activeChatId!, msgId);
+      }
+  };
+
+  const handleStartEdit = (msg: Message) => {
+      setEditingMessageId(msg.id);
+      setInputText(msg.text);
+      setStagedAudio(null);
+      setMediaPreview(null);
+      setIsActionMenuOpen(false);
+  };
+
+  const cancelEditing = () => {
+      setEditingMessageId(null);
+      setInputText('');
   };
 
   useEffect(() => {
@@ -144,6 +330,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   useEffect(() => {
     const currentId = activeChatId;
     if (!currentId) return;
+    
     const messagesRef = ref(db, `chats/${currentId}/messages`);
     onValue(messagesRef, (snapshot) => {
       const data = snapshot.val();
@@ -157,20 +344,16 @@ export const ChatModal: React.FC<ChatModalProps> = ({
         setMessages(sorted);
         fetchAISuggestions(sorted);
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      } else {
+        setMessages([]);
       }
     });
-    onValue(ref(db, `chats/${currentId}/polls`), (snapshot) => setPolls(snapshot.val() || {}));
-  }, [activeChatId]);
 
-  const getRoleBadge = (userId: string) => {
-      const role = userRoles[userId];
-      if (!role) return null;
-      let color = 'bg-stone-500';
-      if (role === 'Planificador') color = 'bg-blue-600';
-      if (role === 'Fotógrafo') color = 'bg-amber-600';
-      if (role === 'Explorador') color = 'bg-emerald-600';
-      return <span className={`ml-2 px-1.5 py-0.5 rounded text-[8px] text-white font-black uppercase ${color}`}>{role}</span>;
-  };
+    onValue(ref(db, `chats/${currentId}/polls`), (snapshot) => setPolls(snapshot.val() || {}));
+    onValue(ref(db, `chats/${currentId}/logistics/checklist`), (snapshot) => setChecklist(snapshot.val() || []));
+    onValue(ref(db, `chats/${currentId}/logistics/expenses`), (snapshot) => setExpenses(snapshot.val() || []));
+
+  }, [activeChatId]);
 
   const getThemeStyles = () => {
       switch(chatTheme) {
@@ -181,52 +364,29 @@ export const ChatModal: React.FC<ChatModalProps> = ({
       }
   };
 
-  const handleSendMessage = async (text?: string) => {
-      const t = text || inputText;
-      if (!t.trim() && !mediaPreview || !activeChatId) return;
-      await StorageService.sendMessage(activeChatId, currentUser.id, t, 'text', mediaPreview?.url);
-      setInputText(''); setMediaPreview(null); setIsActionMenuOpen(false);
-  };
-
-  const handleRecordStart = async () => {
-      try {
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          const recorder = new MediaRecorder(stream);
-          audioChunksRef.current = [];
-          recorder.ondataavailable = (e) => audioChunksRef.current.push(e.data);
-          recorder.start();
-          mediaRecorderRef.current = recorder;
-          setIsRecording(true);
-          recordingTimerRef.current = setInterval(() => setRecordingDuration(p => p + 1), 1000);
-      } catch (e) { alert("Micrófono no disponible"); }
-  };
-
-  const handleRecordEnd = () => {
-      if (mediaRecorderRef.current && isRecording) {
-          mediaRecorderRef.current.stop();
-          mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
-          clearInterval(recordingTimerRef.current);
-          setTimeout(() => {
-              const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-              const reader = new FileReader();
-              reader.readAsDataURL(audioBlob);
-              reader.onloadend = () => setMediaPreview({ type: 'audio', url: reader.result as string });
-          }, 200);
-      }
-      setIsRecording(false);
-  };
-
   if (!isOpen) return null;
 
-  const activePartner = activeChatId ? getChatPartner(chats.find(c => c.id === activeChatId) || { participants: activeChatId.split('_') } as any) : null;
+  const currentChatObj = chats.find(c => c.id === activeChatId);
+  const activePartner = activeChatId && currentChatObj ? getChatPartner(currentChatObj) : null;
+  const activePartners = activeChatId && currentChatObj ? getChatPartners(currentChatObj) : [];
+  const vaultImages = messages.filter(m => m.type === 'image' && m.mediaUrl).map(m => m.mediaUrl!);
 
   return (
     <div className="fixed inset-0 z-[400] flex items-center justify-center bg-black/60 md:backdrop-blur-sm p-0 md:p-4">
       <div className={`bg-white w-full h-full md:max-w-6xl md:h-[90vh] md:rounded-[2.5rem] overflow-hidden shadow-2xl flex flex-row relative`}>
         
+        {/* SIDEBAR */}
         <div className={`w-full md:w-[350px] bg-white border-r border-gray-100 flex flex-col ${activeChatId ? 'hidden md:flex' : 'flex'}`}>
-            <div className="p-4 md:p-6 border-b border-gray-50 flex items-center gap-3">
-                <button onClick={onClose} className="text-stone-400 p-2 hover:bg-stone-50 rounded-full"><ChevronLeft size={24} /></button>
+            <div className="p-4 md:p-6 border-b border-gray-50 space-y-4">
+                <div className="flex justify-between items-center">
+                    <button onClick={onClose} className="text-stone-400 p-2 hover:bg-stone-50 rounded-full"><ChevronLeft size={24} /></button>
+                    <button 
+                        onClick={() => setIsCreatingNewGroup(true)}
+                        className="bg-cyan-50 text-cyan-600 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-1 hover:bg-cyan-100 transition-colors"
+                    >
+                        <UserPlus size={14} /> Nuevo Grupo
+                    </button>
+                </div>
                 <div className="flex-1 bg-stone-100 rounded-xl h-11 flex items-center px-4">
                     <Search size={16} className="text-stone-400 mr-2" />
                     <input className="bg-transparent outline-none w-full text-xs font-bold" placeholder="Buscar amigos..." />
@@ -238,10 +398,17 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                     if (!partner) return null;
                     return (
                         <div key={chat.id} onClick={() => setActiveChatId(chat.id)} className={`flex items-center gap-4 p-4 md:p-5 cursor-pointer hover:bg-stone-50 ${activeChatId === chat.id ? 'bg-cyan-50' : ''} border-b border-gray-50/50`}>
-                            <img src={partner.avatar} className="w-12 h-12 md:w-14 md:h-14 rounded-2xl object-cover shadow-sm" />
+                            <div className="relative shrink-0">
+                                <img src={partner.avatar} className="w-12 h-12 md:w-14 md:h-14 rounded-2xl object-cover shadow-sm" />
+                                {chat.isGroup && (
+                                    <div className="absolute -bottom-1 -right-1 bg-cyan-600 text-white p-1 rounded-lg border-2 border-white">
+                                        <Users2 size={10} />
+                                    </div>
+                                )}
+                            </div>
                             <div className="flex-1 min-w-0">
-                                <h4 className="font-black text-slate-800 text-sm">{partner.name}</h4>
-                                <p className="text-[10px] md:text-xs text-stone-400 truncate mt-0.5">Toca para abrir conversación</p>
+                                <h4 className="font-black text-slate-800 text-sm truncate">{chat.isGroup ? chat.name : partner.name}</h4>
+                                <p className="text-[10px] md:text-xs text-stone-400 truncate mt-0.5">{chat.isGroup ? `${chat.participants.length} participantes` : 'Toca para abrir'}</p>
                             </div>
                         </div>
                     );
@@ -249,48 +416,91 @@ export const ChatModal: React.FC<ChatModalProps> = ({
             </div>
         </div>
 
+        {/* CHAT AREA */}
         <div className={`flex-1 flex flex-col relative ${getThemeStyles()} ${!activeChatId ? 'hidden md:flex' : 'flex'}`}>
-            {activeChatId && activePartner ? (
+            {activeChatId && activePartner && currentChatObj ? (
                 <>
                     <div className="p-3 md:p-4 px-4 md:px-6 flex items-center justify-between z-20 sticky top-0 border-b border-black/5 backdrop-blur-xl">
                         <div className="flex items-center gap-3">
                             <button onClick={() => setActiveChatId(null)} className="md:hidden p-2 -ml-2 text-stone-600 active:bg-black/5 rounded-full transition-all"><ChevronLeft size={24} /></button>
-                            <img src={activePartner.avatar} className="w-9 h-9 md:w-11 md:h-11 rounded-xl md:rounded-2xl object-cover shadow-sm" />
-                            <div className="min-w-0">
-                                <h3 className="font-black text-sm truncate leading-none mb-1">{activePartner.name}</h3>
+                            
+                            {/* Avatar Stack for Groups */}
+                            <div className="flex -space-x-4">
+                                {activePartners.slice(0, 3).map((u, i) => (
+                                    <img key={u.id} src={u.avatar} className="w-9 h-9 md:w-11 md:h-11 rounded-xl md:rounded-2xl object-cover shadow-md border-2 border-white ring-1 ring-black/5 z-[1]" style={{ zIndex: 3 - i }} />
+                                ))}
+                            </div>
+
+                            <div className="min-w-0 ml-1">
+                                <h3 className="font-black text-sm truncate leading-none mb-1">{currentChatObj.isGroup ? currentChatObj.name : activePartner.name}</h3>
                                 <div className="flex items-center text-[8px] md:text-[9px] font-black uppercase tracking-widest gap-1 text-cyan-600">
-                                    <Zap size={8} fill="currentColor" /> Copiloto IA
+                                    {currentChatObj.isGroup ? `${currentChatObj.participants.length} viajeros activos` : <><Zap size={8} fill="currentColor" /> Copiloto IA</>}
                                 </div>
                             </div>
                         </div>
                         <div className="flex gap-1 md:gap-2">
+                            <button onClick={() => setIsAddingParticipants(true)} className="p-2.5 rounded-xl bg-white/30 hover:bg-white/50 text-current active:scale-95 transition-all"><UserPlus size={18} /></button>
                             <button onClick={handleCatchUp} className="p-2.5 rounded-xl bg-white/30 hover:bg-white/50 text-current active:scale-95 transition-all"><PieChart size={18} /></button>
                             <button onClick={() => setShowLogistics(!showLogistics)} className={`p-2.5 rounded-xl transition-all ${showLogistics ? 'bg-cyan-600 text-white shadow-lg' : 'bg-white/30 active:scale-95'}`}><Layout size={18}/></button>
                         </div>
                     </div>
-
-                    {catchUpSummary && (
-                        <div className="absolute top-16 md:top-20 left-4 right-4 md:left-6 md:right-6 z-[30] bg-white/95 backdrop-blur-2xl p-4 md:p-5 rounded-[1.5rem] md:rounded-[2rem] shadow-2xl border border-white animate-in slide-in-from-top-4">
-                            <div className="flex justify-between items-center mb-2">
-                                <h4 className="text-[10px] font-black uppercase text-cyan-600 tracking-widest flex items-center gap-2"><Info size={12}/> Resumen IA</h4>
-                                <button onClick={() => setCatchUpSummary(null)} className="p-1 hover:bg-stone-100 rounded-full"><X size={14}/></button>
-                            </div>
-                            <p className="text-xs md:text-sm font-medium text-slate-700 italic leading-relaxed">"{catchUpSummary}"</p>
-                        </div>
-                    )}
 
                     <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 z-10 scroll-smooth no-scrollbar" ref={messagesEndRef}>
                         {messages.map(msg => {
                             const isMe = msg.senderId === currentUser.id;
                             const liveCard = liveCards[msg.id];
                             return (
-                                <div key={msg.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
-                                    <div className={`max-w-[90%] md:max-w-[85%] p-3 md:p-4 rounded-2xl md:rounded-3xl ${isMe ? 'bg-cyan-600 text-white rounded-tr-sm shadow-md' : 'bg-white text-slate-800 rounded-tl-sm shadow-sm'}`}>
-                                        {!isMe && <p className="text-[9px] md:text-[10px] font-black mb-1 opacity-60 flex items-center">{getSenderName(msg.senderId)} {getRoleBadge(msg.senderId)}</p>}
-                                        {msg.mediaUrl && msg.type === 'image' && <img src={msg.mediaUrl} className="rounded-xl md:rounded-2xl mb-2 w-full object-cover max-h-60" />}
-                                        <p className="text-xs md:text-sm font-medium leading-relaxed">{msg.text}</p>
-                                        <div className="mt-1 text-[8px] md:text-[9px] opacity-40 text-right">{new Date(msg.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
+                                <div key={msg.id} className={`flex flex-col group/msg ${isMe ? 'items-end' : 'items-start'}`}>
+                                    <div className="relative max-w-[90%] md:max-w-[85%]">
+                                        {isMe && (
+                                            <div className="absolute -left-12 top-1/2 -translate-y-1/2 flex flex-col gap-1 opacity-0 group-hover/msg:opacity-100 transition-opacity">
+                                                <button 
+                                                    onClick={() => handleStartEdit(msg)}
+                                                    className="p-1.5 bg-white shadow-sm border border-stone-100 rounded-full text-stone-400 hover:text-cyan-600"
+                                                >
+                                                    <Edit2 size={12} />
+                                                </button>
+                                                <button 
+                                                    onClick={() => handleDeleteMessage(msg.id)}
+                                                    className="p-1.5 bg-white shadow-sm border border-stone-100 rounded-full text-stone-400 hover:text-red-500"
+                                                >
+                                                    <Trash2 size={12} />
+                                                </button>
+                                            </div>
+                                        )}
+                                        
+                                        <div className={`p-3 md:p-4 rounded-2xl md:rounded-3xl ${isMe ? 'bg-cyan-600 text-white rounded-tr-sm shadow-md' : 'bg-white text-slate-800 rounded-tl-sm shadow-sm'}`}>
+                                            {!isMe && <p className="text-[9px] md:text-[10px] font-black mb-1 opacity-60 flex items-center">{getSenderName(msg.senderId)}</p>}
+                                            
+                                            {msg.type === 'audio' && msg.mediaUrl && (
+                                                <div className="mb-2 flex items-center gap-3 bg-black/10 p-2.5 rounded-2xl">
+                                                    <button 
+                                                        onClick={() => handlePlayAudio(msg.id, msg.mediaUrl!)} 
+                                                        className="bg-white/90 text-slate-800 p-2 rounded-full shadow-sm active:scale-90 transition-transform"
+                                                    >
+                                                        {playingAudioId === msg.id ? <Pause size={14} fill="currentColor" /> : <Play size={14} fill="currentColor" />}
+                                                    </button>
+                                                    <div className="flex-1 flex flex-col gap-1">
+                                                        <div className="h-1 bg-white/20 rounded-full overflow-hidden">
+                                                            <div className={`h-full bg-white transition-all ${playingAudioId === msg.id ? 'w-full duration-[10s]' : 'w-0'}`}></div>
+                                                        </div>
+                                                        <div className="flex justify-between items-center px-0.5">
+                                                            <Volume2 size={10} className="opacity-40" />
+                                                            <span className="text-[8px] font-black opacity-40 uppercase tracking-widest">Audio</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {msg.mediaUrl && msg.type === 'image' && <img src={msg.mediaUrl} className="rounded-xl md:rounded-2xl mb-2 w-full object-cover max-h-60" />}
+                                            <p className={`text-xs md:text-sm font-medium leading-relaxed ${msg.type === 'audio' ? 'italic opacity-90' : ''}`}>{msg.text}</p>
+                                            <div className="mt-1 text-[8px] md:text-[9px] opacity-40 text-right flex items-center justify-end gap-1">
+                                                {msg.id.includes('edited_') && <span className="uppercase text-[7px] font-black opacity-60">editado</span>}
+                                                {new Date(msg.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
+                                            </div>
+                                        </div>
                                     </div>
+
                                     {liveCard && (
                                         <div className="mt-2 w-full max-w-[240px] bg-white rounded-2xl md:rounded-3xl shadow-lg overflow-hidden animate-in zoom-in-95">
                                             <div className="bg-cyan-600 p-2.5 text-white flex justify-between items-center">
@@ -306,74 +516,96 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                                 </div>
                             );
                         })}
-
-                        {Object.entries(polls).map(([id, pollData]) => {
-                            const poll = pollData as any;
-                            const totalVotes = Object.values(poll.votes || {}).length;
-                            return (
-                                <div key={id} className="w-full max-w-[280px] md:max-w-xs mx-auto my-6 bg-white rounded-[2rem] p-5 shadow-xl border border-stone-100 animate-in zoom-in-95">
-                                    <div className="flex items-center gap-3 mb-4">
-                                        <div className="bg-purple-100 p-2 rounded-xl text-purple-600"><BarChart3 size={18}/></div>
-                                        <h4 className="font-black text-slate-800 text-xs uppercase tracking-tight">{poll.question}</h4>
-                                    </div>
-                                    <div className="space-y-2">
-                                        {poll.options.map((opt: string, idx: number) => {
-                                            const optionVotes = Object.values(poll.votes || {}).filter(v => v === idx).length;
-                                            const pct = totalVotes > 0 ? (optionVotes / totalVotes) * 100 : 0;
-                                            return (
-                                                <button key={idx} onClick={() => handleVote(id, idx)} className="w-full text-left relative overflow-hidden bg-stone-50 p-2.5 rounded-xl active:bg-stone-100 transition-all">
-                                                    <div className="absolute inset-y-0 left-0 bg-purple-100/50 transition-all duration-700" style={{ width: `${pct}%` }}></div>
-                                                    <div className="relative flex justify-between items-center">
-                                                        <span className="text-[11px] font-bold text-slate-700 truncate pr-2">{opt}</span>
-                                                        <span className="text-[10px] font-black text-purple-600">{optionVotes}</span>
-                                                    </div>
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            );
-                        })}
                     </div>
 
-                    <div className="px-4 md:px-6 py-2 flex gap-2 overflow-x-auto no-scrollbar z-20">
-                        {aiSuggestions.map((s, i) => (
-                            <button key={i} onClick={() => handleSendMessage(s)} className="whitespace-nowrap px-4 py-2 bg-white/80 border border-black/5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm hover:bg-cyan-600 hover:text-white active:scale-95 transition-all flex items-center gap-2">
-                                <Sparkles size={10}/> {s}
-                            </button>
-                        ))}
-                    </div>
-
-                    <div className="p-4 md:p-6 pt-0 z-20">
-                        {isCreatingPoll && (
-                            <div className="mb-3 bg-white/95 backdrop-blur-xl p-4 rounded-[1.5rem] shadow-2xl border border-purple-100 animate-in slide-in-from-bottom-4">
-                                <div className="flex justify-between items-center mb-3">
-                                    <h4 className="text-[10px] font-black uppercase text-purple-600 tracking-widest flex items-center gap-2"><PlusCircle size={12}/> Nueva Encuesta</h4>
-                                    <button onClick={() => setIsCreatingPoll(false)} className="p-1"><X size={14}/></button>
+                    {/* Footer Input Area */}
+                    <div className="px-4 md:px-6 py-2 flex flex-col gap-2 z-20">
+                        {editingMessageId && (
+                            <div className="bg-amber-50 border border-amber-200 p-3 rounded-2xl flex items-center justify-between animate-in slide-in-from-bottom-2">
+                                <div className="flex items-center gap-2">
+                                    <Edit2 size={14} className="text-amber-600" />
+                                    <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Editando mensaje...</p>
                                 </div>
-                                <input placeholder="¿Qué vamos a decidir?" className="w-full p-2.5 bg-stone-50 rounded-xl mb-2 text-xs font-bold outline-none" value={pollQuestion} onChange={e => setPollQuestion(e.target.value)} />
-                                <div className="space-y-2 max-h-32 overflow-y-auto pr-1">
-                                    {pollOptions.map((opt, i) => (
-                                        <input key={i} placeholder={`Opción ${i+1}`} className="w-full p-2 bg-stone-50 rounded-lg text-[11px] outline-none" value={opt} onChange={e => {
-                                            const n = [...pollOptions]; n[i] = e.target.value; setPollOptions(n);
-                                        }} />
-                                    ))}
-                                    <button onClick={() => setPollOptions([...pollOptions, ''])} className="text-[9px] font-black text-purple-500 uppercase px-1">+ Añadir opción</button>
-                                </div>
-                                <button onClick={handleCreatePoll} className="w-full mt-3 bg-purple-600 text-white py-3 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-purple-100">Lanzar Encuesta</button>
+                                <button onClick={cancelEditing} className="text-stone-400 hover:text-red-500 p-1"><X size={16} /></button>
                             </div>
                         )}
 
+                        {stagedAudio && (
+                            <div className="bg-cyan-50 border border-cyan-200 p-3 rounded-2xl flex items-center gap-3 animate-in slide-in-from-bottom-2">
+                                <button 
+                                    onClick={() => handlePlayAudio('staged', stagedAudio)}
+                                    className="bg-cyan-600 text-white p-2 rounded-full shadow-md"
+                                >
+                                    {playingAudioId === 'staged' ? <Pause size={16} /> : <Play size={16} fill="currentColor" />}
+                                </button>
+                                <div className="flex-1">
+                                    <p className="text-[10px] font-black text-cyan-600 uppercase tracking-widest">Audio grabado listo para enviar</p>
+                                    <div className="h-1 bg-cyan-200 rounded-full mt-1 overflow-hidden">
+                                        <div className={`h-full bg-cyan-600 transition-all ${playingAudioId === 'staged' ? 'w-full duration-[5s]' : 'w-0'}`}></div>
+                                    </div>
+                                </div>
+                                <button onClick={() => setStagedAudio(null)} className="text-stone-400 hover:text-red-500 p-1"><Trash2 size={16} /></button>
+                            </div>
+                        )}
+                        
+                        {!editingMessageId && (
+                            <div className="flex gap-2 overflow-x-auto no-scrollbar">
+                                {aiSuggestions.map((s, i) => (
+                                    <button key={i} onClick={() => handleSendMessage(s)} className="whitespace-nowrap px-4 py-2 bg-white/80 border border-black/5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm hover:bg-cyan-600 hover:text-white active:scale-95 transition-all flex items-center gap-2">
+                                        <Sparkles size={10}/> {s}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="p-4 md:p-6 pt-0 z-20">
                         <div className="bg-white/90 backdrop-blur-2xl rounded-[1.8rem] md:rounded-[2.5rem] p-1.5 md:p-2 shadow-xl border border-black/5 flex items-center gap-1">
-                            <button onClick={() => setIsActionMenuOpen(!isActionMenuOpen)} className={`p-3 md:p-4 rounded-full transition-all ${isActionMenuOpen ? 'bg-cyan-600 text-white rotate-45' : 'bg-stone-100 text-stone-500 active:scale-90'}`}><Plus size={22} /></button>
-                            <textarea value={inputText} onChange={e => setInputText(e.target.value)} placeholder="Mensaje..." className="flex-1 bg-transparent py-3 md:py-4 px-2 outline-none text-slate-800 font-bold placeholder-stone-400 resize-none max-h-32 text-sm leading-tight" rows={1} />
+                            {!editingMessageId ? (
+                                <button onClick={() => setIsActionMenuOpen(!isActionMenuOpen)} className={`p-3 md:p-4 rounded-full transition-all ${isActionMenuOpen ? 'bg-cyan-600 text-white rotate-45' : 'bg-stone-100 text-stone-500 active:scale-90'}`}><Plus size={22} /></button>
+                            ) : (
+                                <button onClick={cancelEditing} className="p-3 md:p-4 rounded-full bg-stone-100 text-stone-500 active:scale-90 transition-all"><X size={22} /></button>
+                            )}
+                            
+                            <div className="flex-1 relative flex items-center">
+                                {isProcessingVoice && (
+                                    <div className="absolute inset-0 bg-white z-10 flex items-center gap-2 px-2">
+                                        <div className="flex gap-0.5">
+                                            <div className="w-1 h-3 bg-cyan-500 animate-bounce"></div>
+                                            <div className="w-1 h-5 bg-cyan-500 animate-bounce [animation-delay:0.1s]"></div>
+                                            <div className="w-1 h-4 bg-cyan-500 animate-bounce [animation-delay:0.2s]"></div>
+                                        </div>
+                                        <span className="text-[10px] font-black uppercase text-cyan-600 animate-pulse">Analizando voz...</span>
+                                    </div>
+                                )}
+                                <textarea 
+                                    value={inputText} 
+                                    onChange={e => setInputText(e.target.value)} 
+                                    placeholder={editingMessageId ? "Editar mensaje..." : (stagedAudio ? "Añadir descripción al audio..." : "Mensaje...")} 
+                                    className="w-full bg-transparent py-3 md:py-4 px-2 outline-none text-slate-800 font-bold placeholder-stone-400 resize-none max-h-32 text-sm leading-tight" 
+                                    rows={1} 
+                                />
+                            </div>
+
                             <div className="flex gap-1 pr-1">
-                                <button onMouseDown={handleRecordStart} onMouseUp={handleRecordEnd} onTouchStart={handleRecordStart} onTouchEnd={handleRecordEnd} className={`p-3 md:p-4 rounded-full transition-all ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-stone-100 text-stone-500 active:scale-90'}`}><Mic size={22} /></button>
-                                <button onClick={() => handleSendMessage()} className="p-3 md:p-4 bg-cyan-600 text-white rounded-full shadow-lg active:scale-90 transition-all"><Send size={22} /></button>
+                                {!editingMessageId && (
+                                    <button 
+                                        onClick={handleMicToggle}
+                                        className={`p-3 md:p-4 rounded-full transition-all touch-none ${isRecording ? 'bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.5)]' : 'bg-stone-100 text-stone-500 active:scale-90'}`}
+                                    >
+                                        {isRecording ? <div className="flex gap-0.5 items-center px-1"><div className="w-1 h-3 bg-white animate-pulse"></div><div className="w-1 h-5 bg-white animate-pulse"></div><span className="ml-1 text-[10px] font-black">{recordingDuration}s</span></div> : <Mic size={22} />}
+                                    </button>
+                                )}
+                                <button 
+                                    onClick={() => handleSendMessage()} 
+                                    className={`p-3 md:p-4 rounded-full shadow-lg active:scale-90 transition-all ${editingMessageId ? 'bg-amber-500' : 'bg-cyan-600'} text-white`}
+                                >
+                                    {editingMessageId ? <Check size={22} strokeWidth={3} /> : <Send size={22} />}
+                                </button>
                             </div>
                         </div>
 
-                        {isActionMenuOpen && !isCreatingPoll && (
+                        {isActionMenuOpen && !editingMessageId && (
                             <div className="absolute bottom-20 md:bottom-24 left-4 md:left-6 flex gap-3 animate-in slide-in-from-bottom-4">
                                 <button onClick={() => setIsCreatingPoll(true)} className="flex flex-col items-center gap-1 group">
                                     <div className="bg-purple-600 text-white p-3 md:p-4 rounded-2xl md:rounded-[1.5rem] shadow-xl group-active:scale-90 transition-transform"><BarChart3 size={20} /></div>
@@ -390,7 +622,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                             </div>
                         )}
                         <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={async (e) => {
-                            const f = e.target.files?.[0]; if(f) { const b = await resizeImage(f, 800); setMediaPreview({type:'image', url:b}); setIsActionMenuOpen(false); }
+                            const f = e.target.files?.[0]; if(f) { const b = await resizeImage(f, 800); setMediaPreview({type:'image', url:b}); setIsActionMenuOpen(false); handleSendMessage(); }
                         }} />
                     </div>
                 </>
@@ -402,31 +634,195 @@ export const ChatModal: React.FC<ChatModalProps> = ({
             )}
         </div>
 
+        {/* LOGISTICA DRAWER */}
         {showLogistics && activeChatId && (
             <div className="fixed inset-0 md:relative md:inset-auto w-full md:w-[380px] bg-white border-l border-gray-100 flex flex-col animate-in slide-in-from-right-10 duration-300 z-[400] md:z-[40]">
                 <div className="p-6 md:p-8 border-b border-gray-50 flex justify-between items-center bg-slate-900 text-white">
-                    <div><h3 className="font-black text-lg md:text-xl leading-none">Logística</h3><p className="text-[8px] md:text-[10px] text-stone-400 uppercase font-black tracking-[0.2em] mt-2">IA Colaborativa</p></div>
+                    <div><h3 className="font-black text-lg md:text-xl leading-none">Logística</h3><p className="text-[8px] md:text-[10px] text-stone-400 uppercase font-black tracking-[0.2em] mt-2">Sincronización IA</p></div>
                     <button onClick={() => setShowLogistics(false)} className="bg-white/10 p-2 md:p-3 rounded-xl active:bg-white/20 transition-all"><X size={20}/></button>
                 </div>
+
                 <div className="flex border-b border-gray-50 bg-slate-50/50 p-1">
                     <button onClick={() => setLogisticsTab('checklist')} className={`flex-1 px-4 py-3 md:py-4 text-[9px] md:text-[10px] font-black uppercase rounded-xl transition-all ${logisticsTab === 'checklist' ? 'bg-white text-cyan-600 shadow-sm' : 'text-stone-400'}`}>Checklist</button>
                     <button onClick={() => setLogisticsTab('expenses')} className={`flex-1 px-4 py-3 md:py-4 text-[9px] md:text-[10px] font-black uppercase rounded-xl transition-all ${logisticsTab === 'expenses' ? 'bg-white text-cyan-600 shadow-sm' : 'text-stone-400'}`}>Gastos</button>
                     <button onClick={() => setLogisticsTab('vault')} className={`flex-1 px-4 py-3 md:py-4 text-[9px] md:text-[10px] font-black uppercase rounded-xl transition-all ${logisticsTab === 'vault' ? 'bg-white text-cyan-600 shadow-sm' : 'text-stone-400'}`}>Vault</button>
                 </div>
+
                 <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-slate-50/30 no-scrollbar">
-                    <div className="bg-white p-5 md:p-6 rounded-[1.5rem] md:rounded-[2rem] border border-stone-100 mb-4 shadow-sm">
-                        <div className="flex items-center gap-3 mb-4"><Users2 size={16} className="text-cyan-600"/><h4 className="text-[10px] font-black uppercase text-stone-400">Personalidades</h4></div>
-                        <div className="space-y-3">
-                            {Object.entries(userRoles).length > 0 ? Object.entries(userRoles).map(([id, role]) => (
-                                <div key={id} className="flex justify-between items-center animate-in fade-in duration-500">
-                                    <span className="text-xs font-bold text-slate-700">{getSenderName(id)}</span>
-                                    <span className="text-[8px] font-black uppercase bg-stone-100 px-2 py-1 rounded-lg text-stone-500">{role}</span>
-                                </div>
-                            )) : <p className="text-[10px] text-stone-300 italic text-center py-4">Conversa más para descubrir roles...</p>}
+                    {logisticsTab === 'checklist' && (
+                        <div className="space-y-4 animate-in fade-in">
+                            <div className="flex gap-2">
+                                <input 
+                                    placeholder="Nueva tarea..." 
+                                    className="flex-1 p-3 bg-white rounded-xl text-xs font-bold border border-stone-100 outline-none"
+                                    value={newItemText}
+                                    onChange={e => setNewItemText(e.target.value)}
+                                    onKeyDown={e => e.key === 'Enter' && handleAddChecklistItem(newItemText)}
+                                />
+                                <button onClick={() => handleAddChecklistItem(newItemText)} className="bg-cyan-600 text-white p-3 rounded-xl"><Plus size={18}/></button>
+                            </div>
+                            <div className="space-y-2">
+                                {checklist.map(item => (
+                                    <div key={item.id} className="flex items-center gap-3 bg-white p-3 rounded-xl border border-stone-100 group">
+                                        <button onClick={() => toggleChecklistItem(item.id)} className={`transition-colors ${item.completed ? 'text-green-500' : 'text-stone-300'}`}>
+                                            {item.completed ? <CheckSquare size={18} /> : <Square size={18} />}
+                                        </button>
+                                        <span className={`flex-1 text-xs font-bold ${item.completed ? 'line-through text-stone-300' : 'text-slate-700'}`}>{item.text}</span>
+                                        <button onClick={() => removeChecklistItem(item.id)} className="opacity-0 group-hover:opacity-100 text-stone-300 hover:text-red-500 transition-all"><Trash2 size={14}/></button>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
-                    </div>
-                    <div className="text-center p-10 opacity-20"><ClipboardList size={40} className="mx-auto" /></div>
+                    )}
+
+                    {logisticsTab === 'expenses' && (
+                        <div className="space-y-4 animate-in fade-in">
+                            <div className="bg-cyan-900 text-white p-5 rounded-2xl shadow-lg mb-6">
+                                <p className="text-[9px] font-black uppercase opacity-60 tracking-widest mb-1">Total Gastado</p>
+                                <div className="flex items-end gap-2">
+                                    <span className="text-3xl font-black">${totalExpenses.toFixed(2)}</span>
+                                    <span className="text-xs font-bold text-cyan-400 mb-1">USD</span>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2">
+                                <input 
+                                    placeholder="¿En qué?" 
+                                    className="col-span-2 p-3 bg-white rounded-xl text-xs font-bold border border-stone-100 outline-none"
+                                    value={newExpenseDesc}
+                                    onChange={e => setNewExpenseDesc(e.target.value)}
+                                />
+                                <input 
+                                    type="number" 
+                                    placeholder="$" 
+                                    className="p-3 bg-white rounded-xl text-xs font-bold border border-stone-100 outline-none"
+                                    value={newExpenseAmount}
+                                    onChange={e => setNewExpenseAmount(e.target.value)}
+                                />
+                                <button onClick={() => handleAddExpense(newExpenseDesc, parseFloat(newExpenseAmount))} className="col-span-3 bg-emerald-600 text-white p-3 rounded-xl font-black text-xs uppercase tracking-widest">Añadir Gasto</button>
+                            </div>
+                            <div className="space-y-2 mt-4">
+                                {expenses.map(exp => (
+                                    <div key={exp.id} className="bg-white p-4 rounded-xl border border-stone-100 flex justify-between items-center">
+                                        <div className="min-w-0">
+                                            <p className="text-xs font-black text-slate-800 truncate">{exp.desc}</p>
+                                            <p className="text-[9px] text-stone-400 font-bold uppercase">{getSenderName(exp.userId)}</p>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-xs font-black text-emerald-600">${exp.amount.toFixed(2)}</span>
+                                            <button onClick={() => removeExpense(exp.id)} className="text-stone-200 hover:text-red-500"><X size={14}/></button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {logisticsTab === 'vault' && (
+                        <div className="animate-in fade-in">
+                            <div className="flex items-center gap-2 mb-4">
+                                <History size={14} className="text-cyan-600" />
+                                <h4 className="text-[10px] font-black uppercase text-stone-400">Archivos del Chat ({vaultImages.length})</h4>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2">
+                                {vaultImages.map((img, i) => (
+                                    <img key={i} src={img} className="w-full aspect-square object-cover rounded-xl shadow-sm border border-white hover:scale-105 transition-transform cursor-pointer" />
+                                ))}
+                                {vaultImages.length === 0 && (
+                                    <div className="col-span-3 py-20 text-center text-stone-300">
+                                        <ImageIcon size={32} className="mx-auto mb-2 opacity-20" />
+                                        <p className="text-[10px] font-bold uppercase">No hay fotos compartidas</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
                 </div>
+            </div>
+        )}
+
+        {/* ADD PARTICIPANTS OVERLAY */}
+        {isAddingParticipants && (
+            <div className="absolute inset-0 z-[100] bg-white/95 backdrop-blur-md p-6 flex flex-col animate-in slide-in-from-top-4 duration-300">
+                <div className="flex justify-between items-center mb-6">
+                    <h3 className="font-black text-xl text-slate-800">Agregar Personas</h3>
+                    <button onClick={() => { setIsAddingParticipants(false); setParticipantSearch(''); }} className="p-2 hover:bg-stone-100 rounded-full"><X size={24} /></button>
+                </div>
+                <div className="bg-stone-100 rounded-2xl flex items-center px-4 h-12 mb-6">
+                    <Search size={20} className="text-stone-400 mr-3" />
+                    <input 
+                        className="bg-transparent outline-none w-full font-bold" 
+                        placeholder="Buscar viajero..." 
+                        value={participantSearch}
+                        onChange={e => setParticipantSearch(e.target.value)}
+                    />
+                </div>
+                <div className="flex-1 overflow-y-auto space-y-3 pr-2">
+                    {allUsers.filter(u => u.id !== currentUser.id && participantSearch ? u.name.toLowerCase().includes(participantSearch.toLowerCase()) : u.id !== currentUser.id).map(u => (
+                        <div key={u.id} className="flex items-center justify-between p-3 bg-white rounded-2xl border border-stone-100 hover:border-cyan-200 transition-all">
+                            <div className="flex items-center gap-3">
+                                <img src={u.avatar} className="w-10 h-10 rounded-full object-cover" />
+                                <span className="font-bold text-sm text-slate-800">{u.name}</span>
+                            </div>
+                            <button 
+                                onClick={() => handleAddParticipant(u.id)}
+                                className="bg-cyan-600 text-white p-2 rounded-xl shadow-md active:scale-90"
+                            >
+                                <Plus size={18} />
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        )}
+
+        {/* CREATE NEW GROUP FROM SCRATCH OVERLAY */}
+        {isCreatingNewGroup && (
+            <div className="absolute inset-0 z-[110] bg-white p-6 flex flex-col animate-in fade-in duration-300">
+                 <div className="flex justify-between items-center mb-6">
+                    <h3 className="font-black text-xl text-slate-800">Nuevo Grupo de Chat</h3>
+                    <button onClick={() => setIsCreatingNewGroup(false)} className="p-2 hover:bg-stone-100 rounded-full"><X size={24} /></button>
+                </div>
+                
+                <div className="space-y-4 mb-6">
+                    <input 
+                        className="w-full p-4 bg-stone-50 rounded-2xl border border-stone-100 outline-none focus:ring-2 focus:ring-cyan-500 font-black text-sm"
+                        placeholder="Nombre del Grupo..."
+                        value={newGroupName}
+                        onChange={e => setNewGroupName(e.target.value)}
+                    />
+                    <p className="text-[10px] font-black uppercase text-stone-400 tracking-widest">Selecciona participantes ({newGroupSelectedUsers.length})</p>
+                </div>
+
+                <div className="flex-1 overflow-y-auto space-y-2 mb-6">
+                    {allUsers.filter(u => u.id !== currentUser.id).map(u => {
+                        const isSelected = newGroupSelectedUsers.includes(u.id);
+                        return (
+                            <div 
+                                key={u.id} 
+                                onClick={() => {
+                                    setNewGroupSelectedUsers(prev => isSelected ? prev.filter(id => id !== u.id) : [...prev, u.id]);
+                                }}
+                                className={`flex items-center justify-between p-3 rounded-2xl border cursor-pointer transition-all ${isSelected ? 'bg-cyan-50 border-cyan-300' : 'bg-white border-stone-100'}`}
+                            >
+                                <div className="flex items-center gap-3">
+                                    <img src={u.avatar} className="w-10 h-10 rounded-full object-cover" />
+                                    <span className="font-bold text-sm text-slate-800">{u.name}</span>
+                                </div>
+                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${isSelected ? 'bg-cyan-600 border-cyan-600 text-white' : 'border-stone-200'}`}>
+                                    {isSelected && <Check size={12} strokeWidth={4} />}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+
+                <button 
+                    onClick={handleCreateNewGroupFromScratch}
+                    disabled={!newGroupName.trim() || newGroupSelectedUsers.length === 0}
+                    className="w-full bg-cyan-600 text-white font-black py-4 rounded-2xl shadow-xl disabled:opacity-50 active:scale-95 transition-all uppercase tracking-widest text-xs"
+                >
+                    Crear Grupo de Viaje
+                </button>
             </div>
         )}
       </div>
