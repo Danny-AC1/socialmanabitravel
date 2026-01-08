@@ -58,7 +58,7 @@ export const PostViewer: React.FC<PostViewerProps> = ({
   }, []);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black animate-in fade-in duration-300">
+    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black animate-in fade-in duration-300">
       
       {/* Close Button (Fades out in immersive mode slightly but stays accessible) */}
       <button 

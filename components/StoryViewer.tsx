@@ -143,7 +143,7 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
   const isOwner = currentStory.userId === currentUserId;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
+    <div className="fixed inset-0 z-[300] bg-black flex items-center justify-center">
       
       {currentStory.mediaType !== 'video' && (
         <div 

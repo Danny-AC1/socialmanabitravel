@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Map as MapIcon, Compass, Camera, Search, LogOut, ChevronLeft, PlusCircle, Globe, Filter, Edit3, X, Lightbulb, MapPin, Plus, MessageCircle, Users, Bell, LayoutGrid, Award, Home, Sparkles, Trophy, CheckCircle, Navigation, Lock, User as UserIcon, AlertTriangle, ShieldAlert, Zap, Calendar } from 'lucide-react';
+import { Map as MapIcon, Compass, Camera, Search, LogOut, ChevronLeft, PlusCircle, Globe, Filter, Edit3, X, Lightbulb, MapPin, Plus, MessageCircle, Users, Bell, LayoutGrid, Award, Home, Sparkles, Trophy, CheckCircle, Navigation, Lock, User as UserIcon, AlertTriangle, ShieldAlert, Zap, Calendar, Settings, ChevronRight, Star, UserPlus, UserCheck, Play } from 'lucide-react';
 import { HeroSection } from './components/HeroSection';
 import { PostCard } from './components/PostCard';
 import { CreatePostModal } from './components/CreatePostModal';
@@ -20,16 +20,19 @@ import { TravelGroupsModal } from './components/TravelGroupsModal';
 import { AdminUsersModal } from './components/AdminUsersModal';
 import { AddDestinationModal } from './components/AddDestinationModal';
 import { ItineraryGeneratorModal } from './components/ItineraryGeneratorModal';
+import { LifeMap } from './components/LifeMap';
 import { ALL_DESTINATIONS as STATIC_DESTINATIONS, APP_VERSION } from './constants';
-import { Post, Story, Destination, User, Notification, Challenge, Suggestion, EcuadorRegion } from './types';
+import { Post, Story, Destination, User, Notification, Challenge, Suggestion, EcuadorRegion, Badge, TravelGroup } from './types';
 import { StorageService } from './services/storageService';
 import { AuthService } from './services/authService';
-import { getDailyChallenge, isAdmin } from './utils';
+import { getDailyChallenge, isAdmin, getUserLevel, getNextLevel, BADGES } from './utils';
 import { db } from './services/firebase';
 import { ref, onValue } from 'firebase/database';
 import { Helmet } from 'react-helmet-async';
 
 type Tab = 'home' | 'explore' | 'search' | 'profile';
+type ProfileSubTab = 'grid' | 'badges' | 'map';
+type SearchCategory = 'all' | 'destinations' | 'users' | 'groups';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -37,6 +40,7 @@ export default function App() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [stories, setStories] = useState<Story[]>([]);
   const [allUsersList, setAllUsersList] = useState<User[]>([]);
+  const [travelGroups, setTravelGroups] = useState<TravelGroup[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [destinations, setDestinations] = useState<Destination[]>(STATIC_DESTINATIONS);
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -54,8 +58,17 @@ export default function App() {
   
   // Tab & Filters
   const [activeTab, setActiveTab] = useState<Tab>('home');
+  const [profileSubTab, setProfileSubTab] = useState<ProfileSubTab>('grid');
   const [filterRegion, setFilterRegion] = useState<EcuadorRegion | 'Todas'>('Todas');
   const [filterProvince, setFilterProvince] = useState<string>('Todas');
+
+  // Search State
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searchCategory, setSearchCategory] = useState<SearchCategory>('all');
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+
+  // Perfil de otros usuarios
+  const [viewingUserId, setViewingUserId] = useState<string | null>(null);
 
   const [selectedDestination, setSelectedDestination] = useState<Destination | null>(null);
   const [viewingStoryIndex, setViewingStoryIndex] = useState<number | null>(null);
@@ -67,16 +80,46 @@ export default function App() {
   const isChallengeCompleted = user ? !!(user.completedChallenges && user.completedChallenges[dailyChallenge.id]) : false;
   const userIsAdmin = isAdmin(user?.email);
 
-  const provincesByRegion: Record<EcuadorRegion, string[]> = {
-    'Costa': ['Manabí', 'Guayas', 'Santa Elena', 'El Oro', 'Esmeraldas', 'Los Ríos', 'Santo Domingo'],
-    'Sierra': ['Pichincha', 'Azuay', 'Loja', 'Imbabura', 'Tungurahua', 'Cotopaxi', 'Chimborazo', 'Cañar', 'Carchi', 'Bolívar'],
-    'Amazonía': ['Napo', 'Pastaza', 'Orellana', 'Sucumbíos', 'Morona Santiago', 'Zamora Chinchipe'],
-    'Insular': ['Galápagos']
-  };
-
   const requireAuth = (action: () => void) => {
     if (!user) setIsAuthOpen(true);
     else action();
+  };
+
+  const handleUserClick = (userId: string) => {
+    setViewingUserId(userId);
+    setActiveTab('profile');
+    setProfileSubTab('grid');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleGroupClick = (groupId: string) => {
+    setSelectedGroupId(groupId);
+    setIsGroupsOpen(true);
+  };
+
+  useEffect(() => {
+    const handlePopState = () => {
+      if (selectedDestination) {
+        setSelectedDestination(null);
+      }
+    };
+
+    if (selectedDestination) {
+      window.history.pushState({ modal: 'destination' }, '');
+      window.addEventListener('popstate', handlePopState);
+    }
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [selectedDestination]);
+
+  const closeDestination = () => {
+    if (window.history.state?.modal === 'destination') {
+      window.history.back();
+    } else {
+      setSelectedDestination(null);
+    }
   };
 
   useEffect(() => {
@@ -110,12 +153,19 @@ export default function App() {
         setDestinations(merged);
     });
 
+    const usersRef = ref(db, 'users');
+    onValue(usersRef, (snapshot) => {
+      const data = snapshot.val();
+      setAllUsersList(data ? Object.values(data) : []);
+    });
+
+    const groupsRef = ref(db, 'travelGroups');
+    onValue(groupsRef, (snapshot) => {
+      const data = snapshot.val();
+      setTravelGroups(data ? Object.values(data) : []);
+    });
+
     if (userIsAdmin) {
-      const usersRef = ref(db, 'users');
-      onValue(usersRef, (snapshot) => {
-        const data = snapshot.val();
-        setAllUsersList(data ? Object.values(data) : []);
-      });
       const sugRef = ref(db, 'suggestions');
       onValue(sugRef, (snapshot) => {
         const data = snapshot.val();
@@ -139,16 +189,60 @@ export default function App() {
     }
   });
 
+  const handleLogout = () => {
+      AuthService.logout();
+      setUser(null);
+      setActiveTab('home');
+      setViewingUserId(null);
+  };
+
+  const handleToggleFollow = async (targetId: string) => requireAuth(async () => {
+    await AuthService.toggleFollow(user!.id, targetId);
+    const updatedUser = await AuthService.getUserById(user!.id);
+    if (updatedUser) setUser(updatedUser);
+  });
+
   const featuredDestination = destinations.find(d => d.isFeatured) || destinations[0];
   const activeStories = stories.filter(story => (Date.now() - story.timestamp) < 24 * 60 * 60 * 1000);
-  const unreadSuggestions = suggestions.filter(s => !s.isRead).length;
 
-  // Filtrado de Destinos
   const filteredDestinations = destinations.filter(d => {
       const regionMatch = filterRegion === 'Todas' || d.region === filterRegion;
       const provinceMatch = filterProvince === 'Todas' || d.province === filterProvince;
       return regionMatch && provinceMatch;
   });
+
+  // Determinar qué usuario mostrar en el perfil
+  const targetUser = viewingUserId ? allUsersList.find(u => u.id === viewingUserId) : user;
+  const isOwnProfile = !viewingUserId || viewingUserId === user?.id;
+  const targetPosts = posts.filter(p => p.userId === targetUser?.id);
+  const isFollowing = user && targetUser && user.following && user.following.includes(targetUser.id);
+
+  // Data de Nivel
+  const userLevel = getUserLevel(targetUser?.points);
+  const nextLevel = getNextLevel(targetUser?.points);
+  const progressToNext = nextLevel 
+    ? Math.min(100, Math.max(0, ((targetUser?.points || 0) - userLevel.minPoints) / (nextLevel.minPoints - userLevel.minPoints) * 100))
+    : 100;
+
+  // Lógica de Búsqueda Inteligente (Solo si hay texto)
+  const searchResults = {
+    destinations: searchTerm.trim() ? destinations.filter(d => 
+        d.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        d.location.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        d.province.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        d.category.toLowerCase().includes(searchTerm.toLowerCase())
+    ) : [],
+    users: searchTerm.trim() ? allUsersList.filter(u => 
+        u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        u.email.toLowerCase().includes(searchTerm.toLowerCase())
+    ) : [],
+    groups: searchTerm.trim() ? travelGroups.filter(g => 
+        (!g.isPrivate || (user && g.members && g.members[user.id])) && (
+            g.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            g.description.toLowerCase().includes(searchTerm.toLowerCase())
+        )
+    ) : []
+  };
 
   return (
     <div className="min-h-screen bg-stone-50 font-sans">
@@ -160,13 +254,9 @@ export default function App() {
       <nav className="sticky top-0 z-[100] bg-white border-b border-stone-100 shadow-sm px-4 py-2">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-1 cursor-pointer" onClick={() => setActiveTab('home')}>
+            <div className="flex items-center gap-1 cursor-pointer" onClick={() => { setActiveTab('home'); setViewingUserId(null); }}>
               <span className="text-lg md:text-xl font-black text-manabi-600 tracking-tighter">ECUADOR</span>
               <span className="text-lg md:text-xl font-light text-stone-400">TRAVEL</span>
-            </div>
-            <div className="hidden lg:flex items-center bg-stone-100 rounded-full px-4 py-2 w-80">
-              <Search size={18} className="text-stone-400 mr-2" />
-              <input type="text" placeholder="Buscar en la app..." className="bg-transparent outline-none text-sm w-full" />
             </div>
           </div>
 
@@ -177,18 +267,12 @@ export default function App() {
                  {notifications.length > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>}
                </button>
                <button onClick={() => requireAuth(() => setIsChatOpen(true))} className="p-2 hover:bg-stone-50 rounded-full transition-colors"><MessageCircle size={22} /></button>
-               <button onClick={() => setIsSuggestionsOpen(true)} className="p-2 hover:bg-stone-50 rounded-full transition-colors relative">
-                 <Lightbulb size={22} />
-                 {userIsAdmin && unreadSuggestions > 0 && (
-                   <span className="absolute top-0 right-0 bg-red-500 text-white text-[8px] w-4 h-4 rounded-full flex items-center justify-center font-bold">{unreadSuggestions}</span>
-                 )}
-               </button>
                {userIsAdmin && (
                  <button onClick={() => setIsAdminUsersOpen(true)} className="p-2 bg-manabi-50 text-manabi-600 rounded-full"><Users size={22} /></button>
                )}
             </div>
             <button onClick={() => requireAuth(() => setIsCreateModalOpen(true))} className="hidden md:flex bg-manabi-600 text-white px-5 py-2 rounded-xl font-bold text-sm shadow-md hover:bg-manabi-700 transition-all items-center gap-2"><Camera size={18} /> Publicar</button>
-            {user && <img src={user.avatar} className="w-8 h-8 md:w-10 md:h-10 rounded-full border-2 border-manabi-500 cursor-pointer object-cover" onClick={() => setActiveTab('profile')} />}
+            {user && <img src={user.avatar} className="hidden md:block w-10 h-10 rounded-full border-2 border-manabi-500 cursor-pointer object-cover" onClick={() => { setViewingUserId(null); setActiveTab('profile'); setProfileSubTab('grid'); }} />}
           </div>
         </div>
       </nav>
@@ -197,122 +281,336 @@ export default function App() {
         <div className="lg:col-span-8">
           {activeTab === 'explore' ? (
             <div className="animate-in fade-in slide-in-from-bottom-4 space-y-8">
-               
-               {/* BOTONES DE ACCIÓN EXPLORAR */}
                <div className="grid grid-cols-3 gap-3">
-                  <button 
-                    onClick={() => setIsNearbyModalOpen(true)}
-                    className="flex flex-col items-center justify-center p-4 bg-white rounded-3xl border border-stone-100 shadow-sm hover:shadow-md transition-all group"
-                  >
-                    <div className="bg-emerald-100 p-3 rounded-2xl mb-2 text-emerald-600 group-hover:scale-110 transition-transform relative">
-                        <Zap size={24} fill="currentColor" className="animate-pulse" />
-                    </div>
+                  <button onClick={() => setIsNearbyModalOpen(true)} className="flex flex-col items-center justify-center p-4 bg-white rounded-3xl border border-stone-100 shadow-sm hover:shadow-md transition-all group">
+                    <div className="bg-emerald-100 p-3 rounded-2xl mb-2 text-emerald-600 group-hover:scale-110 transition-transform relative"><Zap size={24} fill="currentColor" className="animate-pulse" /></div>
                     <span className="text-[10px] md:text-xs font-black text-stone-700 uppercase">Radar Local</span>
                   </button>
-
-                  <button 
-                    onClick={() => setIsItineraryOpen(true)}
-                    className="flex flex-col items-center justify-center p-4 bg-white rounded-3xl border border-stone-100 shadow-sm hover:shadow-md transition-all group"
-                  >
-                    <div className="bg-blue-100 p-3 rounded-2xl mb-2 text-blue-600 group-hover:scale-110 transition-transform">
-                        <Calendar size={24} fill="currentColor" />
-                    </div>
+                  <button onClick={() => setIsItineraryOpen(true)} className="flex flex-col items-center justify-center p-4 bg-white rounded-3xl border border-stone-100 shadow-sm hover:shadow-md transition-all group">
+                    <div className="bg-blue-100 p-3 rounded-2xl mb-2 text-blue-600 group-hover:scale-110 transition-transform"><Calendar size={24} fill="currentColor" /></div>
                     <span className="text-[10px] md:text-xs font-black text-stone-700 uppercase">Planificar</span>
                   </button>
-
-                  <button 
-                    onClick={() => requireAuth(() => setIsAddDestModalOpen(true))}
-                    className="flex flex-col items-center justify-center p-4 bg-white rounded-3xl border border-stone-100 shadow-sm hover:shadow-md transition-all group"
-                  >
-                    <div className="bg-purple-100 p-3 rounded-2xl mb-2 text-purple-600 group-hover:scale-110 transition-transform">
-                        <Plus size={24} strokeWidth={3} />
-                    </div>
+                  <button onClick={() => requireAuth(() => setIsAddDestModalOpen(true))} className="flex flex-col items-center justify-center p-4 bg-white rounded-3xl border border-stone-100 shadow-sm hover:shadow-md transition-all group">
+                    <div className="bg-purple-100 p-3 rounded-2xl mb-2 text-purple-600 group-hover:scale-110 transition-transform"><Plus size={24} strokeWidth={3} /></div>
                     <span className="text-[10px] md:text-xs font-black text-stone-700 uppercase">Añadir</span>
                   </button>
                </div>
-
-               {/* FILTROS DE DESTINOS */}
-               <div className="bg-white p-6 rounded-3xl shadow-sm border border-stone-100 space-y-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Filter className="text-manabi-600" size={18} />
-                    <h3 className="font-bold text-stone-800 uppercase text-xs tracking-widest">Filtrar Aventuras</h3>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-stone-400 uppercase ml-1">Región</label>
-                        <select 
-                            className="w-full bg-stone-50 p-3 rounded-xl border border-stone-200 text-sm font-bold outline-none focus:ring-2 focus:ring-manabi-500"
-                            value={filterRegion}
-                            onChange={(e) => {
-                                setFilterRegion(e.target.value as any);
-                                setFilterProvince('Todas');
-                            }}
-                        >
-                            <option value="Todas">Ecuador Continental e Insular</option>
-                            <option value="Costa">La Costa (Playas)</option>
-                            <option value="Sierra">La Sierra (Montañas)</option>
-                            <option value="Amazonía">Amazonía (Selva)</option>
-                            <option value="Insular">Galápagos</option>
-                        </select>
-                    </div>
-                    <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-stone-400 uppercase ml-1">Provincia</label>
-                        <select 
-                            className="w-full bg-stone-50 p-3 rounded-xl border border-stone-200 text-sm font-bold outline-none focus:ring-2 focus:ring-manabi-500"
-                            value={filterProvince}
-                            onChange={(e) => setFilterProvince(e.target.value)}
-                        >
-                            <option value="Todas">Todas las provincias</option>
-                            {filterRegion !== 'Todas' && provincesByRegion[filterRegion as EcuadorRegion].map(p => (
-                                <option key={p} value={p}>{p}</option>
-                            ))}
-                        </select>
-                    </div>
-                  </div>
-               </div>
-
-               {/* LISTADO DE RESULTADOS */}
                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {filteredDestinations.map(d => (
-                    <DestinationCard 
-                        key={d.id} 
-                        destination={d} 
-                        onClickGuide={() => setSelectedDestination(d)} 
-                    />
+                    <DestinationCard key={d.id} destination={d} onClickGuide={() => setSelectedDestination(d)} />
                   ))}
-                  {filteredDestinations.length === 0 && (
-                      <div className="col-span-full py-20 text-center">
-                          <MapPin size={48} className="mx-auto mb-2 text-stone-200" />
-                          <p className="text-stone-400 font-bold italic">No hay destinos cargados con estos filtros aún.</p>
-                      </div>
-                  )}
                </div>
             </div>
           ) : activeTab === 'search' ? (
-            <div className="animate-in fade-in slide-in-from-bottom-4">
-                <h2 className="text-2xl font-black text-stone-800 mb-6 flex items-center gap-2">
-                    <Search className="text-manabi-600" /> Buscar
-                </h2>
-                <div className="bg-white p-4 rounded-2xl shadow-sm mb-6 border border-stone-100 flex items-center">
-                    <Search size={20} className="text-stone-400 mr-3" />
-                    <input type="text" placeholder="¿Qué quieres buscar hoy?" className="w-full outline-none text-lg" />
+            <div className="animate-in fade-in slide-in-from-bottom-4 space-y-6">
+                <div className="bg-white p-4 md:p-6 rounded-[2.5rem] shadow-sm border border-stone-100">
+                    <h2 className="text-2xl font-black text-stone-800 mb-6 flex items-center gap-2">
+                        <Search className="text-manabi-600" size={28} /> Descubrir
+                    </h2>
+                    
+                    <div className="relative bg-stone-50 rounded-2xl h-14 flex items-center px-5 focus-within:ring-2 focus-within:ring-manabi-500/20 focus-within:bg-white transition-all border border-transparent focus-within:border-stone-200">
+                        <Search size={22} className="text-stone-400 mr-3" />
+                        <input 
+                            type="text" 
+                            placeholder="Buscar destinos, provincias, grupos o personas..." 
+                            className="w-full bg-transparent outline-none text-lg font-medium text-stone-700 placeholder-stone-400"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            autoFocus
+                        />
+                        {searchTerm && (
+                            <button onClick={() => setSearchTerm('')} className="text-stone-400 hover:text-stone-600">
+                                <X size={20} />
+                            </button>
+                        )}
+                    </div>
+
+                    <div className="flex gap-2 mt-6 overflow-x-auto no-scrollbar">
+                        {[
+                            { id: 'all', label: 'Todo', icon: <Globe size={14}/> },
+                            { id: 'destinations', label: 'Destinos', icon: <MapPin size={14}/> },
+                            { id: 'groups', label: 'Comunidades', icon: <Users size={14}/> },
+                            { id: 'users', label: 'Viajeros', icon: <UserIcon size={14}/> }
+                        ].map(cat => (
+                            <button
+                                key={cat.id}
+                                onClick={() => setSearchCategory(cat.id as SearchCategory)}
+                                className={`px-5 py-2 rounded-full text-xs font-black uppercase tracking-widest flex items-center gap-2 border transition-all ${searchCategory === cat.id ? 'bg-manabi-600 text-white border-manabi-600 shadow-md scale-105' : 'bg-white text-stone-500 border-stone-200 hover:border-manabi-300'}`}
+                            >
+                                {cat.icon} {cat.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="space-y-8">
+                    {/* Resultados de Destinos */}
+                    {(searchCategory === 'all' || searchCategory === 'destinations') && searchResults.destinations.length > 0 && (
+                        <div>
+                            <h3 className="text-xs font-black text-stone-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                                <MapPin size={14} /> Lugares Encontrados ({searchResults.destinations.length})
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {searchResults.destinations.map(d => (
+                                    <div 
+                                        key={d.id} 
+                                        onClick={() => setSelectedDestination(d)}
+                                        className="bg-white p-3 rounded-3xl border border-stone-100 shadow-sm hover:shadow-md transition-all flex gap-4 cursor-pointer group"
+                                    >
+                                        <img src={d.imageUrl} className="w-24 h-24 rounded-2xl object-cover group-hover:scale-105 transition-transform" />
+                                        <div className="flex-1 py-1">
+                                            <div className="flex justify-between items-start">
+                                                <h4 className="font-bold text-stone-800 leading-tight group-hover:text-manabi-600 transition-colors">{d.name}</h4>
+                                                <span className="flex items-center gap-0.5 text-[10px] font-bold text-amber-500 bg-amber-50 px-1.5 py-0.5 rounded-lg border border-amber-100">
+                                                    <Star size={10} fill="currentColor" /> {d.rating}
+                                                </span>
+                                            </div>
+                                            <p className="text-xs text-stone-400 mt-1 flex items-center gap-1"><MapPin size={10} /> {d.location}</p>
+                                            <span className="inline-block mt-3 text-[9px] font-black text-manabi-600 bg-manabi-50 px-2 py-0.5 rounded uppercase">{d.category}</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Resultados de Grupos */}
+                    {(searchCategory === 'all' || searchCategory === 'groups') && searchResults.groups.length > 0 && (
+                        <div className="animate-in fade-in duration-500">
+                             <h3 className="text-xs font-black text-stone-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                                <Users size={14} /> Grupos de Viaje ({searchResults.groups.length})
+                            </h3>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {searchResults.groups.map(g => (
+                                    <div 
+                                        key={g.id} 
+                                        onClick={() => handleGroupClick(g.id)}
+                                        className="bg-white p-3 rounded-2xl border border-stone-100 shadow-sm hover:border-manabi-200 transition-all flex items-center gap-4 cursor-pointer"
+                                    >
+                                        <div className="relative">
+                                            <img src={g.imageUrl} className="w-14 h-14 rounded-xl object-cover" />
+                                            {g.isPrivate && <div className="absolute -top-1 -right-1 bg-stone-800 text-white p-1 rounded-md"><Lock size={10}/></div>}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <h4 className="font-bold text-stone-800 text-sm truncate">{g.name}</h4>
+                                            <p className="text-[10px] text-stone-400 font-bold uppercase tracking-wider line-clamp-1">{g.description}</p>
+                                        </div>
+                                        <ChevronRight size={16} className="text-stone-300" />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Resultados de Usuarios */}
+                    {(searchCategory === 'all' || searchCategory === 'users') && searchResults.users.length > 0 && (
+                        <div className="animate-in fade-in duration-500">
+                             <h3 className="text-xs font-black text-stone-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                                <UserIcon size={14} /> Viajeros Encontrados ({searchResults.users.length})
+                            </h3>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {searchResults.users.map(u => (
+                                    <div 
+                                        key={u.id} 
+                                        onClick={() => handleUserClick(u.id)}
+                                        className="bg-white p-3 rounded-2xl border border-stone-100 shadow-sm hover:border-manabi-200 transition-all flex items-center gap-4 cursor-pointer"
+                                    >
+                                        <img src={u.avatar} className="w-12 h-12 rounded-xl object-cover" />
+                                        <div className="flex-1 min-w-0">
+                                            <h4 className="font-bold text-stone-800 text-sm truncate">{u.name}</h4>
+                                            <p className="text-[10px] text-stone-400 font-bold uppercase tracking-wider">{getUserLevel(u.points).name}</p>
+                                        </div>
+                                        <ChevronRight size={16} className="text-stone-300" />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {searchTerm && searchResults.destinations.length === 0 && searchResults.users.length === 0 && searchResults.groups.length === 0 && (
+                        <div className="py-20 text-center text-stone-400 flex flex-col items-center gap-4">
+                            <div className="bg-stone-100 p-6 rounded-full">
+                                <Search size={48} className="opacity-20" />
+                            </div>
+                            <div>
+                                <p className="font-bold text-lg text-stone-600">No encontramos resultados</p>
+                                <p className="text-sm">Intenta con otras palabras clave o categorías.</p>
+                            </div>
+                        </div>
+                    )}
+
+                    {!searchTerm && (
+                         <div className="py-20 text-center text-stone-300 flex flex-col items-center gap-4">
+                            <Sparkles size={48} className="opacity-10" />
+                            <p className="text-sm font-black uppercase tracking-widest">Escribe algo para empezar a descubrir Ecuador</p>
+                         </div>
+                    )}
                 </div>
             </div>
           ) : activeTab === 'profile' ? (
-             <div className="animate-in fade-in slide-in-from-bottom-4">
-                <div className="bg-white p-8 rounded-3xl shadow-sm border border-stone-100 text-center mb-8">
-                  <img src={user?.avatar} className="w-32 h-32 rounded-full mx-auto border-4 border-manabi-500 mb-4 object-cover" />
-                  <h2 className="text-2xl font-black text-stone-800">{user?.name}</h2>
-                  <p className="text-stone-400 mb-4 italic">"{user?.bio}"</p>
-                  <div className="flex justify-center gap-8 border-t border-stone-50 pt-6">
-                     <div><span className="block font-black text-xl">{user?.points || 0}</span><span className="text-xs text-stone-400 uppercase font-bold">XP</span></div>
-                     <div><span className="block font-black text-xl">{posts.filter(p => p.userId === user?.id).length}</span><span className="text-xs text-stone-400 uppercase font-bold">Posts</span></div>
+             <div className="animate-in fade-in slide-in-from-bottom-4 space-y-6">
+                {!isOwnProfile && (
+                  <button onClick={() => { setViewingUserId(null); setActiveTab('home'); }} className="flex items-center gap-2 text-stone-500 font-bold text-sm hover:text-manabi-600 transition-colors">
+                    <ChevronLeft size={20} /> Volver al Explorador
+                  </button>
+                )}
+
+                {/* USER CARD */}
+                <div className="bg-white rounded-3xl shadow-sm border border-stone-100 overflow-hidden">
+                  <div className="h-24 bg-gradient-to-r from-manabi-500 to-cyan-600"></div>
+                  <div className="px-8 pb-8 -mt-12 text-center">
+                    <img src={targetUser?.avatar} className="w-24 h-24 rounded-3xl mx-auto border-4 border-white mb-4 object-cover shadow-lg" />
+                    <h2 className="text-2xl font-black text-stone-800 flex items-center justify-center gap-2">
+                        {targetUser?.name}
+                        {!isOwnProfile && targetUser && (
+                           <button 
+                             onClick={() => handleToggleFollow(targetUser.id)}
+                             className={`p-2 rounded-full transition-all ${isFollowing ? 'bg-green-100 text-green-600' : 'bg-manabi-100 text-manabi-600 hover:bg-manabi-600 hover:text-white'}`}
+                           >
+                             {isFollowing ? <UserCheck size={18} /> : <UserPlus size={18} />}
+                           </button>
+                        )}
+                    </h2>
+                    <p className="text-stone-400 mb-6 text-sm font-medium">"{targetUser?.bio || 'Explorando las maravillas de Ecuador 🇪🇨'}"</p>
+                    
+                    {/* Level Progress */}
+                    <div className="max-w-md mx-auto bg-stone-50 p-4 rounded-2xl border border-stone-100 mb-6 text-left">
+                        <div className="flex justify-between items-center mb-2">
+                            <span className={`text-xs font-black uppercase tracking-widest ${userLevel.color} flex items-center gap-1`}>
+                                {userLevel.icon} {userLevel.name}
+                            </span>
+                            <span className="text-xs font-bold text-stone-400">{targetUser?.points || 0} XP</span>
+                        </div>
+                        <div className="h-2 bg-stone-200 rounded-full overflow-hidden">
+                            <div className="h-full bg-manabi-500 transition-all duration-1000" style={{ width: `${progressToNext}%` }}></div>
+                        </div>
+                    </div>
+
+                    <div className="flex justify-center gap-8 border-t border-stone-50 pt-6">
+                       <div className="text-center">
+                          <span className="block font-black text-xl text-stone-800">{targetUser?.points || 0}</span>
+                          <span className="text-[10px] text-stone-400 uppercase font-black tracking-widest">Puntos</span>
+                       </div>
+                       <div className="w-px h-10 bg-stone-100"></div>
+                       <div className="text-center">
+                          <span className="block font-black text-xl text-stone-800">{targetPosts.length}</span>
+                          <span className="text-[10px] text-stone-400 uppercase font-black tracking-widest">Publicaciones</span>
+                       </div>
+                       <div className="w-px h-10 bg-stone-100"></div>
+                       <div className="text-center">
+                          <span className="block font-black text-xl text-stone-800">{targetUser?.followers?.length || 0}</span>
+                          <span className="text-[10px] text-stone-400 uppercase font-black tracking-widest">Seguidores</span>
+                       </div>
+                    </div>
                   </div>
                </div>
+
+               {/* DASHBOARD (Sólo en perfil propio) */}
+               {isOwnProfile && (
+                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <button onClick={() => setIsGroupsOpen(true)} className="bg-white p-6 rounded-3xl border border-stone-100 shadow-sm hover:shadow-md transition-all flex flex-col items-center gap-3 text-center group">
+                        <div className="bg-cyan-50 text-cyan-600 p-4 rounded-2xl group-hover:scale-110 transition-transform"><Users size={28} /></div>
+                        <span className="block text-sm font-black text-stone-800 leading-none">Grupos</span>
+                    </button>
+                    <button onClick={() => setIsItineraryOpen(true)} className="bg-white p-6 rounded-3xl border border-stone-100 shadow-sm hover:shadow-md transition-all flex flex-col items-center gap-3 text-center group">
+                        <div className="bg-blue-50 text-blue-600 p-4 rounded-2xl group-hover:scale-110 transition-transform"><Calendar size={28} /></div>
+                        <span className="block text-sm font-black text-stone-800 leading-none">Viajes IA</span>
+                    </button>
+                    <button onClick={() => setIsSuggestionsOpen(true)} className="bg-white p-6 rounded-3xl border border-stone-100 shadow-sm hover:shadow-md transition-all flex flex-col items-center gap-3 text-center group">
+                        <div className="bg-amber-50 text-amber-600 p-4 rounded-2xl group-hover:scale-110 transition-transform"><Lightbulb size={28} /></div>
+                        <span className="block text-sm font-black text-stone-800 leading-none">Sugerir</span>
+                    </button>
+                 </div>
+               )}
+
+               {/* CONTENT SWITCHER (GRID / BADGES / MAP) */}
+               <div className="bg-white rounded-3xl shadow-sm border border-stone-100 overflow-hidden">
+                 <div className="flex border-b border-stone-50">
+                    <button 
+                      onClick={() => setProfileSubTab('grid')}
+                      className={`flex-1 py-4 text-xs font-black uppercase tracking-widest flex justify-center items-center gap-2 transition-all ${profileSubTab === 'grid' ? 'text-manabi-600 bg-manabi-50/30' : 'text-stone-400 hover:text-stone-600'}`}
+                    >
+                      <LayoutGrid size={16} /> Memorias
+                    </button>
+                    <button 
+                      onClick={() => setProfileSubTab('badges')}
+                      className={`flex-1 py-4 text-xs font-black uppercase tracking-widest flex justify-center items-center gap-2 transition-all ${profileSubTab === 'badges' ? 'text-manabi-600 bg-manabi-50/30' : 'text-stone-400 hover:text-stone-600'}`}
+                    >
+                      <Trophy size={16} /> Logros
+                    </button>
+                    <button 
+                      onClick={() => setProfileSubTab('map')}
+                      className={`flex-1 py-4 text-xs font-black uppercase tracking-widest flex justify-center items-center gap-2 transition-all ${profileSubTab === 'map' ? 'text-manabi-600 bg-manabi-50/30' : 'text-stone-400 hover:text-stone-600'}`}
+                    >
+                      <MapIcon size={16} /> Trayectoria
+                    </button>
+                 </div>
+                 
+                 <div className="p-1 min-h-[300px]">
+                    {profileSubTab === 'grid' && (
+                      <div className="grid grid-cols-3 gap-1 animate-in fade-in duration-300">
+                         {targetPosts.map(post => (
+                           <div 
+                             key={post.id} 
+                             className="aspect-square relative cursor-pointer group overflow-hidden bg-stone-100"
+                             onClick={() => setViewingPost(post)}
+                           >
+                              <img src={post.imageUrl} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                              <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                 <span className="text-white text-xs font-bold flex items-center gap-1">
+                                     <Star size={12} fill="currentColor" /> {post.likes}
+                                 </span>
+                              </div>
+                              {post.mediaType === 'video' && (
+                                <div className="absolute top-2 right-2 text-white bg-black/40 p-1 rounded-md backdrop-blur-md">
+                                  <Play size={10} fill="currentColor" />
+                                </div>
+                              )}
+                           </div>
+                         ))}
+                         {targetPosts.length === 0 && (
+                           <div className="col-span-3 py-20 text-center text-stone-400 flex flex-col items-center gap-2">
+                             <Camera size={48} className="opacity-10" />
+                             <p className="text-sm font-bold italic">No hay publicaciones compartidas todavía.</p>
+                           </div>
+                         )}
+                      </div>
+                    )}
+
+                    {profileSubTab === 'badges' && (
+                      <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in duration-300">
+                         {BADGES.map((badge: Badge) => {
+                            const isUnlocked = targetUser?.badges?.some(b => b.id === badge.id);
+                            return (
+                               <div key={badge.id} className={`flex items-center gap-4 p-4 rounded-2xl border transition-all ${isUnlocked ? 'bg-white border-manabi-100 shadow-sm' : 'bg-stone-50 border-stone-200 opacity-40 grayscale'}`}>
+                                  <div className="text-4xl">{badge.icon}</div>
+                                  <div>
+                                     <h4 className="font-bold text-stone-800 text-sm">{badge.name}</h4>
+                                     <p className="text-[10px] text-stone-500 leading-tight">{badge.description}</p>
+                                     {isUnlocked && <span className="inline-block mt-1 text-[9px] font-black text-manabi-600 bg-manabi-50 px-1.5 py-0.5 rounded uppercase">Desbloqueado</span>}
+                                  </div>
+                               </div>
+                            );
+                         })}
+                      </div>
+                    )}
+
+                    {profileSubTab === 'map' && (
+                       <div className="p-2 animate-in fade-in duration-300">
+                          <LifeMap posts={targetPosts} />
+                       </div>
+                    )}
+                 </div>
+               </div>
+
+               {isOwnProfile && (
+                 <button onClick={handleLogout} className="w-full bg-red-50 text-red-600 font-bold py-4 rounded-3xl hover:bg-red-100 transition-colors flex items-center justify-center gap-2 mb-10">
+                   <LogOut size={20} /> Cerrar Sesión
+                 </button>
+               )}
              </div>
           ) : (
             <>
-              {/* FEED INICIAL */}
               <div className="flex gap-4 overflow-x-auto no-scrollbar mb-8 pb-2">
                 <div className="relative w-24 h-36 md:w-28 md:h-44 shrink-0 rounded-2xl overflow-hidden cursor-pointer bg-stone-200" onClick={() => requireAuth(() => setIsCreateModalOpen(true))}>
                   <img src={user?.avatar || 'https://api.dicebear.com/7.x/adventurer/svg?seed=guest'} className="w-full h-full object-cover opacity-60" />
@@ -336,7 +634,7 @@ export default function App() {
                     key={post.id} post={post} currentUserId={user?.id || 'guest'}
                     onLike={() => StorageService.toggleLikePost(post, user?.id || 'guest')}
                     onComment={(t) => StorageService.addComment(post.id, [...(post.comments || []), {id: Date.now().toString(), userId: user!.id, userName: user!.name, text: t, timestamp: Date.now()}])}
-                    onUserClick={() => {}} onImageClick={(p) => setViewingPost(p)}
+                    onUserClick={handleUserClick} onImageClick={(p) => setViewingPost(p)}
                     onEdit={setEditingPost} onDelete={(id) => StorageService.deletePost(id)}
                   />
                 ))}
@@ -345,12 +643,11 @@ export default function App() {
           )}
         </div>
 
-        {/* SIDEBAR DESKTOP */}
         <div className="hidden lg:block lg:col-span-4 space-y-6">
           <div className="bg-white rounded-3xl p-6 shadow-sm border border-stone-100 sticky top-24">
              <div className="flex items-center gap-2 mb-4">
                 <Trophy className="text-manabi-600" size={20} />
-                <h3 className="font-bold text-gray-800 uppercase text-xs tracking-widest">Descubrimientos Recientes</h3>
+                <h3 className="font-bold text-gray-800 uppercase text-xs tracking-widest">Recomendados</h3>
              </div>
              <div className="space-y-4">
                 {destinations.slice(0, 4).map(dest => (
@@ -369,11 +666,21 @@ export default function App() {
 
       {/* BOTTOM NAV */}
       <div className="fixed bottom-0 w-full bg-white border-t border-stone-100 flex justify-around items-center p-2.5 md:hidden z-[150] shadow-2xl">
-        <button onClick={() => setActiveTab('home')} className={`flex flex-col items-center gap-1 ${activeTab === 'home' ? 'text-manabi-600' : 'text-stone-400'}`}><Home size={22} /><span className="text-[10px] font-bold">Inicio</span></button>
+        <button onClick={() => { setActiveTab('home'); setViewingUserId(null); }} className={`flex flex-col items-center gap-1 ${activeTab === 'home' ? 'text-manabi-600' : 'text-stone-400'}`}><Home size={22} /><span className="text-[10px] font-bold">Inicio</span></button>
         <button onClick={() => setActiveTab('explore')} className={`flex flex-col items-center gap-1 ${activeTab === 'explore' ? 'text-manabi-600' : 'text-stone-400'}`}><Compass size={22} /><span className="text-[10px] font-bold">Explorar</span></button>
         <button onClick={() => requireAuth(() => setIsCreateModalOpen(true))} className="relative -top-5 bg-manabi-600 text-white rounded-2xl p-4 shadow-xl border-4 border-white transition-transform active:scale-90"><Camera size={26} /></button>
         <button onClick={() => setActiveTab('search')} className={`flex flex-col items-center gap-1 ${activeTab === 'search' ? 'text-manabi-600' : 'text-stone-400'}`}><Search size={22} /><span className="text-[10px] font-bold">Buscar</span></button>
-        <button onClick={() => setActiveTab('profile')} className={`flex flex-col items-center gap-1 ${activeTab === 'profile' ? 'text-manabi-600' : 'text-stone-400'}`}><UserIcon size={22} /><span className="text-[10px] font-bold">Perfil</span></button>
+        <button onClick={() => { setViewingUserId(null); setActiveTab('profile'); setProfileSubTab('grid'); }} className={`flex flex-col items-center gap-1 ${activeTab === 'profile' && !viewingUserId ? 'text-manabi-600' : 'text-stone-400'}`}>
+          {user ? (
+            <img 
+              src={user.avatar} 
+              className={`w-6 h-6 rounded-full object-cover transition-all ${activeTab === 'profile' && !viewingUserId ? 'ring-2 ring-manabi-600 ring-offset-1 scale-110' : 'opacity-70'}`} 
+            />
+          ) : (
+            <UserIcon size={22} />
+          )}
+          <span className="text-[10px] font-bold">Perfil</span>
+        </button>
       </div>
 
       {/* ALL MODALS */}
@@ -384,7 +691,8 @@ export default function App() {
       <ChatModal isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} currentUser={user || {id:'guest'} as any} allUsers={allUsersList} />
       <AddDestinationModal isOpen={isAddDestModalOpen} onClose={() => setIsAddDestModalOpen(false)} onSubmit={(d) => StorageService.addDestination({ ...d, id: `dest_${Date.now()}`, createdBy: user?.id })} existingDestinations={destinations} />
       <ItineraryGeneratorModal isOpen={isItineraryOpen} onClose={() => setIsItineraryOpen(false)} />
-      {selectedDestination && <TravelGuideModal destination={selectedDestination} onClose={() => setSelectedDestination(null)} onAskAI={setChatQuery} onRate={() => {}} onAddPhoto={() => {}} isAdminUser={userIsAdmin} />}
+      <TravelGroupsModal isOpen={isGroupsOpen} onClose={() => { setIsGroupsOpen(false); setSelectedGroupId(null); }} currentUser={user || {id:'guest'} as any} allUsers={allUsersList} initialGroupId={selectedGroupId} />
+      {selectedDestination && <TravelGuideModal destination={selectedDestination} onClose={closeDestination} onAskAI={setChatQuery} onRate={() => {}} onAddPhoto={() => {}} isAdminUser={userIsAdmin} />}
       {viewingStoryIndex !== null && <StoryViewer stories={activeStories} initialStoryIndex={viewingStoryIndex} currentUserId={user?.id || 'guest'} onClose={() => setViewingStoryIndex(null)} onMarkViewed={() => {}} onDelete={() => {}} onLike={() => {}} />}
       {isNotificationsOpen && user && <NotificationsModal isOpen={isNotificationsOpen} onClose={() => setIsNotificationsOpen(false)} notifications={notifications} currentUserId={user.id} />}
       {viewingPost && <PostViewer post={viewingPost} currentUserId={user?.id || 'guest'} onClose={() => setViewingPost(null)} onLike={() => {}} onComment={() => {}} onShare={() => {}} onEdit={() => {}} onDelete={() => {}} />}

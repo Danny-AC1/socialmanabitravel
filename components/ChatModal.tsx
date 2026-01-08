@@ -3,13 +3,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, Send, Lock, ChevronLeft, Search, Image as ImageIcon, 
   Mic, Paperclip, Trash2, Check, CheckCheck, 
-  Play, Video, Reply as ReplyIcon, Edit2, AlertTriangle
+  Play, Video, Reply as ReplyIcon, Edit2, AlertTriangle, User as UserIcon
 } from 'lucide-react';
 import { User, Chat, Message } from '../types';
 import { StorageService } from '../services/storageService';
 import { EncryptionService } from '../services/encryptionService';
 import { db } from '../services/firebase';
-import { ref, onValue } from 'firebase/database';
+import { onValue, ref } from 'firebase/database';
 import { resizeImage, validateVideo } from '../utils';
 
 interface ChatModalProps {
@@ -39,8 +39,8 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   // Media & Reply & Actions
   const [mediaPreview, setMediaPreview] = useState<{type: 'image'|'video'|'audio', url: string} | null>(null);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
-  const [selectedMessage, setSelectedMessage] = useState<Message | null>(null); // Mensaje presionado
-  const [isEditingId, setIsEditingId] = useState<string | null>(null); // ID del mensaje siendo editado
+  const [selectedMessage, setSelectedMessage] = useState<Message | null>(null); 
+  const [isEditingId, setIsEditingId] = useState<string | null>(null); 
   
   // Chat Deletion (Long Press)
   const [chatToDelete, setChatToDelete] = useState<Chat | null>(null);
@@ -55,10 +55,10 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<any>(null);
-  const prevChatIdRef = useRef<string | null>(null); // Para controlar el scroll inicial
-  const longPressTimerRef = useRef<any>(null); // Para detectar presión larga en chats
+  const prevChatIdRef = useRef<string | null>(null); 
+  const longPressTimerRef = useRef<any>(null); 
 
-  // Swipe States (Solo para Reply)
+  // Swipe States
   const [swipeStartX, setSwipeStartX] = useState<number | null>(null);
   const [swipedMessageId, setSwipedMessageId] = useState<string | null>(null);
 
@@ -79,19 +79,14 @@ export const ChatModal: React.FC<ChatModalProps> = ({
       return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // --- LONG PRESS LOGIC FOR CHAT DELETION ---
-
   const handleChatPressStart = (chat: Chat) => {
-      // Iniciar temporizador de 800ms
       longPressTimerRef.current = setTimeout(() => {
           setChatToDelete(chat);
-          // Vibración háptica si es soportada
           if (navigator.vibrate) navigator.vibrate(50);
       }, 800);
   };
 
   const handleChatPressEnd = () => {
-      // Cancelar temporizador si se suelta antes
       if (longPressTimerRef.current) {
           clearTimeout(longPressTimerRef.current);
           longPressTimerRef.current = null;
@@ -153,18 +148,12 @@ export const ChatModal: React.FC<ChatModalProps> = ({
     });
   }, [activeChatId]);
 
-  // SCROLL LOGIC
   useEffect(() => {
     if (messagesEndRef.current && !selectedMessage) {
-      // Si cambiamos de chat (o es la primera carga), scroll instantáneo "auto" para aparecer abajo.
-      // Si ya estábamos en este chat y llega un mensaje, scroll suave "smooth".
       const isChatSwitch = prevChatIdRef.current !== activeChatId;
-      
       messagesEndRef.current.scrollIntoView({ 
           behavior: isChatSwitch ? "auto" : "smooth" 
       });
-      
-      // Actualizamos la referencia del chat actual solo si hay mensajes cargados
       if (messages.length > 0) {
           prevChatIdRef.current = activeChatId;
       }
@@ -177,8 +166,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({
 
   if (!isOpen) return null;
 
-  // --- HANDLERS ---
-
   const handleStartChat = async (targetUserId: string) => {
     const chatId = await StorageService.initiateChat(currentUser.id, targetUserId);
     setActiveChatId(chatId);
@@ -188,7 +175,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   const handleSendMessage = async () => {
     if ((!inputText.trim() && !mediaPreview) || !activeChatId) return;
 
-    // MODO EDICIÓN
     if (isEditingId) {
         try {
             await StorageService.editMessage(activeChatId, isEditingId, inputText);
@@ -200,7 +186,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({
         return;
     }
 
-    // MODO ENVÍO NORMAL
     let type: 'text' | 'image' | 'video' | 'audio' = 'text';
     let content = inputText;
     let url = null;
@@ -229,8 +214,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({
     }
   };
 
-  // --- ACTIONS (DELETE / EDIT) ---
-
   const handleDeleteMessage = async () => {
     if (!activeChatId || !selectedMessage) return;
     if (confirm("¿Eliminar mensaje para ambos?")) {
@@ -245,8 +228,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({
     setIsEditingId(selectedMessage.id);
     setSelectedMessage(null);
   };
-
-  // --- FILES ---
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -265,8 +246,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({
     }
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
-
-  // --- AUDIO RECORDING (SIMPLIFIED) ---
 
   const startRecording = async () => {
     try {
@@ -296,9 +275,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
     if (mediaRecorderRef.current && isRecording) {
         mediaRecorderRef.current.stop();
         mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
-        
         clearInterval(recordingTimerRef.current);
-
         if (shouldSave) {
             setTimeout(() => {
                 const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
@@ -314,7 +291,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({
     setIsRecording(false);
   };
 
-  // Simple handlers: MouseDown to start, MouseUp to stop & save
   const handleRecordStart = (e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault(); 
     startRecording();
@@ -322,18 +298,14 @@ export const ChatModal: React.FC<ChatModalProps> = ({
 
   const handleRecordEnd = (e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault();
-    stopRecording(true); // Siempre guarda en preview al soltar
+    stopRecording(true);
   };
-
-  // --- SWIPE TO REPLY ---
 
   const handleSwipeStart = (e: React.TouchEvent, msg: Message) => {
     setSwipeStartX(e.targetTouches[0].clientX);
     setSwipedMessageId(msg.id);
   };
 
-  // Modificación: Agregamos _e para cumplir con el tipo de evento esperado, 
-  // pero el guion bajo indica que no se usa intencionalmente.
   const handleSwipeMove = (_e: React.TouchEvent) => {
     if (swipeStartX === null) return;
   };
@@ -348,8 +320,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({
     setSwipedMessageId(null);
   };
 
-  // --- RENDER ---
-
   const filteredUsers = searchTerm 
     ? allUsers.filter(u => u.id !== currentUser.id && u.name.toLowerCase().includes(searchTerm.toLowerCase()))
     : [];
@@ -359,12 +329,12 @@ export const ChatModal: React.FC<ChatModalProps> = ({
     : null;
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-0 md:p-4 animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[400] flex items-center justify-center bg-black/60 backdrop-blur-sm p-0 md:p-4 animate-in fade-in duration-200">
       <div className="bg-white w-full h-full md:max-w-5xl md:h-[90vh] md:rounded-3xl overflow-hidden shadow-2xl flex flex-row relative">
         
         {/* DELETE CONFIRMATION OVERLAY */}
         {chatToDelete && (
-            <div className="absolute inset-0 z-[80] bg-black/50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 z-[500] bg-black/50 flex items-center justify-center p-4">
                 <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
                     <div className="p-6 text-center">
                         <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4">
@@ -377,13 +347,13 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                         <div className="flex gap-3">
                             <button 
                                 onClick={() => setChatToDelete(null)}
-                                className="flex-1 py-2.5 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition-colors"
+                                className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition-colors"
                             >
                                 Cancelar
                             </button>
                             <button 
                                 onClick={handleConfirmDeleteChat}
-                                className="flex-1 py-2.5 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-colors"
+                                className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-colors"
                             >
                                 Eliminar
                             </button>
@@ -393,27 +363,26 @@ export const ChatModal: React.FC<ChatModalProps> = ({
             </div>
         )}
 
-        {/* ACTION SHEET / MENU (Overlay when message selected) */}
+        {/* ACTION SHEET / MENU */}
         {selectedMessage && (
-            <div className="absolute inset-0 z-50 bg-black/50 flex items-center justify-center p-4 animate-in fade-in duration-150" onClick={() => setSelectedMessage(null)}>
+            <div className="absolute inset-0 z-[450] bg-black/50 flex items-center justify-center p-4 animate-in fade-in duration-150" onClick={() => setSelectedMessage(null)}>
                 <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
                     <div className="p-4 bg-gray-50 border-b">
-                        <p className="text-xs text-gray-500 font-bold uppercase">Opciones de Mensaje</p>
+                        <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest">Opciones de Mensaje</p>
                         <p className="text-sm text-gray-700 truncate mt-1 italic">"{selectedMessage.text || 'Archivo multimedia'}"</p>
                     </div>
                     <div className="flex flex-col">
-                        {/* Only show Edit if it's a text message */}
                         {selectedMessage.type === 'text' && (
-                            <button onClick={handleEditMessage} className="p-4 text-left hover:bg-gray-100 flex items-center gap-3 text-gray-700 font-medium border-b border-gray-100">
-                                <Edit2 size={18} /> Editar mensaje
+                            <button onClick={handleEditMessage} className="p-4 text-left hover:bg-gray-100 flex items-center gap-3 text-gray-700 font-bold border-b border-gray-100 transition-colors">
+                                <Edit2 size={20} /> Editar mensaje
                             </button>
                         )}
-                        <button onClick={handleDeleteMessage} className="p-4 text-left hover:bg-red-50 flex items-center gap-3 text-red-600 font-medium">
-                            <Trash2 size={18} /> Eliminar para ambos
+                        <button onClick={handleDeleteMessage} className="p-4 text-left hover:bg-red-50 flex items-center gap-3 text-red-600 font-bold transition-colors">
+                            <Trash2 size={20} /> Eliminar para todos
                         </button>
                     </div>
-                    <div className="p-2 bg-gray-50">
-                        <button onClick={() => setSelectedMessage(null)} className="w-full py-2 rounded-xl text-center text-gray-500 font-bold hover:bg-gray-200 transition-colors">
+                    <div className="p-3 bg-gray-50">
+                        <button onClick={() => setSelectedMessage(null)} className="w-full py-3 rounded-xl text-center text-gray-500 font-bold hover:bg-gray-200 transition-colors bg-white border border-gray-200">
                             Cancelar
                         </button>
                     </div>
@@ -421,15 +390,15 @@ export const ChatModal: React.FC<ChatModalProps> = ({
             </div>
         )}
 
-        {/* LEFT SIDEBAR */}
+        {/* LEFT SIDEBAR (CHATS LIST) */}
         <div className={`w-full md:w-[350px] bg-white border-r border-gray-200 flex flex-col ${activeChatId ? 'hidden md:flex' : 'flex'}`}>
-          <div className="p-3 border-b border-gray-100 flex items-center gap-3 bg-white">
-             <button onClick={onClose} className="md:hidden text-gray-500"><X size={24} /></button>
-             <div className="flex-1 relative bg-gray-100 rounded-full h-10 flex items-center px-4 overflow-hidden focus-within:ring-2 focus-within:ring-cyan-500 transition-all">
-                <Search size={18} className="text-gray-400 mr-2" />
+          <div className="p-4 border-b border-gray-100 flex items-center gap-3 bg-white sticky top-0 z-10">
+             <button onClick={onClose} className="text-gray-500 p-1 hover:bg-gray-100 rounded-full"><ChevronLeft size={28} /></button>
+             <div className="flex-1 relative bg-gray-100 rounded-2xl h-12 flex items-center px-4 overflow-hidden focus-within:ring-2 focus-within:ring-cyan-500 transition-all">
+                <Search size={18} className="text-stone-400 mr-2" />
                 <input 
-                   className="bg-transparent outline-none w-full text-sm text-gray-700 placeholder-gray-400"
-                   placeholder="Buscar chats..."
+                   className="bg-transparent outline-none w-full text-sm text-gray-700 placeholder-gray-400 font-medium"
+                   placeholder="Buscar chats o personas..."
                    value={searchTerm}
                    onChange={(e) => setSearchTerm(e.target.value)}
                 />
@@ -438,16 +407,22 @@ export const ChatModal: React.FC<ChatModalProps> = ({
 
           <div className="flex-1 overflow-y-auto">
              {searchTerm ? (
-                <div className="p-2">
+                <div className="p-2 space-y-1">
                    {filteredUsers.map(u => (
-                      <div key={u.id} onClick={() => handleStartChat(u.id)} className="flex items-center gap-3 p-3 hover:bg-gray-100 rounded-xl cursor-pointer transition-colors">
-                         <img src={u.avatar} className="w-12 h-12 rounded-full object-cover" />
+                      <div key={u.id} onClick={() => handleStartChat(u.id)} className="flex items-center gap-4 p-4 hover:bg-gray-50 rounded-2xl cursor-pointer transition-colors border border-transparent hover:border-stone-100">
+                         <img src={u.avatar} className="w-12 h-12 rounded-2xl object-cover shadow-sm" />
                          <span className="font-bold text-gray-800">{u.name}</span>
                       </div>
                    ))}
+                   {filteredUsers.length === 0 && (
+                       <div className="p-10 text-center text-stone-400">
+                           <Search size={32} className="mx-auto mb-2 opacity-20" />
+                           <p className="text-xs font-bold">No encontramos a nadie con ese nombre.</p>
+                       </div>
+                   )}
                 </div>
              ) : (
-                <div className="select-none">
+                <div className="select-none divide-y divide-stone-50">
                    {chats.map(chat => {
                       const partner = getChatPartner(chat);
                       if (!partner) return null;
@@ -463,58 +438,68 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                             onMouseLeave={handleChatPressEnd}
                             onTouchStart={() => handleChatPressStart(chat)}
                             onTouchEnd={handleChatPressEnd}
-                            onTouchMove={handleChatPressEnd} // Cancel if scrolling
-                            onContextMenu={(e) => e.preventDefault()} // Prevent native context menu
-                            className={`flex items-center gap-3 p-3 cursor-pointer transition-colors border-b border-gray-50 last:border-0 hover:bg-gray-100 active:bg-gray-200 ${isActive ? 'bg-cyan-50' : ''}`}
+                            onTouchMove={handleChatPressEnd}
+                            onContextMenu={(e) => e.preventDefault()}
+                            className={`flex items-center gap-4 p-4 cursor-pointer transition-colors relative hover:bg-gray-50 active:bg-gray-100 ${isActive ? 'bg-cyan-50/50' : ''}`}
                          >
-                            <div className="relative">
-                               <img src={partner.avatar} className="w-14 h-14 rounded-full object-cover pointer-events-none" />
-                               <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white rounded-full"></div>
+                            <div className="relative shrink-0">
+                               <img src={partner.avatar} className="w-14 h-14 rounded-2xl object-cover pointer-events-none shadow-sm border border-white" />
+                               <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-white rounded-full"></div>
                             </div>
                             <div className="flex-1 min-w-0">
-                               <div className="flex justify-between items-baseline">
-                                  <h4 className="font-bold text-gray-900 truncate">{partner.name}</h4>
-                                  <span className="text-xs text-gray-400">{new Date(chat.updatedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                               <div className="flex justify-between items-baseline mb-0.5">
+                                  <h4 className="font-bold text-gray-900 truncate text-sm">{partner.name}</h4>
+                                  <span className="text-[10px] text-stone-400 font-bold">{new Date(chat.updatedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                                </div>
                                <div className="flex items-center gap-1">
-                                  <p className="text-sm text-gray-500 truncate flex-1">
-                                     {decryptedLastMsg || 'Inicia la conversación'}
+                                  <p className="text-xs text-stone-500 truncate flex-1 leading-tight">
+                                     {decryptedLastMsg || 'Toca para chatear...'}
                                   </p>
                                </div>
                             </div>
                          </div>
                       );
                    })}
+                   {chats.length === 0 && (
+                       <div className="p-16 text-center text-stone-300">
+                           <ImageIcon size={48} className="mx-auto mb-4 opacity-10" />
+                           <p className="text-xs font-bold uppercase tracking-widest">Tus chats aparecerán aquí</p>
+                       </div>
+                   )}
                 </div>
              )}
           </div>
         </div>
 
-        {/* RIGHT SIDE (Chat Window) */}
-        <div className={`flex-1 bg-[#8e9aaf] flex flex-col relative ${!activeChatId ? 'hidden md:flex' : 'flex'}`}>
+        {/* RIGHT SIDE (MESSAGES AREA) */}
+        <div className={`flex-1 bg-[#f4f7f6] flex flex-col relative ${!activeChatId ? 'hidden md:flex' : 'flex'}`}>
            
-           <div className="absolute inset-0 opacity-10 pointer-events-none" style={{
-              backgroundImage: `url("https://web.telegram.org/img/bg_0.png")`, 
-              backgroundSize: '400px'
+           <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{
+              backgroundImage: `url("https://www.transparenttextures.com/patterns/cubes.png")`, 
+              backgroundSize: '200px'
            }} />
 
            {activeChatId && activePartner ? (
               <>
                  {/* Chat Header */}
-                 <div className="bg-white p-2 px-4 flex items-center justify-between shadow-sm z-20 cursor-pointer">
+                 <div className="bg-white/80 backdrop-blur-md p-3 px-5 flex items-center justify-between shadow-sm z-20 sticky top-0 border-b border-stone-100">
                     <div className="flex items-center gap-4">
-                       <button onClick={(e) => { e.stopPropagation(); setActiveChatId(null); }} className="md:hidden text-gray-500"><ChevronLeft size={26} /></button>
-                       <img src={activePartner.avatar} className="w-10 h-10 rounded-full object-cover" />
+                       <button onClick={(e) => { e.stopPropagation(); setActiveChatId(null); }} className="md:hidden text-stone-500 p-2 -ml-2 hover:bg-gray-100 rounded-full"><ChevronLeft size={28} /></button>
+                       <img src={activePartner.avatar} className="w-10 h-10 rounded-xl object-cover shadow-sm border border-stone-100" />
                        <div className="flex flex-col">
-                          <h3 className="font-bold text-gray-900 text-sm leading-tight">{activePartner.name}</h3>
-                          <div className="flex items-center text-xs text-cyan-600 gap-1"><Lock size={10} /> Cifrado E2E</div>
+                          <h3 className="font-bold text-gray-900 text-sm leading-none mb-1">{activePartner.name}</h3>
+                          <div className="flex items-center text-[10px] text-cyan-600 gap-1 font-bold uppercase tracking-wider"><Lock size={10} /> Privado</div>
                        </div>
                     </div>
-                    <button onClick={(e) => { e.stopPropagation(); onClose(); }} className="hidden md:block hover:text-red-500"><X size={24} /></button>
+                    <div className="flex items-center gap-2">
+                        <button onClick={(e) => { e.stopPropagation(); onClose(); }} className="hidden md:flex p-2.5 bg-stone-100 text-stone-500 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all duration-200">
+                            <X size={22} />
+                        </button>
+                    </div>
                  </div>
 
                  {/* Messages List */}
-                 <div className="flex-1 overflow-y-auto p-4 space-y-2 z-10" ref={messagesEndRef}>
+                 <div className="flex-1 overflow-y-auto p-4 space-y-3 z-10 scroll-smooth" ref={messagesEndRef}>
                     {messages.map((msg, idx) => {
                        const isMe = msg.senderId === currentUser.id;
                        const showTail = idx === messages.length - 1 || messages[idx + 1]?.senderId !== msg.senderId;
@@ -526,62 +511,72 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                              onTouchStart={(e) => handleSwipeStart(e, msg)}
                              onTouchMove={handleSwipeMove}
                              onTouchEnd={(e) => handleSwipeEnd(e, msg)}
-                             onClick={() => isMe ? setSelectedMessage(msg) : null} // Click to show options (Only my messages)
+                             onClick={() => isMe ? setSelectedMessage(msg) : null}
                           >
                              <div 
-                                className={`max-w-[75%] md:max-w-[60%] relative shadow-sm text-sm p-1 cursor-pointer transition-transform active:scale-95
+                                className={`max-w-[85%] md:max-w-[70%] relative shadow-sm text-sm p-1.5 transition-all
                                    ${isMe 
-                                      ? 'bg-cyan-100 text-gray-900 rounded-2xl rounded-tr-sm' 
-                                      : 'bg-white text-gray-900 rounded-2xl rounded-tl-sm'
+                                      ? 'bg-cyan-600 text-white rounded-2xl rounded-tr-sm' 
+                                      : 'bg-white text-gray-800 rounded-2xl rounded-tl-sm border border-stone-100'
                                    }
                                    ${!showTail && isMe ? 'rounded-tr-2xl mb-1' : ''}
                                    ${!showTail && !isMe ? 'rounded-tl-2xl mb-1' : ''}
-                                   ${showTail ? 'mb-3' : ''}
+                                   ${showTail ? 'mb-4' : ''}
                                    ${swipedMessageId === msg.id ? 'translate-x-10' : ''}
+                                   active:scale-[0.98]
                                 `}
                              >
                                 {msg.replyTo && (
-                                   <div className={`mx-2 mt-2 px-2 py-1 rounded border-l-2 mb-1 cursor-pointer bg-black/5 border-cyan-500`}>
-                                      <p className="text-cyan-700 font-bold text-xs">{msg.replyTo.senderName}</p>
-                                      <p className="text-gray-500 text-xs truncate">{msg.replyTo.text}</p>
+                                   <div className={`mx-1.5 mt-1 px-3 py-2 rounded-xl border-l-4 mb-2 cursor-pointer bg-black/5 ${isMe ? 'border-white/40' : 'border-cyan-500'}`}>
+                                      <p className={`font-black text-[10px] uppercase tracking-wider mb-0.5 ${isMe ? 'text-white/80' : 'text-cyan-700'}`}>{msg.replyTo.senderName}</p>
+                                      <p className={`text-xs truncate ${isMe ? 'text-white/70' : 'text-gray-500'}`}>{msg.replyTo.text}</p>
                                    </div>
                                 )}
 
-                                <div className="px-2 pb-4 min-w-[120px]">
+                                <div className="px-2 pb-5 min-w-[80px]">
                                    {msg.type === 'image' && msg.mediaUrl && (
-                                      <img src={msg.mediaUrl} className="rounded-lg mb-1 max-w-full" alt="Media" />
-                                   )}
-                                   {msg.type === 'video' && msg.mediaUrl && (
-                                      <video src={msg.mediaUrl} controls className="rounded-lg mb-1 max-w-full" />
-                                   )}
-                                   {msg.type === 'audio' && msg.mediaUrl && (
-                                      <div className="flex items-center gap-2 my-2 bg-black/5 p-2 rounded-full">
-                                         <div className="p-2 rounded-full bg-cyan-500 text-white">
-                                            <Play size={14} fill="currentColor" />
-                                         </div>
-                                         <audio src={msg.mediaUrl} controls className="h-8 w-40 opacity-80" />
+                                      <div className="relative rounded-xl overflow-hidden mb-1.5 group/media shadow-inner border border-black/5">
+                                          <img src={msg.mediaUrl} className="max-w-full block hover:scale-105 transition-transform duration-500" alt="Media" />
                                       </div>
                                    )}
-                                   {msg.text && <p className="whitespace-pre-wrap leading-snug px-1 pt-1">{msg.text}</p>}
+                                   {msg.type === 'video' && msg.mediaUrl && (
+                                      <video src={msg.mediaUrl} controls className="rounded-xl mb-1.5 max-w-full shadow-sm" />
+                                   )}
+                                   {msg.type === 'audio' && msg.mediaUrl && (
+                                      <div className={`flex items-center gap-3 my-2 p-2.5 rounded-2xl shadow-sm ${isMe ? 'bg-cyan-700/50' : 'bg-stone-50'}`}>
+                                         <button className={`p-3 rounded-full shadow-md ${isMe ? 'bg-white text-cyan-600' : 'bg-cyan-600 text-white'}`}>
+                                            <Play size={18} fill="currentColor" />
+                                         </button>
+                                         <div className="flex-1 space-y-1">
+                                            <div className={`h-1 rounded-full w-full ${isMe ? 'bg-white/20' : 'bg-cyan-100'}`}>
+                                                <div className={`h-full rounded-full w-1/3 ${isMe ? 'bg-white' : 'bg-cyan-600'}`}></div>
+                                            </div>
+                                            <div className="flex justify-between items-center px-0.5">
+                                                <span className={`text-[9px] font-black ${isMe ? 'text-white/60' : 'text-stone-400'}`}>NOTA DE VOZ</span>
+                                                <audio src={msg.mediaUrl} className="hidden" />
+                                            </div>
+                                         </div>
+                                      </div>
+                                   )}
+                                   {msg.text && <p className="whitespace-pre-wrap leading-relaxed px-1 font-medium">{msg.text}</p>}
                                 </div>
 
-                                <div className="absolute bottom-1 right-2 flex items-center gap-1 select-none">
-                                   <span className={`text-[10px] ${isMe ? 'text-cyan-800/60' : 'text-gray-400'}`}>
+                                <div className="absolute bottom-1.5 right-3 flex items-center gap-1.5 select-none">
+                                   <span className={`text-[9px] font-bold ${isMe ? 'text-white/60' : 'text-stone-400'}`}>
                                       {new Date(msg.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
                                    </span>
                                    {isMe && (
                                       msg.isRead 
-                                      ? <CheckCheck size={14} className="text-cyan-600" />
-                                      : <Check size={14} className="text-cyan-600" />
+                                      ? <CheckCheck size={14} className="text-cyan-200" />
+                                      : <Check size={14} className="text-white/40" />
                                    )}
                                 </div>
 
-                                {/* Reply Button on Hover */}
                                 <button 
                                     onClick={(e) => { e.stopPropagation(); setReplyTo(msg); }}
-                                    className={`absolute top-2 ${isMe ? '-left-10' : '-right-10'} p-2 bg-white rounded-full shadow opacity-0 group-hover:opacity-100 transition-opacity md:block hidden text-gray-500`}
+                                    className={`absolute top-1/2 -translate-y-1/2 ${isMe ? '-left-12' : '-right-12'} p-2.5 bg-white rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-all duration-200 hover:scale-110 active:scale-90 text-stone-500 border border-stone-100`}
                                 >
-                                    <ReplyIcon size={16} />
+                                    <ReplyIcon size={18} />
                                 </button>
                              </div>
                           </div>
@@ -591,126 +586,121 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                  </div>
 
                  {/* Input Area */}
-                 <div className="bg-white min-h-[60px] flex flex-col z-20">
+                 <div className="bg-white p-2 md:p-4 z-20 border-t border-stone-100 shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
                     
-                    {/* Editing Indicator */}
-                    {isEditingId && (
-                       <div className="bg-cyan-50 px-4 py-2 flex justify-between items-center border-t border-cyan-100 animate-in slide-in-from-bottom-2">
-                          <div className="flex items-center gap-3">
-                             <Edit2 size={20} className="text-cyan-600" />
-                             <div>
-                                <p className="text-cyan-700 font-bold text-xs">Editando mensaje</p>
-                             </div>
-                          </div>
-                          <button onClick={() => { setIsEditingId(null); setInputText(''); }}><X size={20} className="text-cyan-400" /></button>
-                       </div>
-                    )}
+                    {/* Editing / Reply / Media Context Overlays */}
+                    <div className="space-y-1 mb-2">
+                        {isEditingId && (
+                        <div className="bg-cyan-50 px-4 py-3 rounded-2xl flex justify-between items-center border border-cyan-100 animate-in slide-in-from-bottom-2">
+                            <div className="flex items-center gap-3">
+                                <Edit2 size={20} className="text-cyan-600" />
+                                <p className="text-cyan-700 font-bold text-xs uppercase tracking-wider">Modo Edición</p>
+                            </div>
+                            <button onClick={() => { setIsEditingId(null); setInputText(''); }} className="p-1 hover:bg-cyan-100 rounded-full"><X size={18} className="text-cyan-400" /></button>
+                        </div>
+                        )}
 
-                    {/* Reply Preview */}
-                    {replyTo && !isEditingId && (
-                       <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-t border-gray-200 animate-in slide-in-from-bottom-2">
-                          <div className="flex items-center gap-3 overflow-hidden">
-                             <div className="border-l-2 border-cyan-600 pl-2">
-                                <p className="text-cyan-600 font-bold text-xs">Responder a {getSenderName(replyTo.senderId)}</p>
-                                <p className="text-gray-500 text-xs truncate max-w-[200px]">{replyTo.type === 'text' ? replyTo.text : 'Archivo adjunto'}</p>
-                             </div>
-                          </div>
-                          <button onClick={() => setReplyTo(null)}><X size={20} className="text-gray-400" /></button>
-                       </div>
-                    )}
+                        {replyTo && !isEditingId && (
+                        <div className="flex items-center justify-between px-4 py-3 bg-stone-50 rounded-2xl border border-stone-200 animate-in slide-in-from-bottom-2">
+                            <div className="flex items-center gap-3 overflow-hidden">
+                                <div className="border-l-4 border-cyan-600 pl-3">
+                                    <p className="text-cyan-600 font-black text-[10px] uppercase tracking-widest">Respuesta a {getSenderName(replyTo.senderId)}</p>
+                                    <p className="text-stone-500 text-xs truncate max-w-[250px] font-medium">{replyTo.type === 'text' ? replyTo.text : 'Archivo adjunto'}</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setReplyTo(null)} className="p-1 hover:bg-stone-200 rounded-full"><X size={18} className="text-stone-400" /></button>
+                        </div>
+                        )}
 
-                    {/* Media Preview */}
-                    {mediaPreview && (
-                       <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 flex justify-between items-center animate-in slide-in-from-bottom-2">
-                          <div className="flex gap-4 items-center">
-                             {mediaPreview.type === 'video' ? <Video className="text-cyan-600" /> : mediaPreview.type === 'audio' ? <Mic className="text-red-500" /> : <ImageIcon className="text-cyan-600" />}
-                             <div>
-                                <span className="text-sm font-medium text-gray-700 block">
-                                    {mediaPreview.type === 'audio' ? 'Nota de voz' : 'Archivo multimedia'}
-                                </span>
-                                <span className="text-xs text-gray-500">Listo para enviar</span>
-                             </div>
-                             {mediaPreview.type === 'audio' && (
-                                <audio src={mediaPreview.url} controls className="h-8 w-32" />
-                             )}
-                          </div>
-                          <button onClick={() => setMediaPreview(null)}><Trash2 size={20} className="text-red-500" /></button>
-                       </div>
-                    )}
+                        {mediaPreview && (
+                        <div className="px-4 py-3 bg-cyan-50/50 rounded-2xl border border-cyan-100 flex justify-between items-center animate-in slide-in-from-bottom-2">
+                            <div className="flex gap-4 items-center">
+                                <div className="bg-white p-2 rounded-xl shadow-sm">
+                                    {mediaPreview.type === 'video' ? <Video size={20} className="text-cyan-600" /> : mediaPreview.type === 'audio' ? <Mic size={20} className="text-red-500" /> : <ImageIcon size={20} className="text-cyan-600" />}
+                                </div>
+                                <div>
+                                    <span className="text-xs font-black text-stone-700 block uppercase tracking-wider">
+                                        {mediaPreview.type === 'audio' ? 'Nota de voz' : 'Multimedia listo'}
+                                    </span>
+                                    <span className="text-[10px] text-stone-500 font-bold uppercase">Pulsa enviar para confirmar</span>
+                                </div>
+                            </div>
+                            <button onClick={() => setMediaPreview(null)} className="p-2 bg-red-50 text-red-500 hover:bg-red-100 rounded-xl transition-colors"><Trash2 size={20} /></button>
+                        </div>
+                        )}
+                    </div>
 
-                    {/* Controls & Input */}
-                    <div className="flex items-end gap-2 p-2 px-3">
-                       
-                       {/* Attach Button (Hidden while recording) */}
+                    <div className="flex items-end gap-2">
                        {!isRecording && (
-                           <>
-                               <button onClick={() => fileInputRef.current?.click()} className="p-3 text-gray-500 hover:text-gray-700 transition-colors">
+                           <div className="flex">
+                               <button onClick={() => fileInputRef.current?.click()} className="p-3.5 text-stone-400 hover:text-cyan-600 hover:bg-stone-50 rounded-2xl transition-all active:scale-90">
                                   <Paperclip size={24} className="rotate-45" />
                                </button>
                                <input type="file" ref={fileInputRef} hidden accept="image/*,video/*" onChange={handleFileUpload} />
-                           </>
+                           </div>
                        )}
 
-                       {/* Center Area: Textarea OR Recording Status */}
-                       {isRecording ? (
-                          <div className={`flex-1 h-[48px] flex items-center px-4 rounded-2xl transition-colors bg-gray-100`}>
-                             <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse mr-3"></div>
-                             <span className={`font-mono font-bold text-gray-700`}>
-                                {formatTime(recordingDuration)}
-                             </span>
-                             <span className="ml-auto text-xs text-gray-400 uppercase font-bold tracking-wide">
-                                Soltar para guardar
-                             </span>
-                          </div>
-                       ) : (
-                          <textarea
-                             value={inputText}
-                             onChange={(e) => setInputText(e.target.value)}
-                             placeholder={isEditingId ? "Editar mensaje..." : "Escribe un mensaje..."}
-                             className="flex-1 bg-gray-100 max-h-32 min-h-[44px] py-3 px-4 rounded-2xl outline-none text-gray-800 resize-none overflow-y-auto leading-relaxed"
-                             rows={1}
-                             onKeyDown={(e) => {
-                                if (e.key === 'Enter' && !e.shiftKey) {
-                                   e.preventDefault();
-                                   handleSendMessage();
-                                }
-                             }}
-                          />
-                       )}
+                       <div className="flex-1 relative">
+                           {isRecording ? (
+                              <div className={`w-full h-[52px] flex items-center px-5 rounded-2xl transition-all duration-300 bg-red-50 border border-red-100`}>
+                                 <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse mr-3 shadow-[0_0_8px_rgba(239,68,68,0.5)]"></div>
+                                 <span className={`font-mono font-black text-red-600 text-lg`}>
+                                    {formatTime(recordingDuration)}
+                                 </span>
+                                 <span className="ml-auto text-[10px] text-red-400 uppercase font-black tracking-widest animate-pulse">
+                                    Grabando...
+                                 </span>
+                              </div>
+                           ) : (
+                              <textarea
+                                 value={inputText}
+                                 onChange={(e) => setInputText(e.target.value)}
+                                 placeholder={isEditingId ? "Escribe el nuevo texto..." : "Escribe tu mensaje..."}
+                                 className="w-full bg-stone-100 max-h-32 min-h-[52px] py-3.5 px-5 rounded-2xl outline-none text-stone-800 resize-none overflow-y-auto leading-relaxed font-medium placeholder-stone-400 focus:bg-stone-50 focus:ring-2 focus:ring-cyan-500/10 transition-all border border-transparent focus:border-stone-200"
+                                 rows={1}
+                                 onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && !e.shiftKey && !isRecording) {
+                                       e.preventDefault();
+                                       handleSendMessage();
+                                    }
+                                 }}
+                              />
+                           )}
+                       </div>
 
-                       {/* Dynamic Button: SEND or MIC */}
                        {(inputText.trim() || mediaPreview) && !isRecording ? (
                           <button 
                              onClick={() => handleSendMessage()}
                              type="button"
-                             className="p-3 bg-cyan-500 hover:bg-cyan-600 text-white rounded-full shadow-md transition-all active:scale-95 duration-200 ease-out flex items-center justify-center mb-1"
+                             className="p-4 bg-cyan-600 hover:bg-cyan-700 text-white rounded-2xl shadow-lg shadow-cyan-200 transition-all active:scale-90 duration-200 flex items-center justify-center mb-0.5"
                           >
-                             {isEditingId ? <Check size={20} /> : <Send size={20} className="ml-0.5 mt-0.5" />}
+                             {isEditingId ? <Check size={22} strokeWidth={3} /> : <Send size={22} className="ml-0.5" strokeWidth={3} />}
                           </button>
                        ) : (
                           <div
-                             className={`p-3 rounded-full shadow-md mb-1 transition-all duration-200 cursor-pointer touch-none select-none flex items-center justify-center ${
+                             className={`p-4 rounded-2xl shadow-lg mb-0.5 transition-all duration-300 cursor-pointer touch-none select-none flex items-center justify-center ${
                                 isRecording 
-                                   ? 'bg-cyan-500 text-white scale-125' 
-                                   : 'bg-cyan-500 text-white hover:bg-cyan-600'
+                                   ? 'bg-red-500 text-white scale-110 shadow-red-200' 
+                                   : 'bg-cyan-600 text-white hover:bg-cyan-700 shadow-cyan-200'
                              }`}
                              onMouseDown={handleRecordStart}
                              onTouchStart={handleRecordStart}
                              onMouseUp={handleRecordEnd}
                              onTouchEnd={handleRecordEnd}
                           >
-                             <Mic size={24} />
+                             <Mic size={24} strokeWidth={2.5} />
                           </div>
                        )}
                     </div>
                  </div>
               </>
            ) : (
-              <div className="flex-1 flex flex-col items-center justify-center text-stone-300 p-8">
-                 <div className="bg-stone-50 p-6 rounded-full mb-4">
-                    <Lock size={48} className="opacity-20" />
+              <div className="flex-1 flex flex-col items-center justify-center text-stone-300 p-10 text-center">
+                 <div className="bg-white/50 backdrop-blur-sm p-8 rounded-3xl mb-6 shadow-sm border border-stone-100">
+                    <UserIcon size={56} className="opacity-10 text-stone-900" />
                  </div>
-                 <p>Selecciona un chat para comenzar.</p>
+                 <h3 className="text-stone-400 font-black uppercase tracking-widest text-sm mb-2">Mensajería Segura</h3>
+                 <p className="text-stone-400/60 text-xs max-w-[250px] leading-relaxed font-medium">Selecciona un viajero de la lista para iniciar una conversación cifrada de extremo a extremo.</p>
               </div>
            )}
         </div>

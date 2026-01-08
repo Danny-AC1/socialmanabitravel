@@ -66,7 +66,6 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
   const getCoreName = (text: string) => {
       let cleaned = normalize(text);
       // Palabras que son descriptores genéricos y NO parte del nombre propio único si están al inicio
-      // OJO: "Puerto" NO se quita porque "Puerto Cayo" es el nombre, "Cayo" solo no existe como tal.
       const descriptorsToRemove = ['playa ', 'balneario ', 'sector ', 'comuna ', 'recinto '];
       
       descriptorsToRemove.forEach(d => {
@@ -126,17 +125,13 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
 
     // 2. Verificación de Duplicados Inteligente
     const duplicate = existingDestinations.find(d => {
-        // Regla A: Distinguir Áreas Protegidas vs Pueblos
-        // Ejemplo: "Parque Nacional Machalilla" != "Machalilla" (pueblo)
         const inputIsProtected = isProtectedArea(name);
         const dbIsProtected = isProtectedArea(d.name);
 
         if (inputIsProtected !== dbIsProtected) {
-            return false; // Son entidades diferentes (una es parque, la otra no)
+            return false; 
         }
 
-        // Regla B: Comparar Nombres Núcleo
-        // Ejemplo: "Playa Puerto Cayo" == "Puerto Cayo"
         const inputCore = getCoreName(name);
         const dbCore = getCoreName(d.name);
 
@@ -211,8 +206,8 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/80 backdrop-blur-sm p-4 animate-in fade-in zoom-in duration-200">
-      <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-stone-900/90 backdrop-blur-md p-0 md:p-4 animate-in fade-in duration-200">
+      <div className="bg-white rounded-none md:rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col h-full md:h-auto md:max-h-[90vh]">
         
         <div className="flex justify-between items-center p-5 border-b border-gray-100 bg-cyan-600 text-white shrink-0">
           <h2 className="text-xl font-bold flex items-center gap-2">
@@ -224,7 +219,7 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
           </button>
         </div>
 
-        <div className="p-6 overflow-y-auto space-y-5 flex-1">
+        <div className="p-6 overflow-y-auto space-y-5 flex-1 pb-32 md:pb-6">
           
           {/* VISTA 1: DATOS BÁSICOS */}
           {step === 'basic' && (

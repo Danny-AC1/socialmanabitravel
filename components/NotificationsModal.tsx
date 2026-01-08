@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { X, Heart, MessageCircle, UserPlus, Bell, Info, Image as ImageIcon, Camera } from 'lucide-react';
 import { Notification } from '../types';
@@ -43,8 +44,8 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({ isOpen, 
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-md rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[80vh]">
+    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-stone-900/60 backdrop-blur-sm p-0 md:p-4 animate-in fade-in duration-200">
+      <div className="bg-white w-full h-full md:max-w-md md:h-auto md:max-h-[80vh] md:rounded-3xl overflow-hidden shadow-2xl flex flex-col">
         
         <div className="bg-white p-4 border-b border-gray-100 flex justify-between items-center sticky top-0 z-10">
           <div className="flex items-center gap-2">
@@ -63,7 +64,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({ isOpen, 
           </div>
         </div>
 
-        <div className="overflow-y-auto flex-1 bg-stone-50">
+        <div className="overflow-y-auto flex-1 bg-stone-50 pb-24 md:pb-6">
           {notifications.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-stone-400">
               <Bell size={48} className="mb-4 opacity-20" />

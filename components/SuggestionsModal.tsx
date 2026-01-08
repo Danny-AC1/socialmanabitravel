@@ -64,8 +64,8 @@ export const SuggestionsModal: React.FC<SuggestionsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-stone-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-md rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[80vh]">
+    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-stone-900/60 backdrop-blur-sm p-0 md:p-4 animate-in fade-in duration-200">
+      <div className="bg-white w-full h-full md:max-w-md md:h-auto md:max-h-[80vh] md:rounded-3xl overflow-hidden shadow-2xl flex flex-col">
         
         <div className="bg-cyan-700 p-4 flex justify-between items-center text-white">
           <div className="flex items-center gap-2">
@@ -79,7 +79,7 @@ export const SuggestionsModal: React.FC<SuggestionsModalProps> = ({
           </button>
         </div>
 
-        <div className="p-6 flex-1 overflow-y-auto bg-stone-50">
+        <div className="p-6 flex-1 overflow-y-auto bg-stone-50 pb-24 md:pb-6">
           {isAdmin ? (
             <div className="space-y-4">
               {suggestions.length === 0 ? (

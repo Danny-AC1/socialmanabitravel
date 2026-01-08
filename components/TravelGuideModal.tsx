@@ -187,7 +187,7 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
   }, [viewingImage, currentImageIndex]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/60 backdrop-blur-sm p-0 md:p-4 animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-stone-900/60 backdrop-blur-sm p-0 md:p-4 animate-in fade-in duration-200">
       <div className="bg-white w-full h-full md:h-[90vh] md:max-w-4xl md:rounded-3xl overflow-hidden shadow-2xl flex flex-col">
         
         <div className="relative h-64 md:h-80 shrink-0 group">
@@ -199,37 +199,46 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30 pointer-events-none" />
           
+          {/* Mobile Back Button (Left Corner) */}
           <button 
             onClick={onClose}
-            className="absolute top-4 right-4 bg-black/20 hover:bg-white text-white hover:text-black p-2 rounded-full backdrop-blur-md transition-all z-10"
+            className="md:hidden absolute top-4 left-4 bg-black/40 text-white p-2.5 rounded-full backdrop-blur-md transition-all z-[60] flex items-center gap-1 shadow-lg border border-white/20 active:scale-95"
+          >
+            <ChevronLeft size={24} />
+            <span className="text-sm font-bold pr-2">Volver</span>
+          </button>
+
+          {/* Desktop Close Button (Right Corner) */}
+          <button 
+            onClick={onClose}
+            className="hidden md:block absolute top-4 right-4 bg-black/20 hover:bg-white text-white hover:text-black p-2 rounded-full backdrop-blur-md transition-all z-10"
           >
             <X size={24} />
           </button>
 
+          {/* Admin Tools Container - Moved to RIGHT on mobile to avoid overlapping with "Volver" */}
           {isAdminUser && (
-             <>
-               <div className="absolute top-4 left-4 z-10 flex gap-2 flex-wrap">
-                  <button 
-                    onClick={() => coverInputRef.current?.click()}
-                    className="bg-white/20 hover:bg-white text-white hover:text-cyan-900 px-3 py-1.5 rounded-full backdrop-blur-md transition-all text-xs font-bold flex items-center gap-1"
-                  >
-                     <Edit2 size={12} /> Portada
-                  </button>
-                  <button 
-                    onClick={handleToggleFeature}
-                    className={`px-3 py-1.5 rounded-full backdrop-blur-md transition-all text-xs font-bold flex items-center gap-1 border ${destination.isFeatured ? 'bg-yellow-400 text-yellow-900 border-yellow-500' : 'bg-black/40 text-white border-white/30 hover:bg-yellow-400 hover:text-yellow-900'}`}
-                  >
-                     <Award size={12} /> {destination.isFeatured ? 'Destacado' : 'Destacar'}
-                  </button>
-                  <button 
-                    onClick={handleDeleteDestination}
-                    className="bg-red-600/80 hover:bg-red-600 text-white px-3 py-1.5 rounded-full backdrop-blur-md transition-all text-xs font-bold flex items-center gap-1 border border-red-400"
-                  >
-                     <Trash2 size={12} /> Eliminar
-                  </button>
-                  <input type="file" ref={coverInputRef} hidden accept="image/*" onChange={(e) => handlePhotoUpload(e, true)} />
-               </div>
-             </>
+             <div className="absolute top-4 right-4 md:right-16 z-50 flex flex-wrap gap-2 justify-end max-w-[60%]">
+                <button 
+                  onClick={() => coverInputRef.current?.click()}
+                  className="bg-white/20 hover:bg-white text-white hover:text-cyan-900 px-3 py-1.5 rounded-full backdrop-blur-md transition-all text-[10px] font-bold flex items-center gap-1 border border-white/10"
+                >
+                   <Edit2 size={10} /> Portada
+                </button>
+                <button 
+                  onClick={handleToggleFeature}
+                  className={`px-3 py-1.5 rounded-full backdrop-blur-md transition-all text-[10px] font-bold flex items-center gap-1 border ${destination.isFeatured ? 'bg-yellow-400 text-yellow-900 border-yellow-500' : 'bg-black/40 text-white border-white/30 hover:bg-yellow-400 hover:text-yellow-900'}`}
+                >
+                   <Award size={10} /> {destination.isFeatured ? 'Destacado' : 'Destacar'}
+                </button>
+                <button 
+                  onClick={handleDeleteDestination}
+                  className="bg-red-600/80 hover:bg-red-600 text-white px-3 py-1.5 rounded-full backdrop-blur-md transition-all text-[10px] font-bold flex items-center gap-1 border border-red-400"
+                >
+                   <Trash2 size={10} /> Borrar
+                </button>
+                <input type="file" ref={coverInputRef} hidden accept="image/*" onChange={(e) => handlePhotoUpload(e, true)} />
+             </div>
           )}
 
           <div className="absolute bottom-0 left-0 p-6 md:p-8 text-white w-full">
@@ -257,7 +266,7 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto bg-stone-50">
+        <div className="flex-1 overflow-y-auto bg-stone-50 pb-10">
           <div className="p-6 md:p-10 grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12">
             
             {/* COLUMNA IZQUIERDA (Principal) */}
@@ -472,7 +481,7 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
                 )}
               </div>
 
-              <div className="bg-white border border-stone-200 rounded-2xl p-6 shadow-sm">
+              <div className="bg-white border border-stone-200 rounded-2xl p-6 shadow-sm mb-12">
                 <h3 className="font-bold text-stone-800 mb-2">¿Tienes dudas?</h3>
                 <p className="text-stone-500 text-sm mb-4">
                   Pregunta a nuestro guía virtual sobre horarios, mejores restaurantes cercanos o clima actual.
@@ -482,7 +491,7 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
                     onClose();
                     onAskAI(`Cuéntame más sobre ${destination.name} en ${destination.location}. ¿Cómo llego y qué recomiendas comer?`);
                   }}
-                  className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors active:scale-95"
+                  className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors active:scale-95 shadow-lg shadow-cyan-100"
                 >
                   <MessageSquare size={18} />
                   Preguntar al Guía IA
@@ -496,7 +505,7 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
 
       {viewingImage && (
         <div 
-          className="fixed inset-0 z-[60] bg-black/95 flex items-center justify-center animate-in fade-in duration-200 select-none"
+          className="fixed inset-0 z-[400] bg-black/95 flex items-center justify-center animate-in fade-in duration-200 select-none"
           onClick={() => setViewingImage(null)}
           onTouchStart={onTouchStart}
           onTouchMove={onTouchMove}

@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Users, Plus, Search, Map, Calendar, DollarSign, ArrowRight, ArrowLeft, Share2, Trash2, FileText, Loader2, Image as ImageIcon, Lock, Shield, UserPlus, Unlock, Globe, Sun, Sunset, Moon, PlusCircle, Camera, Edit2, LogOut } from 'lucide-react';
+import { X, Users, Plus, Search, Map, Calendar, DollarSign, ArrowRight, ArrowLeft, Share2, Trash2, FileText, Loader2, Image as ImageIcon, Lock, Shield, UserPlus, Unlock, Globe, Sun, Sunset, Moon, PlusCircle, Camera, Edit2, Compass, Heart } from 'lucide-react';
 import { User, TravelGroup, TravelTemplate } from '../types';
 import { StorageService } from '../services/storageService';
 import { db } from '../services/firebase';
@@ -16,6 +17,7 @@ interface TravelGroupsModalProps {
 
 export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, onClose, currentUser, allUsers, initialGroupId }) => {
   const [view, setView] = useState<'list' | 'create' | 'detail' | 'create_template' | 'add_member'>('list');
+  const [listTab, setListTab] = useState<'all' | 'joined'>('all');
   const [groups, setGroups] = useState<TravelGroup[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<TravelGroup | null>(null);
   
@@ -117,6 +119,7 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
       setNewGroupImage(null);
       setIsPrivateGroup(false);
       setView('list');
+      setListTab('joined');
   };
 
   // Logic to build the final description string from the itinerary days
@@ -172,7 +175,7 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
   };
 
   const handleLeave = async (group: TravelGroup) => {
-      if(confirm("¿Estás seguro de que quieres salir de este grupo?")) {
+      if(confirm("¿Salir del grupo?")) {
           await StorageService.leaveTravelGroup(group.id, currentUser.id);
           setView('list');
       }
@@ -232,92 +235,103 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
   // --- RENDER FUNCTIONS ---
 
   const renderList = () => {
-      // Filtrar grupos para mostrar:
-      // 1. Grupos Públicos
-      // 2. Grupos Privados donde soy Admin
-      // 3. Grupos Privados donde soy Miembro
-      // OCULTAR: Grupos Privados donde no soy nada
-      const visibleGroups = groups.filter(g => 
-          !g.isPrivate || 
-          g.adminId === currentUser.id || 
-          (g.members && g.members[currentUser.id])
-      );
+    const filteredGroups = groups.filter(g => {
+        const isMember = g.members && g.members[currentUser.id];
+        const isAdmin = g.adminId === currentUser.id;
+        if (listTab === 'joined') return isMember || isAdmin;
+        // Explorar muestra todos los públicos o los que ya soy parte
+        return !g.isPrivate || isMember || isAdmin;
+    });
 
-      return (
-        <div className="space-y-4 p-6">
-            <div className="flex justify-between items-center mb-4">
-                <h3 className="font-bold text-gray-800 text-lg">Explorar Grupos</h3>
-                <button onClick={() => setView('create')} className="bg-cyan-600 text-white px-4 py-2 rounded-full text-xs font-bold flex items-center gap-2 hover:bg-cyan-700 transition-colors shadow-md">
-                    <Plus size={16} /> Crear Grupo
-                </button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {visibleGroups.map(group => {
-                    const memberCount = group.members ? Object.keys(group.members).length : 0;
-                    const isMember = group.members && group.members[currentUser.id];
-                    const isAdmin = group.adminId === currentUser.id;
-                    
-                    return (
-                        <div key={group.id} onClick={() => { setSelectedGroup(group); setView('detail'); }} className="bg-white rounded-xl shadow-sm border border-stone-100 overflow-hidden cursor-pointer hover:shadow-md transition-all group-card relative flex flex-col h-full">
-                            <div className="h-32 bg-gray-200 relative shrink-0">
-                                <img src={group.imageUrl} className="w-full h-full object-cover" />
-                                <div className="absolute inset-0 bg-black/30 group-hover:bg-black/10 transition-colors"></div>
-                                {isMember && <span className="absolute top-2 right-2 bg-green-500 text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-sm">MIEMBRO</span>}
-                                <span className="absolute top-2 left-2 bg-black/40 backdrop-blur-md text-white p-1 rounded-full">
-                                    {group.isPrivate ? <Lock size={12}/> : <Globe size={12}/>}
-                                </span>
-                            </div>
-                            <div className="p-4 flex flex-col flex-1">
-                                <h4 className="font-bold text-gray-800 text-lg mb-1 flex items-center gap-2">
-                                    {group.name}
-                                </h4>
-                                <p className="text-gray-500 text-xs line-clamp-2 mb-3 flex-1">{group.description}</p>
-                                <div className="flex items-center gap-4 text-xs text-gray-400 font-medium mb-3">
-                                    <span className="flex items-center gap-1"><Users size={14} /> {memberCount}</span>
-                                    <span className="flex items-center gap-1"><FileText size={14} /> {(group.templates ? Object.keys(group.templates).length : 0)}</span>
-                                </div>
-                                
-                                {/* Action Buttons in Card */}
-                                <div className="mt-auto">
-                                    {isMember ? (
-                                        // Show Leave button if member (and not admin to prevent accidental orphan groups here, though logic handles it)
-                                        !isAdmin && (
-                                            <button 
-                                                onClick={(e) => { e.stopPropagation(); handleLeave(group); }} 
-                                                className="w-full bg-red-50 text-red-600 text-xs font-bold py-2 rounded-lg hover:bg-red-100 transition-colors border border-red-200 flex items-center justify-center gap-1"
-                                            >
-                                                <LogOut size={14} /> Salir
-                                            </button>
-                                        )
-                                    ) : (
-                                        // Show Join if not member and public
-                                        !group.isPrivate && (
-                                            <button 
-                                                onClick={(e) => { e.stopPropagation(); handleJoin(group); }} 
-                                                className="w-full bg-cyan-600 text-white text-xs font-bold py-2 rounded-lg hover:bg-cyan-700 transition-colors shadow-sm flex items-center justify-center gap-1"
-                                            >
-                                                <UserPlus size={14} /> Unirme
-                                            </button>
-                                        )
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    );
-                })}
-                {visibleGroups.length === 0 && (
-                    <div className="col-span-2 text-center py-10 text-gray-400">
-                        <Users size={48} className="mx-auto mb-2 opacity-20" />
-                        <p>No hay grupos disponibles.</p>
-                    </div>
-                )}
-            </div>
-        </div>
-      );
+    return (
+      <div className="flex flex-col h-full">
+          <div className="p-6 pb-0 space-y-4">
+              <div className="flex justify-between items-center">
+                  <h3 className="font-black text-gray-800 text-2xl tracking-tight">Comunidades</h3>
+                  <button onClick={() => setView('create')} className="bg-cyan-600 text-white px-4 py-2 rounded-full text-xs font-bold flex items-center gap-2 hover:bg-cyan-700 transition-all shadow-md active:scale-95">
+                      <Plus size={16} /> Crear Grupo
+                  </button>
+              </div>
+
+              <div className="flex bg-stone-100 p-1 rounded-xl">
+                  <button 
+                    onClick={() => setListTab('all')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-black transition-all ${listTab === 'all' ? 'bg-white text-cyan-600 shadow-sm' : 'text-stone-400'}`}
+                  >
+                    <Compass size={16} /> Explorar
+                  </button>
+                  <button 
+                    onClick={() => setListTab('joined')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-black transition-all ${listTab === 'joined' ? 'bg-white text-cyan-600 shadow-sm' : 'text-stone-400'}`}
+                  >
+                    <Heart size={16} /> Mis Grupos
+                  </button>
+              </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-6 space-y-4 pb-24 md:pb-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {filteredGroups.map(group => {
+                      const memberCount = group.members ? Object.keys(group.members).length : 0;
+                      const isMember = group.members && group.members[currentUser.id];
+                      const isAdmin = group.adminId === currentUser.id;
+                      
+                      return (
+                          <div key={group.id} onClick={() => { setSelectedGroup(group); setView('detail'); }} className="bg-white rounded-2xl shadow-sm border border-stone-100 overflow-hidden cursor-pointer hover:shadow-md transition-all group-card relative">
+                              <div className="h-32 bg-gray-200 relative">
+                                  <img src={group.imageUrl} className="w-full h-full object-cover" />
+                                  <div className="absolute inset-0 bg-black/30 group-hover:bg-black/10 transition-colors"></div>
+                                  {(isMember || isAdmin) && <span className="absolute top-2 right-2 bg-green-500 text-white text-[10px] font-black px-2 py-1 rounded-lg shadow-sm tracking-widest">MIEMBRO</span>}
+                                  <span className="absolute top-2 left-2 bg-black/40 backdrop-blur-md text-white p-1.5 rounded-lg">
+                                      {group.isPrivate ? <Lock size={12}/> : <Globe size={12}/>}
+                                  </span>
+                              </div>
+                              <div className="p-4">
+                                  <h4 className="font-black text-gray-800 text-lg mb-1 leading-tight">{group.name}</h4>
+                                  <p className="text-stone-500 text-xs line-clamp-2 mb-3 font-medium">{group.description}</p>
+                                  <div className="flex items-center gap-4 text-xs text-stone-400 font-bold uppercase tracking-wider">
+                                      <span className="flex items-center gap-1"><Users size={14} className="text-cyan-600" /> {memberCount}</span>
+                                      <span className="flex items-center gap-1"><FileText size={14} className="text-cyan-600" /> {(group.templates ? Object.keys(group.templates).length : 0)}</span>
+                                  </div>
+                                  
+                                  {!isMember && !isAdmin && !group.isPrivate && (
+                                      <div className="mt-4">
+                                          <button 
+                                            onClick={(e) => { e.stopPropagation(); handleJoin(group); }} 
+                                            className="w-full bg-cyan-50 text-cyan-700 text-xs font-black py-2.5 rounded-xl hover:bg-cyan-100 transition-colors uppercase tracking-widest"
+                                          >
+                                              Unirme a la comunidad
+                                          </button>
+                                      </div>
+                                  )}
+                              </div>
+                          </div>
+                      );
+                  })}
+              </div>
+
+              {filteredGroups.length === 0 && (
+                  <div className="text-center py-20 text-stone-300">
+                      <div className="bg-stone-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 border border-stone-100">
+                        <Users size={32} className="opacity-20" />
+                      </div>
+                      <p className="font-black text-sm uppercase tracking-widest">
+                          {listTab === 'joined' ? 'No perteneces a ningún grupo aún' : 'No hay grupos públicos disponibles'}
+                      </p>
+                      {listTab === 'joined' && (
+                        <button onClick={() => setListTab('all')} className="mt-4 text-cyan-600 font-bold text-xs hover:underline">
+                            Explorar grupos públicos
+                        </button>
+                      )}
+                  </div>
+              )}
+          </div>
+      </div>
+    );
   };
 
   const renderCreateGroup = () => (
-      <div className="p-6 space-y-4">
+      <div className="p-6 space-y-4 pb-24 md:pb-6">
           <button onClick={() => setView('list')} className="text-sm text-gray-500 hover:text-cyan-600 flex items-center gap-1 font-bold mb-2">
               <ArrowLeft size={16} /> Volver
           </button>
@@ -367,14 +381,13 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
   );
 
   const renderAddMember = () => {
-      // Filtramos usuarios que no estén ya en el grupo
       const nonMembers = allUsers.filter(u => selectedGroup && (!selectedGroup.members || !selectedGroup.members[u.id]));
       const filteredUsers = memberSearch 
         ? nonMembers.filter(u => u.name.toLowerCase().includes(memberSearch.toLowerCase())) 
         : nonMembers;
 
       return (
-        <div className="p-6 space-y-4">
+        <div className="p-6 space-y-4 pb-24 md:pb-6">
              <button onClick={() => setView('detail')} className="text-sm text-gray-500 hover:text-cyan-600 flex items-center gap-1 font-bold mb-2">
                   <ArrowLeft size={16} /> Volver al grupo
              </button>
@@ -417,13 +430,12 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
       if (!selectedGroup) return null;
       const isMember = selectedGroup.members && selectedGroup.members[currentUser.id];
       const isAdminOfGroup = selectedGroup.adminId === currentUser.id;
-      const templates = selectedGroup.templates ? Object.values(selectedGroup.templates) : [];
+      const templates: TravelTemplate[] = selectedGroup.templates ? Object.values(selectedGroup.templates) as TravelTemplate[] : [];
       
-      // Si es privado y no soy miembro (y no soy el admin global o creador), mostrar pantalla de bloqueo
       if (selectedGroup.isPrivate && !isMember && !isAdminOfGroup) {
           return (
               <div className="flex flex-col h-full bg-stone-50">
-                 <div className="relative h-48 bg-gray-900">
+                 <div className="relative h-48 bg-gray-900 shrink-0">
                     <img src={selectedGroup.imageUrl} className="w-full h-full object-cover opacity-50 blur-sm" />
                     <button onClick={() => setView('list')} className="absolute top-4 left-4 bg-white/20 text-white p-2 rounded-full hover:bg-white/40 transition-colors">
                         <ArrowLeft size={20} />
@@ -510,12 +522,12 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
              </div>
 
              {/* Content */}
-             <div className="flex-1 overflow-y-auto bg-stone-50 p-6">
+             <div className="flex-1 overflow-y-auto bg-stone-50 p-6 pb-24 md:pb-6">
                  <div className="flex justify-between items-center mb-4">
                      <h3 className="font-bold text-gray-800 flex items-center gap-2">
                          <FileText className="text-cyan-600" size={20} /> Plantillas de Viaje
                      </h3>
-                     {isAdminOfGroup && (
+                     {isMember && (
                          <button onClick={() => setView('create_template')} className="text-cyan-600 text-xs font-bold bg-cyan-50 px-3 py-1.5 rounded-full hover:bg-cyan-100 transition-colors flex items-center gap-1">
                              <Plus size={14} /> Compartir Plantilla
                          </button>
@@ -541,7 +553,6 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
                                          <span className="text-xs text-gray-500">Por <strong>{tpl.authorName}</strong></span>
                                      </div>
                                      <div className="flex items-center gap-2">
-                                         {/* Only admin or author can delete */}
                                          {(currentUser.id === tpl.authorId || currentUser.id === selectedGroup.adminId) && (
                                              <button onClick={() => handleDeleteTemplate(tpl.id)} className="text-stone-300 hover:text-red-500">
                                                  <Trash2 size={16} />
@@ -559,7 +570,7 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
                      <div className="text-center py-10 text-stone-400 border-2 border-dashed border-stone-200 rounded-xl">
                          <Map size={32} className="mx-auto mb-2 opacity-30" />
                          <p className="text-sm">Aún no hay plantillas.</p>
-                         {isAdminOfGroup && <p className="text-xs">¡Comparte tu itinerario favorito!</p>}
+                         {isMember && <p className="text-xs">¡Comparte tu itinerario favorito!</p>}
                      </div>
                  )}
              </div>
@@ -568,7 +579,7 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
   };
 
   const renderCreateTemplate = () => (
-      <div className="p-6 space-y-4">
+      <div className="p-6 space-y-4 pb-24 md:pb-6">
           <button onClick={() => setView('detail')} className="text-sm text-gray-500 hover:text-cyan-600 flex items-center gap-1 font-bold mb-2">
               <ArrowLeft size={16} /> Cancelar
           </button>
@@ -664,11 +675,11 @@ export const TravelGroupsModal: React.FC<TravelGroupsModalProps> = ({ isOpen, on
   );
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-cyan-950/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-stone-900/90 backdrop-blur-md p-0 md:p-4 animate-in fade-in duration-200">
+      <div className="bg-white w-full h-full md:max-w-2xl md:h-auto md:max-h-[90vh] md:rounded-3xl overflow-hidden shadow-2xl flex flex-col">
           {/* Header (Only for List view essentially, others have custom headers) */}
           {view === 'list' && (
-              <div className="bg-white p-4 border-b border-gray-100 flex justify-between items-center">
+              <div className="bg-white p-4 border-b border-stone-100 flex justify-between items-center shrink-0">
                   <div className="flex items-center gap-2 text-cyan-700">
                       <Users size={24} />
                       <h2 className="text-xl font-black tracking-tight">Comunidades</h2>

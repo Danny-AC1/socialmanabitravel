@@ -84,8 +84,8 @@ export const ItineraryGeneratorModal: React.FC<ItineraryGeneratorModalProps> = (
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-cyan-950/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-cyan-950/80 backdrop-blur-md p-0 md:p-4 animate-in fade-in duration-200">
+      <div className="bg-white w-full h-full md:max-w-2xl md:h-auto md:max-h-[90vh] md:rounded-3xl overflow-hidden shadow-2xl flex flex-col">
         
         {/* Header */}
         <div className="bg-gradient-to-r from-cyan-600 to-blue-600 p-6 text-white flex justify-between items-start shrink-0">
@@ -101,7 +101,7 @@ export const ItineraryGeneratorModal: React.FC<ItineraryGeneratorModalProps> = (
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto bg-stone-50 p-6 scroll-smooth">
+        <div className="flex-1 overflow-y-auto bg-stone-50 p-6 scroll-smooth pb-24 md:pb-6">
           {!result ? (
             <div className="space-y-6">
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-stone-100 space-y-4">

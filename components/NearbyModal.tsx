@@ -52,8 +52,8 @@ export const NearbyModal: React.FC<NearbyModalProps> = ({ isOpen, onClose, isLoa
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-cyan-950/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[85vh]">
+    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-cyan-950/80 backdrop-blur-md p-0 md:p-4 animate-in fade-in duration-200">
+      <div className="bg-white w-full h-full md:max-w-lg md:h-auto md:max-h-[85vh] md:rounded-3xl overflow-hidden shadow-2xl flex flex-col">
         
         {/* Header con Gradiente */}
         <div className="bg-gradient-to-r from-emerald-500 to-teal-600 p-5 text-white shadow-md z-10">
@@ -102,7 +102,7 @@ export const NearbyModal: React.FC<NearbyModalProps> = ({ isOpen, onClose, isLoa
         </div>
 
         {/* Content Body */}
-        <div className="flex-1 overflow-y-auto bg-stone-50 p-4 scroll-smooth">
+        <div className="flex-1 overflow-y-auto bg-stone-50 p-4 scroll-smooth pb-24 md:pb-6">
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-16 text-center space-y-6">
                 <div className="relative">

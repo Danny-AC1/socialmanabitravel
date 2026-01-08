@@ -81,16 +81,16 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, onClos
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-cyan-950/80 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-200 flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-stone-900/90 backdrop-blur-md p-0 md:p-4 animate-in fade-in duration-200">
+      <div className="bg-white rounded-none md:rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in duration-200 flex flex-col h-full md:h-auto md:max-h-[90vh]">
         
-        <div className="flex flex-col border-b border-gray-100">
+        <div className="flex flex-col border-b border-gray-100 bg-white sticky top-0 z-10">
           <div className="flex justify-between items-center p-4 pb-2">
-            <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-              <Camera size={24} className="text-cyan-600" />
+            <h2 className="text-xl font-black text-stone-800 flex items-center gap-2">
+              <Camera size={24} className="text-manabi-600" />
               Crear Contenido
             </h2>
-            <button onClick={onClose} className="bg-gray-100 p-2 rounded-full text-gray-500 hover:bg-red-50 hover:text-red-500 transition-colors">
+            <button onClick={onClose} className="bg-stone-100 p-2 rounded-full text-stone-500 hover:bg-red-50 hover:text-red-500 transition-colors">
               <X size={20} />
             </button>
           </div>
@@ -98,55 +98,51 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, onClos
           <div className="flex px-4 space-x-4">
             <button 
               onClick={() => setMode('post')}
-              className={`flex-1 pb-3 text-sm font-bold border-b-2 transition-colors flex justify-center items-center gap-2 ${mode === 'post' ? 'border-cyan-600 text-cyan-700' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+              className={`flex-1 pb-3 text-xs font-black uppercase tracking-widest border-b-2 transition-all flex justify-center items-center gap-2 ${mode === 'post' ? 'border-manabi-600 text-manabi-700' : 'border-transparent text-stone-400 hover:text-stone-600'}`}
             >
               <ImageIcon size={16} /> Publicación
             </button>
             <button 
               onClick={() => setMode('story')}
-              className={`flex-1 pb-3 text-sm font-bold border-b-2 transition-colors flex justify-center items-center gap-2 ${mode === 'story' ? 'border-cyan-600 text-cyan-700' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+              className={`flex-1 pb-3 text-xs font-black uppercase tracking-widest border-b-2 transition-all flex justify-center items-center gap-2 ${mode === 'story' ? 'border-manabi-600 text-manabi-700' : 'border-transparent text-stone-400 hover:text-stone-600'}`}
             >
               <Clock size={16} /> Historia (24h)
             </button>
           </div>
         </div>
 
-        <div className="p-6 space-y-5 overflow-y-auto">
-          {/* File Warning */}
-          <div className="bg-blue-50 p-3 rounded-xl flex items-start gap-2 text-blue-700 text-xs">
-             <AlertCircle size={16} className="shrink-0 mt-0.5" />
-             <p>¡Sin límites! Puedes subir videos de cualquier duración. Si son muy pesados, <strong>los comprimiremos automáticamente</strong> para ti sin perder calidad.</p>
+        <div className="p-6 space-y-5 overflow-y-auto flex-1 pb-32 md:pb-6">
+          <div className="bg-blue-50 p-3 rounded-2xl flex items-start gap-3 text-blue-800 text-[11px] leading-relaxed border border-blue-100">
+             <AlertCircle size={18} className="shrink-0 text-blue-500" />
+             <p>Comprimiremos tus fotos y videos automáticamente para que carguen rápido 🚀.</p>
           </div>
 
           <div 
             onClick={() => !isProcessing && fileInputRef.current?.click()}
-            className={`border-2 border-dashed rounded-2xl h-64 flex flex-col items-center justify-center cursor-pointer transition-colors relative overflow-hidden ${
-              mediaPreview ? 'border-transparent p-0' : 'border-cyan-200 hover:border-cyan-500 bg-cyan-50/50 hover:bg-cyan-50'
+            className={`border-2 border-dashed rounded-2xl h-64 flex flex-col items-center justify-center cursor-pointer transition-all relative overflow-hidden ${
+              mediaPreview ? 'border-transparent p-0 bg-black' : 'border-stone-200 hover:border-manabi-400 bg-stone-50 hover:bg-manabi-50/30'
             }`}
           >
             {isProcessing ? (
-               <div className="flex flex-col items-center text-cyan-600 p-4 text-center">
+               <div className="flex flex-col items-center text-manabi-600 p-4 text-center">
                  <Loader2 size={32} className="animate-spin mb-2" />
-                 <p className="text-sm font-bold">Procesando video...</p>
-                 <p className="text-xs text-cyan-500 mt-1">Si el archivo es grande, esto puede tomar unos segundos.</p>
+                 <p className="text-sm font-black uppercase tracking-wide">Procesando...</p>
                </div>
             ) : mediaPreview ? (
               mediaType === 'video' ? (
-                 <video src={mediaPreview} className="w-full h-full object-cover rounded-2xl" controls autoPlay muted loop />
+                 <video src={mediaPreview} className="w-full h-full object-contain" controls autoPlay muted loop />
               ) : (
-                 <img src={mediaPreview} alt="Preview" className="w-full h-full object-cover rounded-2xl" />
+                 <img src={mediaPreview} alt="Preview" className="w-full h-full object-cover" />
               )
             ) : (
-              <div className="text-center text-cyan-600">
-                <div className="bg-white p-4 rounded-full shadow-sm w-fit mx-auto mb-3 flex gap-2">
-                  <Camera size={24} />
-                  <div className="w-px h-6 bg-gray-200"></div>
-                  <Video size={24} />
+              <div className="text-center text-stone-400">
+                <div className="bg-white p-4 rounded-3xl shadow-sm w-fit mx-auto mb-3 flex gap-2 border border-stone-100">
+                  <Camera size={24} className="text-manabi-500" />
+                  <div className="w-px h-6 bg-stone-100"></div>
+                  <Video size={24} className="text-manabi-500" />
                 </div>
-                <p className="font-semibold">Foto o Video</p>
-                <span className="text-xs text-cyan-400">
-                  Alta Calidad
-                </span>
+                <p className="font-black text-xs uppercase tracking-widest text-stone-600">Subir Multimedia</p>
+                <span className="text-[10px] text-stone-400">Toque para seleccionar</span>
               </div>
             )}
             <input 
@@ -158,48 +154,52 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, onClos
             />
           </div>
 
-          <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-            <label className="flex items-center text-xs font-bold text-gray-400 mb-1.5 uppercase tracking-wide">
-              <MapPin size={12} className="mr-1" />
-              Ubicación {mode === 'story' && '(Opcional)'}
-            </label>
-            <input
-              type="text"
-              placeholder={mode === 'story' ? "Ej: Playa Murciélago" : "Ej: Los Frailes, Puerto López..."}
-              className="w-full bg-gray-50 border-gray-200 border rounded-xl p-3 focus:ring-2 focus:ring-cyan-500 outline-none transition-all"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-            />
-          </div>
-
-          <div className="animate-in fade-in slide-in-from-top-2 duration-300 delay-75">
-            <div className="flex justify-between items-center mb-1.5">
-              <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide">
-                {mode === 'story' ? 'Comentario (Opcional)' : 'Tu Experiencia'}
+          <div className="space-y-4">
+            <div>
+              <label className="flex items-center text-[10px] font-black text-stone-400 mb-1.5 uppercase tracking-[0.2em]">
+                <MapPin size={12} className="mr-1 text-manabi-500" />
+                ¿Dónde estás?
               </label>
-              <button 
-                onClick={handleGenerateCaption}
-                disabled={isGenerating || !location || mediaType === 'video'}
-                className="text-xs flex items-center bg-purple-50 text-purple-600 px-2 py-1 rounded-md hover:bg-purple-100 disabled:opacity-50 font-bold transition-colors"
-              >
-                {isGenerating ? <Loader2 size={12} className="animate-spin mr-1"/> : <Wand2 size={12} className="mr-1"/>}
-                Inspírame con IA
-              </button>
+              <input
+                type="text"
+                placeholder={mode === 'story' ? "Ubicación opcional" : "Ej: Los Frailes, Manabí..."}
+                className="w-full bg-stone-50 border-stone-200 border rounded-2xl p-4 text-sm font-medium focus:ring-2 focus:ring-manabi-500/20 focus:border-manabi-500 outline-none transition-all"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+              />
             </div>
-            <textarea
-              className="w-full bg-gray-50 border-gray-200 border rounded-xl p-3 h-24 resize-none focus:ring-2 focus:ring-cyan-500 outline-none transition-all"
-              placeholder={mode === 'story' ? "Añade un comentario..." : "¿Qué hizo especial este momento?"}
-              value={caption}
-              onChange={(e) => setCaption(e.target.value)}
-            ></textarea>
-          </div>
 
+            <div>
+              <div className="flex justify-between items-center mb-1.5">
+                <label className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em]">
+                  {mode === 'story' ? 'Texto breve' : 'Tu Experiencia'}
+                </label>
+                <button 
+                  onClick={handleGenerateCaption}
+                  disabled={isGenerating || !location || mediaType === 'video'}
+                  className="text-[10px] font-black uppercase flex items-center bg-manabi-50 text-manabi-600 px-3 py-1.5 rounded-full hover:bg-manabi-100 disabled:opacity-50 transition-colors border border-manabi-100"
+                >
+                  {isGenerating ? <Loader2 size={12} className="animate-spin mr-1"/> : <Wand2 size={12} className="mr-1"/>}
+                  IA Inspiración
+                </button>
+              </div>
+              <textarea
+                className="w-full bg-stone-50 border-stone-200 border rounded-2xl p-4 h-32 resize-none text-sm font-medium focus:ring-2 focus:ring-manabi-500/20 focus:border-manabi-500 outline-none transition-all leading-relaxed"
+                placeholder={mode === 'story' ? "Escribe un comentario rápido..." : "¿Qué hizo especial este momento?"}
+                value={caption}
+                onChange={(e) => setCaption(e.target.value)}
+              ></textarea>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-4 md:p-6 bg-white border-t border-stone-100 fixed bottom-0 left-0 w-full md:relative shrink-0">
           <button 
             onClick={handleSubmit}
             disabled={!mediaPreview || (mode === 'post' && !caption) || isProcessing}
-            className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-cyan-200 hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
+            className="w-full bg-manabi-600 hover:bg-manabi-700 text-white font-black py-4 rounded-2xl shadow-xl shadow-manabi-200 transition-all active:scale-95 disabled:opacity-50 disabled:grayscale uppercase tracking-widest text-sm"
           >
-            {mode === 'post' ? 'Publicar en Perfil' : 'Subir Historia'}
+            {mode === 'post' ? 'Compartir Publicación' : 'Subir a Historias'}
           </button>
         </div>
       </div>
