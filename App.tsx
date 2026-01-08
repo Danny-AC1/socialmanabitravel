@@ -90,6 +90,25 @@ export default function App() {
     else action();
   };
 
+  const handleShare = async (title: string, text: string) => {
+    const shareData = {
+      title: title,
+      text: text,
+      url: window.location.origin
+    };
+
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+      } else {
+        await navigator.clipboard.writeText(`${text} - ${window.location.origin}`);
+        alert("¡Link copiado al portapapeles!");
+      }
+    } catch (err) {
+      console.log("Error al compartir:", err);
+    }
+  };
+
   const handleUserClick = (userId: string) => {
     setViewingUserId(userId);
     setActiveTab('profile');
@@ -376,6 +395,7 @@ export default function App() {
                 onLike={(p) => StorageService.toggleLikePost(p, user?.id || 'guest')} 
                 onComment={(id) => setViewingPost(posts.find(p => p.id === id) || null)} 
                 onUserClick={handleUserClick} 
+                onShare={(p) => handleShare(`Mira este portal de @${p.userName} en ${p.location}`, p.caption)}
               />
           ) : activeTab === 'explore' ? (
             <div className="animate-in fade-in slide-in-from-bottom-4 space-y-8">
@@ -657,7 +677,7 @@ export default function App() {
                     </button>
                     <button onClick={() => setIsItineraryOpen(true)} className="bg-white p-6 rounded-3xl border border-stone-100 shadow-sm hover:shadow-md transition-all flex flex-col items-center gap-3 text-center group">
                         <div className="bg-blue-50 text-blue-600 p-4 rounded-2xl group-hover:scale-110 transition-transform"><Calendar size={28} /></div>
-                        <span className="block text-sm font-black text-stone-800 leading-none">Planificar Viaje</span>
+                        <span className="block text-sm font-black text-stone-800 leading-none">Viajes IA</span>
                     </button>
                     <button onClick={() => setIsSuggestionsOpen(true)} className="bg-white p-6 rounded-3xl border border-stone-100 shadow-sm hover:shadow-md transition-all flex flex-col items-center gap-3 text-center group">
                         <div className="bg-amber-50 text-amber-600 p-4 rounded-2xl group-hover:scale-110 transition-transform"><Lightbulb size={28} /></div>
@@ -770,7 +790,9 @@ export default function App() {
               </div>
               <ChallengeCard challenge={dailyChallenge} isCompleted={isChallengeCompleted} onParticipate={() => setIsCreateModalOpen(true)} />
               <div className="space-y-8">
-                <HeroSection destination={featuredDestination} onGuideClick={(name) => setSelectedDestination(destinations.find(d => d.name === name) || null)} />
+                {posts.length === 0 && (
+                  <HeroSection destination={featuredDestination} onGuideClick={(name) => setSelectedDestination(destinations.find(d => d.name === name) || null)} />
+                )}
                 {posts.map(post => (
                   <PostCard 
                     key={post.id} post={post} currentUserId={user?.id || 'guest'}
@@ -778,6 +800,7 @@ export default function App() {
                     onComment={(t) => StorageService.addComment(post.id, [...(post.comments || []), {id: Date.now().toString(), userId: user!.id, userName: user!.name, text: t, timestamp: Date.now()}])}
                     onUserClick={handleUserClick} onImageClick={(p) => setViewingPost(p)}
                     onEdit={setEditingPost} onDelete={(id) => StorageService.deletePost(id)}
+                    onShare={(p) => handleShare(`Mira esta publicación de @${p.userName} en ${p.location}`, p.caption)}
                   />
                 ))}
               </div>
@@ -891,9 +914,9 @@ export default function App() {
         />
       )}
 
-      {viewingStoryIndex !== null && <StoryViewer stories={activeStories} initialStoryIndex={viewingStoryIndex} currentUserId={user?.id || 'guest'} onClose={() => setViewingStoryIndex(null)} onMarkViewed={() => {}} onDelete={() => {}} onLike={() => {}} />}
+      {viewingStoryIndex !== null && <StoryViewer stories={activeStories} initialStoryIndex={viewingStoryIndex} currentUserId={user?.id || 'guest'} onClose={() => setViewingStoryIndex(null)} onMarkViewed={() => {}} onDelete={() => {}} onLike={() => {}} onShare={(text) => handleShare("Mira esta historia en Ecuador Travel", text)} />}
       {isNotificationsOpen && user && <NotificationsModal isOpen={isNotificationsOpen} onClose={() => setIsNotificationsOpen(false)} notifications={notifications} currentUserId={user.id} />}
-      {viewingPost && <PostViewer post={viewingPost} currentUserId={user?.id || 'guest'} onClose={() => setViewingPost(null)} onLike={() => {}} onComment={() => {}} onShare={() => {}} onEdit={() => {}} onDelete={() => {}} />}
+      {viewingPost && <PostViewer post={viewingPost} currentUserId={user?.id || 'guest'} onClose={() => setViewingPost(null)} onLike={() => {}} onComment={() => {}} onShare={(p) => handleShare(`Mira esta publicación de @${p.userName} en ${p.location}`, p.caption)} onEdit={() => {}} onDelete={() => {}} />}
       {isAdminUsersOpen && <AdminUsersModal isOpen={isAdminUsersOpen} onClose={() => setIsAdminUsersOpen(false)} users={allUsersList} />}
       <ChatBot externalIsOpen={chatQuery !== ''} externalQuery={chatQuery} onCloseExternal={() => setChatQuery('')} />
     </div>

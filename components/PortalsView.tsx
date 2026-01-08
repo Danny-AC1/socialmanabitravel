@@ -10,9 +10,10 @@ interface PortalsViewProps {
   onLike: (post: Post) => void;
   onComment: (postId: string) => void;
   onUserClick: (userId: string) => void;
+  onShare: (post: Post) => void;
 }
 
-export const PortalsView: React.FC<PortalsViewProps> = ({ posts, currentUser, onLike, onComment, onUserClick }) => {
+export const PortalsView: React.FC<PortalsViewProps> = ({ posts, currentUser, onLike, onComment, onUserClick, onShare }) => {
   const [activePostIndex, setActivePostIndex] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -43,6 +44,7 @@ export const PortalsView: React.FC<PortalsViewProps> = ({ posts, currentUser, on
             onLike={() => onLike(post)}
             onComment={() => onComment(post.id)}
             onUserClick={() => onUserClick(post.userId)}
+            onShare={() => onShare(post)}
           />
         ))
       ) : (
@@ -62,7 +64,8 @@ const PortalItem: React.FC<{
     onLike: () => void;
     onComment: () => void;
     onUserClick: () => void;
-}> = ({ post, isActive, currentUser, onLike, onComment, onUserClick }) => {
+    onShare: () => void;
+}> = ({ post, isActive, currentUser, onLike, onComment, onUserClick, onShare }) => {
     const [isCinematic, setIsCinematic] = useState(false);
     const [aiInfo, setAiInfo] = useState<{title: string, info: string, category: string} | null>(null);
     const [isAiLoading, setIsAiLoading] = useState(false);
@@ -197,7 +200,7 @@ const PortalItem: React.FC<{
                     <span className="text-white text-[10px] font-black drop-shadow-md">{post.comments?.length || 0}</span>
                 </div>
 
-                <button className="p-4 rounded-full bg-white/10 backdrop-blur-xl text-white hover:bg-white/20 transition-all active:scale-90">
+                <button onClick={onShare} className="p-4 rounded-full bg-white/10 backdrop-blur-xl text-white hover:bg-white/20 transition-all active:scale-90">
                     <Share2 size={28} />
                 </button>
 
