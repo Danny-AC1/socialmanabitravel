@@ -834,7 +834,7 @@ export default function App() {
                   <PostCard 
                     key={post.id} post={post} currentUserId={user?.id || 'guest'}
                     onLike={() => StorageService.toggleLikePost(post, user?.id || 'guest')}
-                    onComment={(t) => StorageService.addComment(post.id, [...(post.comments || []), {id: Date.now().toString(), userId: user!.id, userName: user!.name, text: t, timestamp: Date.now()}])}
+                    onComment={(id, t) => StorageService.addComment(id, [...(post.comments || []), {id: Date.now().toString(), userId: user!.id, userName: user!.name, text: t, timestamp: Date.now()}])}
                     onUserClick={handleUserClick} onImageClick={(p) => setViewingPost(p)}
                     onEdit={setEditingPost} onDelete={(id) => StorageService.deletePost(id)}
                     onShare={(p) => handleShare(`Mira esta publicación de @${p.userName} en ${p.location}`, p.caption)}

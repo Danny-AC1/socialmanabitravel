@@ -36,7 +36,6 @@ export const PostCard: React.FC<PostCardProps> = ({
   const [liveContext, setLiveContext] = useState<{placeName: string, weather: string, temp: string, status: string} | null>(null);
   const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState<{title: string, info: string, category: string} | null>(null);
-  const [isSoundEnabled, setIsSoundEnabled] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
 
   const menuRef = useRef<HTMLDivElement>(null);
@@ -59,8 +58,9 @@ export const PostCard: React.FC<PostCardProps> = ({
   const handleCommentSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (commentText.trim()) {
-      onComment(post.id, commentText);
-      setCommentText('');
+      const textToSend = commentText.trim();
+      setCommentText(''); // Limpieza inmediata para sensación de fluidez
+      onComment(post.id, textToSend);
       setShowComments(true);
     }
   };
@@ -194,7 +194,6 @@ export const PostCard: React.FC<PostCardProps> = ({
         onMouseEnter={() => { if(post.mediaType === 'video') videoRef.current?.play(); }}
         onMouseLeave={() => { if(post.mediaType === 'video') { videoRef.current?.pause(); videoRef.current!.currentTime = 0; } }}
       >
-        {/* Efecto Ken Burns (Solo para imágenes) */}
         <div className={`absolute inset-0 w-full h-full transition-all duration-1000 ${post.mediaType !== 'video' ? 'animate-ken-burns' : ''}`}>
              {post.mediaType === 'video' ? (
                 <video 
@@ -215,10 +214,8 @@ export const PostCard: React.FC<PostCardProps> = ({
             )}
         </div>
 
-        {/* OVERLAYS VIVOS */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-60 pointer-events-none" />
 
-        {/* BOTÓN EXPLORAR IA */}
         <div className="absolute top-4 left-4 z-40">
             <button 
                 onClick={handleAiExplore}
@@ -237,7 +234,6 @@ export const PostCard: React.FC<PostCardProps> = ({
             </button>
         </div>
 
-        {/* INDICADOR DE SONIDO (Simulado) */}
         {isHovered && (
             <div className="absolute bottom-4 left-4 glass-post rounded-xl px-3 py-1.5 flex items-center gap-2 animate-in slide-in-from-bottom-2">
                 <div className="flex gap-0.5 items-end h-3">
@@ -249,7 +245,6 @@ export const PostCard: React.FC<PostCardProps> = ({
             </div>
         )}
 
-        {/* ETIQUETAS DE ANÁLISIS IA (FLOTANTES) */}
         {aiAnalysis && (
             <div className="absolute inset-0 flex items-center justify-center p-6 z-30">
                 <div className="glass-post p-5 rounded-3xl border border-cyan-400/30 text-white max-w-xs animate-in zoom-in-90 duration-300">
@@ -263,7 +258,6 @@ export const PostCard: React.FC<PostCardProps> = ({
             </div>
         )}
 
-        {/* Badge de Video */}
         {post.mediaType === 'video' && (
             <div className="absolute top-4 right-4 bg-black/40 backdrop-blur-md p-2 rounded-xl text-white">
                 <Play size={16} fill="currentColor" />
@@ -271,7 +265,6 @@ export const PostCard: React.FC<PostCardProps> = ({
         )}
       </div>
 
-      {/* ACCIONES Y CONTENIDO SOCIAL */}
       <div className="p-6 pb-2">
         <div className="flex items-center justify-between mb-5">
             <div className="flex items-center space-x-6">
@@ -279,7 +272,6 @@ export const PostCard: React.FC<PostCardProps> = ({
                     onClick={handleLikeClick}
                     className={`relative transition-all flex items-center gap-2 group/like ${post.isLiked ? 'text-manabi-600' : 'text-slate-400 hover:text-manabi-600'}`}
                 >
-                    {/* Partículas de Suerte */}
                     {isLikeAnimating && (
                       <>
                         <Clover size={14} className="absolute inset-0 m-auto text-manabi-500 particle-1" fill="currentColor" />
@@ -339,7 +331,7 @@ export const PostCard: React.FC<PostCardProps> = ({
             {comments.map((comment) => (
               <div key={comment.id} className="flex items-start space-x-3 group">
                 <div className="w-7 h-7 rounded-lg bg-manabi-100 flex items-center justify-center text-manabi-700 font-black text-[10px] shrink-0">
-                    {comment.userName.charAt(0)}
+                    {comment.userName?.charAt(0) || '?'}
                 </div>
                 <div className="flex-1">
                     <span className="font-black text-slate-800 text-[11px] mr-2">{comment.userName}</span>
