@@ -22,7 +22,8 @@ import {
     getChatCatchUp
 } from '../services/geminiService';
 import { db } from '../services/firebase';
-import { onValue, ref, set, update, push, remove } from 'firebase/database';
+// Fixed: Ensure imports are from @firebase/database explicitly for modular SDK resolution
+import { onValue, ref, set, update, push, remove } from '@firebase/database';
 import { resizeImage, downloadMedia } from '../utils';
 
 interface ChatModalProps {
@@ -123,7 +124,10 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   };
 
   const handleCatchUp = async () => {
-      if (messages.length < 5) return;
+      if (messages.length < 3) {
+          alert("Necesito al menos 3 mensajes para generar un resumen útil.");
+          return;
+      }
       setIsProcessingAI(true);
       const summary = await getChatCatchUp(messages.map(m => `${getSenderName(m.senderId)}: ${m.text}`));
       setCatchUpSummary(summary);
@@ -150,6 +154,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   // Restablecer flag de carga al cambiar de chat
   useEffect(() => {
     isFirstLoadRef.current = true;
+    setCatchUpSummary(null); // Limpiar resumen al cambiar de chat
   }, [activeChatId]);
 
   // --- GROUP ACTIONS ---
@@ -160,7 +165,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
       if (!chat) return;
 
       if (!chat.isGroup) {
-          const gName = prompt("¿Cómo se llamará este nuevo grupo de viaje?");
+          const gName = prompt("Estás creando un grupo. ¿Cómo se llamará?");
           if (gName === null) return;
           await StorageService.addParticipantToChat(activeChatId, userId, gName || "Grupo de Viaje");
       } else {
@@ -467,11 +472,42 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                             </div>
                         </div>
                         <div className="flex gap-1 md:gap-2">
-                            <button onClick={() => setIsAddingParticipants(true)} className="p-2.5 rounded-xl bg-white/30 hover:bg-white/50 text-current active:scale-95 transition-all"><UserPlus size={18} /></button>
-                            <button onClick={handleCatchUp} className="p-2.5 rounded-xl bg-white/30 hover:bg-white/50 text-current active:scale-95 transition-all"><PieChart size={18} /></button>
+                            <button 
+                                onClick={() => setIsAddingParticipants(true)} 
+                                className="p-2.5 rounded-xl bg-white/30 hover:bg-white/50 text-current active:scale-95 transition-all"
+                                title="Agregar personas al chat"
+                            >
+                                <UserPlus size={18} />
+                            </button>
+                            <button 
+                                onClick={handleCatchUp} 
+                                disabled={isProcessingAI}
+                                className={`p-2.5 rounded-xl transition-all ${isProcessingAI ? 'bg-cyan-100 text-cyan-600' : 'bg-white/30 hover:bg-white/50 text-current active:scale-95'}`}
+                                title="Resumen Catch Up"
+                            >
+                                {isProcessingAI ? <Loader2 size={18} className="animate-spin" /> : <PieChart size={18} />}
+                            </button>
                             <button onClick={() => setShowLogistics(!showLogistics)} className={`p-2.5 rounded-xl transition-all ${showLogistics ? 'bg-cyan-600 text-white shadow-lg' : 'bg-white/30 active:scale-95'}`}><Layout size={18}/></button>
                         </div>
                     </div>
+
+                    {/* Catch Up Summary Alert */}
+                    {catchUpSummary && (
+                        <div className="mx-4 md:mx-6 mt-4 p-4 bg-gradient-to-br from-cyan-600 to-blue-700 text-white rounded-[1.5rem] shadow-xl animate-in slide-in-from-top-4 relative overflow-hidden group">
+                            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform"><Sparkles size={64}/></div>
+                            <div className="flex justify-between items-start mb-2">
+                                <div className="flex items-center gap-2">
+                                    <Brain size={18} className="text-cyan-200" />
+                                    <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-100">Resumen de la Conversación</h4>
+                                </div>
+                                <button onClick={() => setCatchUpSummary(null)} className="text-white/60 hover:text-white transition-colors"><X size={18}/></button>
+                            </div>
+                            <p className="text-sm font-medium leading-relaxed italic">{catchUpSummary}</p>
+                            <div className="mt-3 flex items-center gap-2">
+                                <span className="text-[8px] font-black uppercase bg-white/20 px-2 py-0.5 rounded-lg tracking-wider">Generado por IA</span>
+                            </div>
+                        </div>
+                    )}
 
                     <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 z-10 scroll-smooth no-scrollbar" ref={messagesEndRef}>
                         {messages.map(msg => {
@@ -643,7 +679,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                                 )}
                                 <button 
                                     onClick={() => handleSendMessage()} 
-                                    className={`p-3 md:p-4 rounded-full shadow-lg active:scale-90 transition-all ${editingMessageId ? 'bg-amber-500' : 'bg-cyan-600'} text-white`}
+                                    className={`p-3 md:p-4 rounded-full shadow-lg active:scale-90 transition-all ${editingMessageId ? 'bg-amber-50' : 'bg-cyan-600'} text-white`}
                                 >
                                     {editingMessageId ? <Check size={22} strokeWidth={3} /> : <Send size={22} />}
                                 </button>
@@ -710,7 +746,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                                 {checklist.map(item => (
                                     <div key={item.id} className="flex items-center gap-3 bg-white p-3 rounded-xl border border-stone-100 group">
                                         <button onClick={() => toggleChecklistItem(item.id)} className={`transition-colors ${item.completed ? 'text-green-500' : 'text-stone-300'}`}>
-                                            {item.completed ? <CheckSquare size={18} /> : <Square size={18} />}
+                                            {item.completed ? <CheckSquare size={18} /> : <CheckSquare size={18} className="opacity-20" />}
                                         </button>
                                         <span className={`flex-1 text-xs font-bold ${item.completed ? 'line-through text-stone-300' : 'text-slate-700'}`}>{item.text}</span>
                                         <button onClick={() => removeChecklistItem(item.id)} className="opacity-0 group-hover:opacity-100 text-stone-300 hover:text-red-500 transition-all"><Trash2 size={14}/></button>
@@ -786,7 +822,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
         )}
 
         {/* ADD PARTICIPANTS OVERLAY */}
-        {isAddingParticipants && (
+        {isAddingParticipants && currentChatObj && (
             <div className="absolute inset-0 z-[100] bg-white/95 backdrop-blur-md p-6 flex flex-col animate-in slide-in-from-top-4 duration-300">
                 <div className="flex justify-between items-center mb-6">
                     <h3 className="font-black text-xl text-slate-800">Agregar Personas</h3>
@@ -796,26 +832,42 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                     <Search size={20} className="text-stone-400 mr-3" />
                     <input 
                         className="bg-transparent outline-none w-full font-bold" 
-                        placeholder="Buscar viajero..." 
+                        placeholder="Buscar viajero por nombre..." 
                         value={participantSearch}
                         onChange={e => setParticipantSearch(e.target.value)}
                     />
                 </div>
-                <div className="flex-1 overflow-y-auto space-y-3 pr-2">
-                    {allUsers.filter(u => u.id !== currentUser.id && participantSearch ? u.name.toLowerCase().includes(participantSearch.toLowerCase()) : u.id !== currentUser.id).map(u => (
-                        <div key={u.id} className="flex items-center justify-between p-3 bg-white rounded-2xl border border-stone-100 hover:border-cyan-200 transition-all">
+                <div className="flex-1 overflow-y-auto space-y-3 pr-2 no-scrollbar">
+                    {allUsers
+                      .filter(u => {
+                        const isSelf = u.id === currentUser.id;
+                        const alreadyInChat = currentChatObj.participants.includes(u.id);
+                        const matchesSearch = !participantSearch || u.name.toLowerCase().includes(participantSearch.toLowerCase());
+                        return !isSelf && !alreadyInChat && matchesSearch;
+                      })
+                      .map(u => (
+                        <div key={u.id} className="flex items-center justify-between p-4 bg-white rounded-2xl border border-stone-100 hover:border-cyan-200 hover:shadow-md transition-all">
                             <div className="flex items-center gap-3">
-                                <img src={u.avatar} className="w-10 h-10 rounded-full object-cover" />
-                                <span className="font-bold text-sm text-slate-800">{u.name}</span>
+                                <img src={u.avatar} className="w-11 h-11 rounded-xl object-cover shadow-sm" />
+                                <div>
+                                  <span className="font-black text-sm text-slate-800 block">{u.name}</span>
+                                  <span className="text-[10px] text-stone-400 font-bold uppercase tracking-wider">Viajero Ecuador</span>
+                                </div>
                             </div>
                             <button 
                                 onClick={() => handleAddParticipant(u.id)}
-                                className="bg-cyan-600 text-white p-2 rounded-xl shadow-md active:scale-90"
+                                className="bg-cyan-600 text-white p-2.5 rounded-xl shadow-lg active:scale-90 transition-all hover:bg-cyan-700"
                             >
-                                <Plus size={18} />
+                                <UserPlus size={20} />
                             </button>
                         </div>
                     ))}
+                    {allUsers.filter(u => u.id !== currentUser.id && !currentChatObj.participants.includes(u.id)).length === 0 && (
+                      <div className="text-center py-20 text-stone-300">
+                        <UserIcon size={48} className="mx-auto mb-2 opacity-10" />
+                        <p className="text-xs font-black uppercase tracking-widest">Todos los viajeros ya están aquí</p>
+                      </div>
+                    )}
                 </div>
             </div>
         )}

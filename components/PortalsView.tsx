@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Clover, MessageSquareText, Share2, MapPin, Zap, Sparkles, Loader2, Play, Info, Volume2, Waves, ChevronLeft, Map as MapIcon, X, Maximize2 } from 'lucide-react';
+import { Clover, MessageSquareText, Share2, MapPin, Zap, Sparkles, Loader2, Play, Info, Volume2, Waves, ChevronLeft, Map as MapIcon, X, Maximize2, Leaf } from 'lucide-react';
 import { Post, User } from '../types';
 import { analyzeTravelImage, getPlaceLiveContext } from '../services/geminiService';
 
@@ -13,11 +13,20 @@ interface PortalsViewProps {
   onShare: (post: Post) => void;
 }
 
+interface Particle {
+    id: number;
+    x: number;
+    y: number;
+    type: 'clover' | 'leaf' | 'sand' | 'sparkle';
+    angle: number;
+    velocity: number;
+    rotation: number;
+}
+
 export const PortalsView: React.FC<PortalsViewProps> = ({ posts, currentUser, onLike, onComment, onUserClick, onShare }) => {
   const [activePostIndex, setActivePostIndex] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Detectar cual post está en vista para snapping manual o efectos
   const handleScroll = () => {
     if (!containerRef.current) return;
     const scrollPos = containerRef.current.scrollTop;
@@ -70,10 +79,11 @@ const PortalItem: React.FC<{
     const [aiInfo, setAiInfo] = useState<{title: string, info: string, category: string} | null>(null);
     const [isAiLoading, setIsAiLoading] = useState(false);
     const [liveData, setLiveData] = useState<any>(null);
+    const [particles, setParticles] = useState<Particle[]>([]);
+    
     const cinematicTimeout = useRef<any>(null);
     const videoRef = useRef<HTMLVideoElement>(null);
 
-    // Modo Cinemático: Desaparecer UI tras inactividad
     useEffect(() => {
         const resetTimeout = () => {
             setIsCinematic(false);
@@ -87,10 +97,7 @@ const PortalItem: React.FC<{
             resetTimeout();
             window.addEventListener('mousemove', resetTimeout);
             window.addEventListener('touchstart', resetTimeout);
-            
-            // Cargar clima/contexto
             getPlaceLiveContext(post.location).then(setLiveData);
-
             if (post.mediaType === 'video') videoRef.current?.play();
         } else {
             setIsCinematic(false);
@@ -103,6 +110,29 @@ const PortalItem: React.FC<{
             if (cinematicTimeout.current) clearTimeout(cinematicTimeout.current);
         };
     }, [isActive, post.location]);
+
+    const handleInteraction = (e: React.MouseEvent | React.TouchEvent) => {
+        const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
+        const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
+
+        const types: Particle['type'][] = ['clover', 'leaf', 'sand', 'sparkle'];
+        const newParticles: Particle[] = Array.from({ length: 4 }).map(() => ({
+            id: Date.now() + Math.random(),
+            x: clientX,
+            y: clientY,
+            type: types[Math.floor(Math.random() * types.length)],
+            angle: Math.random() * Math.PI * 2,
+            velocity: 100 + Math.random() * 150,
+            rotation: Math.random() * 360
+        }));
+
+        setParticles(prev => [...prev, ...newParticles]);
+
+        // Auto-eliminar partículas después de la animación
+        setTimeout(() => {
+            setParticles(prev => prev.filter(p => !newParticles.find(np => np.id === p.id)));
+        }, 800);
+    };
 
     const handleExploreIA = async (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -119,7 +149,46 @@ const PortalItem: React.FC<{
     };
 
     return (
-        <div className="h-screen w-full snap-start relative overflow-hidden bg-black flex items-center justify-center">
+        <div 
+            className="h-screen w-full snap-start relative overflow-hidden bg-black flex items-center justify-center cursor-pointer"
+            onClick={handleInteraction}
+        >
+            <style>{`
+                @keyframes particle-burst {
+                    0% { transform: translate(0, 0) scale(1) rotate(0deg); opacity: 1; }
+                    100% { transform: translate(var(--tw-translate-x), var(--tw-translate-y)) scale(0) rotate(var(--tw-rotate)); opacity: 0; }
+                }
+                .portal-particle {
+                    animation: particle-burst 0.8s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
+                }
+            `}</style>
+
+            {/* PARTICLE LAYER */}
+            <div className="absolute inset-0 z-[100] pointer-events-none overflow-hidden">
+                {particles.map(p => {
+                    const tx = Math.cos(p.angle) * p.velocity;
+                    const ty = Math.sin(p.angle) * p.velocity;
+                    return (
+                        <div 
+                            key={p.id}
+                            className="portal-particle absolute"
+                            style={{ 
+                                left: p.x, 
+                                top: p.y, 
+                                '--tw-translate-x': `${tx}px`, 
+                                '--tw-translate-y': `${ty}px`,
+                                '--tw-rotate': `${p.rotation}deg`
+                            } as any}
+                        >
+                            {p.type === 'clover' && <Clover size={24} className="text-green-400 fill-green-400/30" />}
+                            {p.type === 'leaf' && <Leaf size={24} className="text-emerald-500 fill-emerald-500/30" />}
+                            {p.type === 'sand' && <div className="w-3 h-3 bg-amber-300 rounded-full shadow-lg shadow-amber-500/50" />}
+                            {p.type === 'sparkle' && <Sparkles size={20} className="text-white" />}
+                        </div>
+                    );
+                })}
+            </div>
+
             {/* BACKGROUND MEDIA */}
             <div className={`absolute inset-0 w-full h-full transition-transform duration-[10s] ease-linear ${isActive ? 'scale-110' : 'scale-100'}`}>
                 {post.mediaType === 'video' ? (
@@ -132,7 +201,6 @@ const PortalItem: React.FC<{
                 ) : (
                     <img src={post.imageUrl} className="w-full h-full object-cover" alt="Portal content" />
                 )}
-                {/* Vignette Overlay */}
                 <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/80" />
             </div>
 
@@ -150,7 +218,7 @@ const PortalItem: React.FC<{
             {/* INFO PANEL (ABAJO) */}
             <div className={`absolute bottom-0 left-0 w-full p-6 pb-24 md:pb-10 transition-all duration-700 z-40 ${isCinematic ? 'opacity-0 translate-y-10' : 'opacity-100'}`}>
                 <div className="max-w-2xl">
-                    <div className="flex items-center gap-3 mb-4 cursor-pointer group w-fit" onClick={onUserClick}>
+                    <div className="flex items-center gap-3 mb-4 cursor-pointer group w-fit" onClick={(e) => { e.stopPropagation(); onUserClick(); }}>
                         <img src={post.userAvatar} className="w-12 h-12 rounded-2xl border-2 border-white/20 shadow-lg object-cover group-hover:scale-110 transition-transform" />
                         <div>
                             <h3 className="text-white font-black text-lg drop-shadow-md">@{post.userName}</h3>
@@ -187,20 +255,20 @@ const PortalItem: React.FC<{
             {/* ACTION SIDEBAR (DERECHA) */}
             <div className={`absolute right-4 bottom-32 md:bottom-20 flex flex-col gap-6 items-center z-50 transition-all duration-700 ${isCinematic ? 'opacity-0 translate-x-10' : 'opacity-100'}`}>
                 <div className="flex flex-col items-center gap-1 group">
-                    <button onClick={onLike} className={`p-4 rounded-full backdrop-blur-xl transition-all active:scale-125 ${post.isLiked ? 'bg-red-500/80 text-white' : 'bg-white/10 text-white hover:bg-white/20'}`}>
+                    <button onClick={(e) => { e.stopPropagation(); onLike(); }} className={`p-4 rounded-full backdrop-blur-xl transition-all active:scale-125 ${post.isLiked ? 'bg-red-500/80 text-white' : 'bg-white/10 text-white hover:bg-white/20'}`}>
                         <Clover size={28} fill={post.isLiked ? "currentColor" : "none"} />
                     </button>
                     <span className="text-white text-[10px] font-black drop-shadow-md">{post.likes}</span>
                 </div>
 
                 <div className="flex flex-col items-center gap-1 group">
-                    <button onClick={onComment} className="p-4 rounded-full bg-white/10 backdrop-blur-xl text-white hover:bg-white/20 transition-all active:scale-90">
+                    <button onClick={(e) => { e.stopPropagation(); onComment(); }} className="p-4 rounded-full bg-white/10 backdrop-blur-xl text-white hover:bg-white/20 transition-all active:scale-90">
                         <MessageSquareText size={28} />
                     </button>
                     <span className="text-white text-[10px] font-black drop-shadow-md">{post.comments?.length || 0}</span>
                 </div>
 
-                <button onClick={onShare} className="p-4 rounded-full bg-white/10 backdrop-blur-xl text-white hover:bg-white/20 transition-all active:scale-90">
+                <button onClick={(e) => { e.stopPropagation(); onShare(); }} className="p-4 rounded-full bg-white/10 backdrop-blur-xl text-white hover:bg-white/20 transition-all active:scale-90">
                     <Share2 size={28} />
                 </button>
 
@@ -211,7 +279,10 @@ const PortalItem: React.FC<{
 
             {/* IA EXPLORE OVERLAY */}
             {aiInfo && (
-                <div className="absolute inset-0 z-[60] bg-black/60 backdrop-blur-md flex items-center justify-center p-8 animate-in fade-in zoom-in duration-300">
+                <div 
+                    className="absolute inset-0 z-[60] bg-black/60 backdrop-blur-md flex items-center justify-center p-8 animate-in fade-in zoom-in duration-300"
+                    onClick={(e) => e.stopPropagation()}
+                >
                     <div className="max-w-md w-full bg-white rounded-[2.5rem] overflow-hidden shadow-2xl relative">
                         <button onClick={() => setAiInfo(null)} className="absolute top-4 right-4 p-2 bg-stone-100 rounded-full text-stone-500"><X size={20}/></button>
                         <div className="bg-manabi-600 p-8 text-white">

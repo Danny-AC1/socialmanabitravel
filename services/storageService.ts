@@ -1,5 +1,5 @@
 
-import { ref, set, remove, update, get, push } from "firebase/database";
+import { ref, set, remove, update, get, push } from "@firebase/database";
 import { db } from "./firebase";
 import { Post, Story, Destination, Suggestion, User, Chat, Message, TravelGroup, TravelTemplate } from '../types';
 import { EncryptionService } from "./encryptionService";

@@ -5,6 +5,7 @@ import { HeroSection } from './components/HeroSection';
 import { PostCard } from './components/PostCard';
 import { CreatePostModal } from './components/CreatePostModal';
 import { EditPostModal } from './components/EditPostModal';
+import { EditStoryModal } from './components/EditStoryModal';
 import { ChatBot } from './components/ChatBot';
 import { StoryViewer } from './components/StoryViewer';
 import { DestinationCard } from './components/DestinationCard';
@@ -28,7 +29,8 @@ import { StorageService } from './services/storageService';
 import { AuthService } from './services/authService';
 import { getDailyChallenge, isAdmin, getUserLevel, getNextLevel, BADGES } from './utils';
 import { db } from './services/firebase';
-import { onValue, ref } from 'firebase/database';
+// Fixed: Use @firebase/database to ensure named exports are correctly resolved in modular SDK
+import { ref, onValue } from '@firebase/database';
 import { Helmet } from 'react-helmet-async';
 
 type ProfileSubTab = 'grid' | 'badges' | 'map';
@@ -77,7 +79,9 @@ export default function App() {
 
   const [selectedDestination, setSelectedDestination] = useState<Destination | null>(null);
   const [viewingStoryIndex, setViewingStoryIndex] = useState<number | null>(null);
+  const [viewingStoriesSubset, setViewingStoriesSubset] = useState<Story[]>([]);
   const [editingPost, setEditingPost] = useState<Post | null>(null);
+  const [editingStory, setEditingStory] = useState<Story | null>(null);
   const [viewingPost, setViewingPost] = useState<Post | null>(null);
   const [chatQuery, setChatQuery] = useState('');
   
@@ -243,18 +247,29 @@ export default function App() {
     });
   }, [user?.id]);
 
-  const handleCreateContent = (image: string, caption: string, location: string, type: 'post' | 'story', mediaType: 'image' | 'video') => requireAuth(async () => {
+  const handleCreateContent = (image: string, caption: string, locationOrName: string, type: 'post' | 'story' | 'group', mediaType: 'image' | 'video', extraData?: any) => requireAuth(async () => {
     try {
       if (type === 'post') {
-        const newPost: Post = { id: Date.now().toString(), userId: user!.id, userName: user!.name, userAvatar: user!.avatar, location, imageUrl: image, mediaType, caption, likes: 0, comments: [], timestamp: Date.now() };
+        const newPost: Post = { id: Date.now().toString(), userId: user!.id, userName: user!.name, userAvatar: user!.avatar, location: locationOrName, imageUrl: image, mediaType, caption, likes: 0, comments: [], timestamp: Date.now() };
         await StorageService.savePost(newPost);
-      } else {
-        const newStory: Story = { id: `s_${Date.now()}`, userId: user!.id, userName: user!.name, userAvatar: user!.avatar, imageUrl: image, mediaType, timestamp: Date.now(), isViewed: false, caption, location, likes: 0 };
+      } else if (type === 'story') {
+        const newStory: Story = { id: `s_${Date.now()}`, userId: user!.id, userName: user!.name, userAvatar: user!.avatar, imageUrl: image, mediaType, timestamp: Date.now(), isViewed: false, caption, location: locationOrName, likes: 0 };
         await StorageService.saveStory(newStory);
+      } else if (type === 'group') {
+        const groupData = {
+          id: `tg_${Date.now()}`,
+          name: extraData.name,
+          description: caption,
+          imageUrl: image,
+          adminId: user!.id,
+          createdAt: Date.now(),
+          isPrivate: extraData.isPrivate
+        };
+        await StorageService.createTravelGroup(groupData, extraData.createChat);
       }
-      alert("¡Publicado con éxito!");
+      alert("¡Realizado con éxito!");
     } catch (e: any) {
-      alert("Error al subir.");
+      alert("Error al procesar la solicitud.");
     }
   });
 
@@ -294,6 +309,15 @@ export default function App() {
 
   const featuredDestination = destinations.find(d => d.isFeatured) || destinations[0];
   const activeStories = stories.filter(story => (Date.now() - story.timestamp) < 24 * 60 * 60 * 1000);
+
+  // Group stories by userId
+  const groupedStories = activeStories.reduce((acc, story) => {
+    if (!acc[story.userId]) acc[story.userId] = [];
+    acc[story.userId].push(story);
+    return acc;
+  }, {} as Record<string, Story[]>);
+
+  const uniqueStoryUsers = Object.keys(groupedStories);
 
   const REGIONS: EcuadorRegion[] = ['Costa', 'Sierra', 'Amazonía', 'Insular'];
   
@@ -581,7 +605,7 @@ export default function App() {
                                         onClick={() => handleUserClick(u.id)}
                                         className="bg-white p-3 rounded-2xl border border-stone-100 shadow-sm hover:border-manabi-200 transition-all flex items-center gap-4 cursor-pointer"
                                     >
-                                        <img src={u.avatar} className="w-12 h-12 rounded-xl object-cover" />
+                                        <img src={u.avatar} className="w-12 h-12 rounded-full object-cover" />
                                         <div className="flex-1 min-w-0">
                                             <h4 className="font-bold text-stone-800 text-sm truncate">{u.name}</h4>
                                             <p className="text-[10px] text-stone-400 font-bold uppercase tracking-wider">{getUserLevel(u.points).name}</p>
@@ -781,12 +805,25 @@ export default function App() {
                     <span className="text-[10px] font-bold">Crear</span>
                   </div>
                 </div>
-                {activeStories.map((story, idx) => (
-                  <div key={story.id} className="relative w-24 h-36 md:w-28 md:h-44 shrink-0 rounded-2xl overflow-hidden cursor-pointer ring-2 ring-manabi-500 ring-offset-2" onClick={() => setViewingStoryIndex(idx)}>
-                    <img src={story.imageUrl} className="w-full h-full object-cover" />
-                    <span className="absolute bottom-2 left-2 text-white text-[10px] font-bold truncate pr-2">{story.userName}</span>
-                  </div>
-                ))}
+                {uniqueStoryUsers.map((userId) => {
+                  const userStories = groupedStories[userId];
+                  const lastStory = userStories[userStories.length - 1];
+                  return (
+                    <div 
+                      key={userId} 
+                      className="relative w-24 h-36 md:w-28 md:h-44 shrink-0 rounded-2xl overflow-hidden cursor-pointer ring-2 ring-manabi-500 ring-offset-2" 
+                      onClick={() => {
+                        setViewingStoriesSubset(userStories);
+                        setViewingStoryIndex(0);
+                      }}
+                    >
+                      <img src={lastStory.imageUrl} className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black/20"></div>
+                      <img src={lastStory.userAvatar} className="absolute top-2 left-2 w-8 h-8 rounded-lg border-2 border-white object-cover" />
+                      <span className="absolute bottom-2 left-2 text-white text-[10px] font-bold truncate pr-2">{lastStory.userName}</span>
+                    </div>
+                  );
+                })}
               </div>
               <ChallengeCard challenge={dailyChallenge} isCompleted={isChallengeCompleted} onParticipate={() => setIsCreateModalOpen(true)} />
               <div className="space-y-8">
@@ -914,11 +951,38 @@ export default function App() {
         />
       )}
 
-      {viewingStoryIndex !== null && <StoryViewer stories={activeStories} initialStoryIndex={viewingStoryIndex} currentUserId={user?.id || 'guest'} onClose={() => setViewingStoryIndex(null)} onMarkViewed={() => {}} onDelete={() => {}} onLike={() => {}} onShare={(text) => handleShare("Mira esta historia en Ecuador Travel", text)} />}
+      {viewingStoryIndex !== null && viewingStoriesSubset.length > 0 && (
+        <StoryViewer 
+          stories={viewingStoriesSubset} 
+          initialStoryIndex={viewingStoryIndex} 
+          currentUserId={user?.id || 'guest'} 
+          onClose={() => { setViewingStoryIndex(null); setViewingStoriesSubset([]); }} 
+          onMarkViewed={(id) => StorageService.markStoryViewed(id, user!)} 
+          onDelete={(id) => StorageService.deleteStory(id)} 
+          onEdit={(s) => setEditingStory(s)} 
+          onLike={(id) => StorageService.toggleLikeStory(stories.find(s => s.id === id)!)} 
+          onShare={(text) => handleShare("Mira esta historia en Ecuador Travel", text)} 
+        />
+      )}
       {isNotificationsOpen && user && <NotificationsModal isOpen={isNotificationsOpen} onClose={() => setIsNotificationsOpen(false)} notifications={notifications} currentUserId={user.id} />}
-      {viewingPost && <PostViewer post={viewingPost} currentUserId={user?.id || 'guest'} onClose={() => setViewingPost(null)} onLike={() => {}} onComment={() => {}} onShare={(p) => handleShare(`Mira esta publicación de @${p.userName} en ${p.location}`, p.caption)} onEdit={() => {}} onDelete={() => {}} />}
+      {viewingPost && (
+        <PostViewer 
+          post={viewingPost} 
+          currentUserId={user?.id || 'guest'} 
+          onClose={() => setViewingPost(null)} 
+          onLike={(id) => StorageService.toggleLikePost(viewingPost, user?.id || 'guest')} 
+          onComment={(id, text) => StorageService.addComment(id, [...(viewingPost.comments || []), {id: Date.now().toString(), userId: user!.id, userName: user!.name, text, timestamp: Date.now()}])} 
+          onShare={(p) => handleShare(`Mira esta publicación de @${p.userName} en ${p.location}`, p.caption)} 
+          onEdit={(p) => setEditingPost(p)} 
+          onDelete={(id) => StorageService.deletePost(id)} 
+        />
+      )}
       {isAdminUsersOpen && <AdminUsersModal isOpen={isAdminUsersOpen} onClose={() => setIsAdminUsersOpen(false)} users={allUsersList} />}
-      <ChatBot externalIsOpen={chatQuery !== ''} externalQuery={chatQuery} onCloseExternal={() => setChatQuery('')} />
+      {editingPost && <EditPostModal isOpen={!!editingPost} post={editingPost} onClose={() => setEditingPost(null)} onSave={(id, cap, loc) => StorageService.updatePost(id, { caption: cap, location: loc })} />}
+      {editingStory && <EditStoryModal isOpen={!!editingStory} story={editingStory} onClose={() => setEditingStory(null)} onSave={(id, cap, loc) => StorageService.updateStory(id, { caption: cap, location: loc })} />}
+      {activeTab !== 'portals' && (
+        <ChatBot externalIsOpen={chatQuery !== ''} externalQuery={chatQuery} onCloseExternal={() => setChatQuery('')} />
+      )}
     </div>
   );
 }
