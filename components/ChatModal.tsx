@@ -224,7 +224,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({
     <div className="fixed inset-0 z-[400] flex items-center justify-center bg-black/60 md:backdrop-blur-sm p-0 md:p-4">
       <div className={`bg-white w-full h-full md:max-w-6xl md:h-[90vh] md:rounded-[2.5rem] overflow-hidden shadow-2xl flex flex-row relative`}>
         
-        {/* SIDEBAR - Oculto en móvil cuando hay chat activo */}
         <div className={`w-full md:w-[350px] bg-white border-r border-gray-100 flex flex-col ${activeChatId ? 'hidden md:flex' : 'flex'}`}>
             <div className="p-4 md:p-6 border-b border-gray-50 flex items-center gap-3">
                 <button onClick={onClose} className="text-stone-400 p-2 hover:bg-stone-50 rounded-full"><ChevronLeft size={24} /></button>
@@ -250,11 +249,9 @@ export const ChatModal: React.FC<ChatModalProps> = ({
             </div>
         </div>
 
-        {/* CHAT AREA - Ocupa todo el espacio en móvil si hay chat activo */}
         <div className={`flex-1 flex flex-col relative ${getThemeStyles()} ${!activeChatId ? 'hidden md:flex' : 'flex'}`}>
             {activeChatId && activePartner ? (
                 <>
-                    {/* Header optimizado para móvil */}
                     <div className="p-3 md:p-4 px-4 md:px-6 flex items-center justify-between z-20 sticky top-0 border-b border-black/5 backdrop-blur-xl">
                         <div className="flex items-center gap-3">
                             <button onClick={() => setActiveChatId(null)} className="md:hidden p-2 -ml-2 text-stone-600 active:bg-black/5 rounded-full transition-all"><ChevronLeft size={24} /></button>
@@ -272,7 +269,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                         </div>
                     </div>
 
-                    {/* Resumen IA Overlay */}
                     {catchUpSummary && (
                         <div className="absolute top-16 md:top-20 left-4 right-4 md:left-6 md:right-6 z-[30] bg-white/95 backdrop-blur-2xl p-4 md:p-5 rounded-[1.5rem] md:rounded-[2rem] shadow-2xl border border-white animate-in slide-in-from-top-4">
                             <div className="flex justify-between items-center mb-2">
@@ -283,7 +279,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                         </div>
                     )}
 
-                    {/* Mensajes con scroll suave */}
                     <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 z-10 scroll-smooth no-scrollbar" ref={messagesEndRef}>
                         {messages.map(msg => {
                             const isMe = msg.senderId === currentUser.id;
@@ -312,7 +307,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                             );
                         })}
 
-                        {/* Polls optimizados para móvil */}
                         {Object.entries(polls).map(([id, pollData]) => {
                             const poll = pollData as any;
                             const totalVotes = Object.values(poll.votes || {}).length;
@@ -342,7 +336,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                         })}
                     </div>
 
-                    {/* Sugerencias horizontales móviles */}
                     <div className="px-4 md:px-6 py-2 flex gap-2 overflow-x-auto no-scrollbar z-20">
                         {aiSuggestions.map((s, i) => (
                             <button key={i} onClick={() => handleSendMessage(s)} className="whitespace-nowrap px-4 py-2 bg-white/80 border border-black/5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm hover:bg-cyan-600 hover:text-white active:scale-95 transition-all flex items-center gap-2">
@@ -351,7 +344,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                         ))}
                     </div>
 
-                    {/* Input Área Móvil */}
                     <div className="p-4 md:p-6 pt-0 z-20">
                         {isCreatingPoll && (
                             <div className="mb-3 bg-white/95 backdrop-blur-xl p-4 rounded-[1.5rem] shadow-2xl border border-purple-100 animate-in slide-in-from-bottom-4">
@@ -381,7 +373,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                             </div>
                         </div>
 
-                        {/* FAB Actions para móvil */}
                         {isActionMenuOpen && !isCreatingPoll && (
                             <div className="absolute bottom-20 md:bottom-24 left-4 md:left-6 flex gap-3 animate-in slide-in-from-bottom-4">
                                 <button onClick={() => setIsCreatingPoll(true)} className="flex flex-col items-center gap-1 group">
@@ -405,13 +396,12 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                 </>
             ) : (
                 <div className="flex-1 flex flex-col items-center justify-center text-stone-300 p-10 text-center">
-                    <div className="bg-white/40 p-8 md:p-10 rounded-[2.5rem] md:rounded-[3rem] border border-white/50 animate-in zoom-in duration-500"><Brain size={48} md:size={64} className="opacity-10" /></div>
+                    <div className="bg-white/40 p-8 md:p-10 rounded-[2.5rem] md:rounded-[3rem] border border-white/50 animate-in zoom-in duration-500"><Brain className="w-12 h-12 md:w-16 md:h-16 opacity-10" /></div>
                     <h3 className="text-slate-400 font-black uppercase tracking-[0.2em] text-[10px] md:text-xs mt-6">Selecciona una conversación</h3>
                 </div>
             )}
         </div>
 
-        {/* LOGISTICA DRAWER - Overlay completo en móvil */}
         {showLogistics && activeChatId && (
             <div className="fixed inset-0 md:relative md:inset-auto w-full md:w-[380px] bg-white border-l border-gray-100 flex flex-col animate-in slide-in-from-right-10 duration-300 z-[400] md:z-[40]">
                 <div className="p-6 md:p-8 border-b border-gray-50 flex justify-between items-center bg-slate-900 text-white">
@@ -435,7 +425,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                             )) : <p className="text-[10px] text-stone-300 italic text-center py-4">Conversa más para descubrir roles...</p>}
                         </div>
                     </div>
-                    {/* Placeholder para contenido adicional */}
                     <div className="text-center p-10 opacity-20"><ClipboardList size={40} className="mx-auto" /></div>
                 </div>
             </div>
