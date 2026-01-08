@@ -23,14 +23,11 @@ export const StorageService = {
             const newPoints = currentPoints + amount;
             
             let actionCount = 0;
-            // Cálculo aproximado para insignias basado en puntos acumulados si no tenemos contadores específicos
             if (actionType === 'post') actionCount = Math.floor(newPoints / POINT_VALUES.POST);
             if (actionType === 'comment') actionCount = Math.floor(newPoints / POINT_VALUES.COMMENT);
             
-            // Verificar nuevas insignias
             const newBadges = checkNewBadges({ ...user, points: newPoints }, actionType as any, actionCount);
             
-            // Fusionar insignias nuevas con las existentes evitando duplicados
             const currentBadgeIds = new Set((user.badges || []).map(b => b.id));
             const uniqueNewBadges = newBadges.filter(b => !currentBadgeIds.has(b.id));
             const updatedBadges = [...(user.badges || []), ...uniqueNewBadges];
@@ -121,11 +118,8 @@ export const StorageService = {
   toggleLikePost: async (post: Post, userId: string) => {
     const isLiked = post.isLiked;
     const newLikes = isLiked ? (post.likes - 1) : (post.likes + 1);
-    
-    // Optimistic update handled by UI, backend update here
-    // Note: A real implementation should use transactions for likes to avoid race conditions
     await update(ref(db, `posts/${post.id}`), {
-      likes: Math.max(0, newLikes) // Prevent negative likes
+      likes: Math.max(0, newLikes) 
     });
   },
 
@@ -239,7 +233,7 @@ export const StorageService = {
   createTravelGroup: async (groupData: Omit<TravelGroup, 'members' | 'templates'>) => {
       const newGroup: TravelGroup = {
           ...groupData,
-          members: { [groupData.adminId]: true }, // Creator is the first member
+          members: { [groupData.adminId]: true }, 
       };
       await set(ref(db, `travelGroups/${groupData.id}`), newGroup);
   },
@@ -253,7 +247,6 @@ export const StorageService = {
   },
 
   joinTravelGroup: async (groupId: string, userId: string) => {
-      // Direct join for public groups (logic checked in UI, here we just write)
       await update(ref(db, `travelGroups/${groupId}/members`), {
           [userId]: true
       });
@@ -309,14 +302,11 @@ export const StorageService = {
     mediaUrl?: string | null,
     replyTo?: Message['replyTo']
   ) => {
-    // 1. Encriptar contenido
     const encryptedText = text ? EncryptionService.encrypt(text, chatId) : '';
     const encryptedMedia = mediaUrl ? EncryptionService.encrypt(mediaUrl, chatId) : null;
 
-    // 2. Crear referencia
     const messageRef = push(ref(db, `chats/${chatId}/messages`));
     
-    // 3. Construir objeto LIMPIO
     const messagePayload: any = {
       id: messageRef.key!,
       senderId,
@@ -329,10 +319,8 @@ export const StorageService = {
     if (encryptedMedia) messagePayload.mediaUrl = encryptedMedia;
     if (replyTo) messagePayload.replyTo = replyTo;
 
-    // 4. Guardar
     await set(messageRef, messagePayload);
 
-    // 5. Actualizar último mensaje
     let previewText = encryptedText;
     if (type === 'image') previewText = EncryptionService.encrypt('📷 Foto', chatId);
     if (type === 'video') previewText = EncryptionService.encrypt('🎥 Video', chatId);
@@ -375,6 +363,16 @@ export const StorageService = {
         await update(messagesRef, updates);
       }
     }
+  },
+
+  // --- LOGISTICS (CHECKLIST & EXPENSES) ---
+
+  updateChecklist: async (chatId: string, items: any[]) => {
+      await set(ref(db, `chats/${chatId}/logistics/checklist`), items);
+  },
+
+  updateExpenses: async (chatId: string, expenses: any[]) => {
+      await set(ref(db, `chats/${chatId}/logistics/expenses`), expenses);
   },
 
   // --- ADMIN FUNCTIONS ---

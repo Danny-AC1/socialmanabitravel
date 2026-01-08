@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Map as MapIcon, Compass, Camera, Search, LogOut, ChevronLeft, PlusCircle, Globe, Filter, Edit3, X, Lightbulb, MapPin, Plus, MessageCircle, Users, Bell, LayoutGrid, Award, Home, Sparkles, Trophy, CheckCircle, Navigation, Lock, User as UserIcon, AlertTriangle, ShieldAlert, Zap, Calendar, Settings, ChevronRight, Star, UserPlus, UserCheck, Play } from 'lucide-react';
+import { Map as MapIcon, Compass, Camera, Search, LogOut, ChevronLeft, PlusCircle, Globe, Filter, Edit3, X, Lightbulb, MapPin, Plus, MessageCircle, Users, Bell, LayoutGrid, Award, Home, Sparkles, Trophy, CheckCircle, Navigation, Lock, User as UserIcon, AlertTriangle, ShieldAlert, Zap, Calendar, Settings, ChevronRight, Star, UserPlus, UserCheck, Play, Palmtree, Mountain, Tent, Waves, ChevronDown, ChevronUp } from 'lucide-react';
 import { HeroSection } from './components/HeroSection';
 import { PostCard } from './components/PostCard';
 import { CreatePostModal } from './components/CreatePostModal';
@@ -62,6 +62,9 @@ export default function App() {
   const [filterRegion, setFilterRegion] = useState<EcuadorRegion | 'Todas'>('Todas');
   const [filterProvince, setFilterProvince] = useState<string>('Todas');
 
+  // Accordion state for Explore
+  const [collapsedRegions, setCollapsedRegions] = useState<Record<string, boolean>>({});
+
   // Search State
   const [searchTerm, setSearchTerm] = useState('');
   const [searchCategory, setSearchCategory] = useState<SearchCategory>('all');
@@ -95,6 +98,13 @@ export default function App() {
   const handleGroupClick = (groupId: string) => {
     setSelectedGroupId(groupId);
     setIsGroupsOpen(true);
+  };
+
+  const toggleRegionCollapse = (region: string) => {
+    setCollapsedRegions(prev => ({
+      ...prev,
+      [region]: !prev[region]
+    }));
   };
 
   useEffect(() => {
@@ -148,9 +158,16 @@ export default function App() {
         const loadedDestinations: Destination[] = data ? Object.values(data) : [];
         const merged = [...STATIC_DESTINATIONS];
         loadedDestinations.forEach(ld => {
-            if (!merged.find(m => m.id === ld.id)) merged.push(ld);
+            const idx = merged.findIndex(m => m.id === ld.id);
+            if (idx !== -1) merged[idx] = ld;
+            else merged.push(ld);
         });
         setDestinations(merged);
+        
+        if (selectedDestination) {
+          const updated = merged.find(d => d.id === selectedDestination.id);
+          if (updated) setSelectedDestination(updated);
+        }
     });
 
     const usersRef = ref(db, 'users');
@@ -172,7 +189,7 @@ export default function App() {
         setSuggestions(data ? Object.values(data) : []);
       });
     }
-  }, [userIsAdmin]);
+  }, [userIsAdmin, selectedDestination?.id]);
 
   const handleCreateContent = (image: string, caption: string, location: string, type: 'post' | 'story', mediaType: 'image' | 'video') => requireAuth(async () => {
     try {
@@ -202,29 +219,61 @@ export default function App() {
     if (updatedUser) setUser(updatedUser);
   });
 
+  const handleUpdateDestination = async (id: string, updates: Partial<Destination>) => {
+    if (!userIsAdmin) return;
+    await StorageService.updateDestinationStatus(id, updates);
+  };
+
+  const handleDeleteDestination = async (id: string) => {
+    if (!userIsAdmin) return;
+    await StorageService.deleteDestination(id);
+    setSelectedDestination(null);
+  };
+
+  const handleChangeDestinationCover = async (id: string, imageUrl: string) => {
+    if (!userIsAdmin) return;
+    await StorageService.updateDestinationCover(id, imageUrl);
+  };
+
+  const handleRemoveDestinationPhoto = async (id: string, photoUrl: string) => {
+    if (!userIsAdmin || !selectedDestination) return;
+    await StorageService.removeDestinationPhoto(id, selectedDestination.gallery || [], photoUrl);
+  };
+
   const featuredDestination = destinations.find(d => d.isFeatured) || destinations[0];
   const activeStories = stories.filter(story => (Date.now() - story.timestamp) < 24 * 60 * 60 * 1000);
 
-  const filteredDestinations = destinations.filter(d => {
-      const regionMatch = filterRegion === 'Todas' || d.region === filterRegion;
-      const provinceMatch = filterProvince === 'Todas' || d.province === filterProvince;
-      return regionMatch && provinceMatch;
-  });
+  const REGIONS: EcuadorRegion[] = ['Costa', 'Sierra', 'Amazonía', 'Insular'];
+  
+  const getRegionIcon = (region: EcuadorRegion) => {
+    switch(region) {
+      case 'Costa': return <Palmtree className="text-amber-500" size={24} />;
+      case 'Sierra': return <Mountain className="text-blue-500" size={24} />;
+      case 'Amazonía': return <Tent className="text-emerald-500" size={24} />;
+      case 'Insular': return <Waves className="text-cyan-500" size={24} />;
+    }
+  };
 
-  // Determinar qué usuario mostrar en el perfil
+  const getRegionColor = (region: EcuadorRegion) => {
+    switch(region) {
+      case 'Costa': return 'from-amber-500 to-orange-600';
+      case 'Sierra': return 'from-blue-500 to-indigo-600';
+      case 'Amazonía': return 'from-emerald-500 to-teal-600';
+      case 'Insular': return 'from-cyan-500 to-blue-600';
+    }
+  };
+
   const targetUser = viewingUserId ? allUsersList.find(u => u.id === viewingUserId) : user;
   const isOwnProfile = !viewingUserId || viewingUserId === user?.id;
   const targetPosts = posts.filter(p => p.userId === targetUser?.id);
   const isFollowing = user && targetUser && user.following && user.following.includes(targetUser.id);
 
-  // Data de Nivel
   const userLevel = getUserLevel(targetUser?.points);
   const nextLevel = getNextLevel(targetUser?.points);
   const progressToNext = nextLevel 
     ? Math.min(100, Math.max(0, ((targetUser?.points || 0) - userLevel.minPoints) / (nextLevel.minPoints - userLevel.minPoints) * 100))
     : 100;
 
-  // Lógica de Búsqueda Inteligente (Solo si hay texto)
   const searchResults = {
     destinations: searchTerm.trim() ? destinations.filter(d => 
         d.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -250,7 +299,6 @@ export default function App() {
         <title>Explora | Ecuador Travel</title>
       </Helmet>
 
-      {/* HEADER */}
       <nav className="sticky top-0 z-[100] bg-white border-b border-stone-100 shadow-sm px-4 py-2">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -295,10 +343,61 @@ export default function App() {
                     <span className="text-[10px] md:text-xs font-black text-stone-700 uppercase">Añadir</span>
                   </button>
                </div>
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {filteredDestinations.map(d => (
-                    <DestinationCard key={d.id} destination={d} onClickGuide={() => setSelectedDestination(d)} />
-                  ))}
+
+               <div className="space-y-12">
+                  {REGIONS.filter(region => filterRegion === 'Todas' || region === filterRegion).map(region => {
+                    const regionDestinations = destinations.filter(d => d.region === region);
+                    if (regionDestinations.length === 0) return null;
+
+                    const isCollapsed = collapsedRegions[region];
+                    const provincesInRegion = Array.from(new Set(regionDestinations.map(d => d.province)));
+
+                    return (
+                      <div key={region} className="space-y-6">
+                        <div 
+                          onClick={() => toggleRegionCollapse(region)}
+                          className="flex items-center justify-between border-b border-stone-200 pb-4 cursor-pointer group/header"
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className={`p-3 rounded-2xl bg-gradient-to-br ${getRegionColor(region)} text-white shadow-lg group-hover/header:scale-105 transition-transform`}>
+                                {getRegionIcon(region)}
+                            </div>
+                            <div>
+                              <h2 className="text-2xl font-black text-stone-800 tracking-tight">{region}</h2>
+                              <p className="text-xs font-bold text-stone-400 uppercase tracking-widest">{regionDestinations.length} lugares por descubrir</p>
+                            </div>
+                          </div>
+                          <div className="bg-stone-100 p-2 rounded-full text-stone-400 group-hover/header:bg-stone-200 group-hover/header:text-stone-600 transition-all">
+                             {isCollapsed ? <ChevronDown size={20} /> : <ChevronUp size={20} />}
+                          </div>
+                        </div>
+
+                        {!isCollapsed && (
+                          <div className="space-y-10 animate-in fade-in slide-in-from-top-2 duration-300">
+                            {provincesInRegion.filter(p => filterProvince === 'Todas' || p === filterProvince).map(province => {
+                              const provinceDestinations = regionDestinations.filter(d => d.province === province);
+                              if (provinceDestinations.length === 0) return null;
+
+                              return (
+                                <div key={province} className="space-y-4">
+                                  <div className="flex items-center gap-2">
+                                    <div className="h-4 w-1 bg-stone-300 rounded-full"></div>
+                                    <h3 className="font-black text-stone-600 uppercase text-xs tracking-[0.2em]">{province}</h3>
+                                  </div>
+                                  
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    {provinceDestinations.map(d => (
+                                      <DestinationCard key={d.id} destination={d} onClickGuide={() => setSelectedDestination(d)} />
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                </div>
             </div>
           ) : activeTab === 'search' ? (
@@ -344,7 +443,6 @@ export default function App() {
                 </div>
 
                 <div className="space-y-8">
-                    {/* Resultados de Destinos */}
                     {(searchCategory === 'all' || searchCategory === 'destinations') && searchResults.destinations.length > 0 && (
                         <div>
                             <h3 className="text-xs font-black text-stone-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
@@ -374,7 +472,6 @@ export default function App() {
                         </div>
                     )}
 
-                    {/* Resultados de Grupos */}
                     {(searchCategory === 'all' || searchCategory === 'groups') && searchResults.groups.length > 0 && (
                         <div className="animate-in fade-in duration-500">
                              <h3 className="text-xs font-black text-stone-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
@@ -402,7 +499,6 @@ export default function App() {
                         </div>
                     )}
 
-                    {/* Resultados de Usuarios */}
                     {(searchCategory === 'all' || searchCategory === 'users') && searchResults.users.length > 0 && (
                         <div className="animate-in fade-in duration-500">
                              <h3 className="text-xs font-black text-stone-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
@@ -455,7 +551,6 @@ export default function App() {
                   </button>
                 )}
 
-                {/* USER CARD */}
                 <div className="bg-white rounded-3xl shadow-sm border border-stone-100 overflow-hidden">
                   <div className="h-24 bg-gradient-to-r from-manabi-500 to-cyan-600"></div>
                   <div className="px-8 pb-8 -mt-12 text-center">
@@ -473,7 +568,6 @@ export default function App() {
                     </h2>
                     <p className="text-stone-400 mb-6 text-sm font-medium">"{targetUser?.bio || 'Explorando las maravillas de Ecuador 🇪🇨'}"</p>
                     
-                    {/* Level Progress */}
                     <div className="max-w-md mx-auto bg-stone-50 p-4 rounded-2xl border border-stone-100 mb-6 text-left">
                         <div className="flex justify-between items-center mb-2">
                             <span className={`text-xs font-black uppercase tracking-widest ${userLevel.color} flex items-center gap-1`}>
@@ -505,7 +599,6 @@ export default function App() {
                   </div>
                </div>
 
-               {/* DASHBOARD (Sólo en perfil propio) */}
                {isOwnProfile && (
                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                     <button onClick={() => setIsGroupsOpen(true)} className="bg-white p-6 rounded-3xl border border-stone-100 shadow-sm hover:shadow-md transition-all flex flex-col items-center gap-3 text-center group">
@@ -523,7 +616,6 @@ export default function App() {
                  </div>
                )}
 
-               {/* CONTENT SWITCHER (GRID / BADGES / MAP) */}
                <div className="bg-white rounded-3xl shadow-sm border border-stone-100 overflow-hidden">
                  <div className="flex border-b border-stone-50">
                     <button 
@@ -664,7 +756,6 @@ export default function App() {
         </div>
       </main>
 
-      {/* BOTTOM NAV */}
       <div className="fixed bottom-0 w-full bg-white border-t border-stone-100 flex justify-around items-center p-2.5 md:hidden z-[150] shadow-2xl">
         <button onClick={() => { setActiveTab('home'); setViewingUserId(null); }} className={`flex flex-col items-center gap-1 ${activeTab === 'home' ? 'text-manabi-600' : 'text-stone-400'}`}><Home size={22} /><span className="text-[10px] font-bold">Inicio</span></button>
         <button onClick={() => setActiveTab('explore')} className={`flex flex-col items-center gap-1 ${activeTab === 'explore' ? 'text-manabi-600' : 'text-stone-400'}`}><Compass size={22} /><span className="text-[10px] font-bold">Explorar</span></button>
@@ -683,7 +774,6 @@ export default function App() {
         </button>
       </div>
 
-      {/* ALL MODALS */}
       <AuthScreen isOpen={isAuthOpen} onClose={() => setIsAuthOpen(false)} onLoginSuccess={(u) => { setUser(u); setIsAuthOpen(false); }} />
       <CreatePostModal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} onSubmit={handleCreateContent} />
       <NearbyModal isOpen={isNearbyModalOpen} onClose={() => setIsNearbyModalOpen(false)} isLoading={false} data={null} />
@@ -692,7 +782,23 @@ export default function App() {
       <AddDestinationModal isOpen={isAddDestModalOpen} onClose={() => setIsAddDestModalOpen(false)} onSubmit={(d) => StorageService.addDestination({ ...d, id: `dest_${Date.now()}`, createdBy: user?.id })} existingDestinations={destinations} />
       <ItineraryGeneratorModal isOpen={isItineraryOpen} onClose={() => setIsItineraryOpen(false)} />
       <TravelGroupsModal isOpen={isGroupsOpen} onClose={() => { setIsGroupsOpen(false); setSelectedGroupId(null); }} currentUser={user || {id:'guest'} as any} allUsers={allUsersList} initialGroupId={selectedGroupId} />
-      {selectedDestination && <TravelGuideModal destination={selectedDestination} onClose={closeDestination} onAskAI={setChatQuery} onRate={() => {}} onAddPhoto={() => {}} isAdminUser={userIsAdmin} />}
+      
+      {selectedDestination && (
+        <TravelGuideModal 
+          destination={selectedDestination} 
+          onClose={closeDestination} 
+          onAskAI={setChatQuery} 
+          onRate={() => {}} 
+          onAddPhoto={(img) => StorageService.addPhotoToDestinationGallery(selectedDestination.id, selectedDestination.gallery || [], img, user?.id)} 
+          isAdminUser={userIsAdmin} 
+          onChangeCover={(img) => handleChangeDestinationCover(selectedDestination.id, img)}
+          onDeletePhoto={(url) => handleRemoveDestinationPhoto(selectedDestination.id, url)}
+          onDeleteDestination={() => handleDeleteDestination(selectedDestination.id)}
+          onToggleFeatured={(id, isFeatured) => handleUpdateDestination(id, { isFeatured })}
+          onUpdateDestination={handleUpdateDestination}
+        />
+      )}
+
       {viewingStoryIndex !== null && <StoryViewer stories={activeStories} initialStoryIndex={viewingStoryIndex} currentUserId={user?.id || 'guest'} onClose={() => setViewingStoryIndex(null)} onMarkViewed={() => {}} onDelete={() => {}} onLike={() => {}} />}
       {isNotificationsOpen && user && <NotificationsModal isOpen={isNotificationsOpen} onClose={() => setIsNotificationsOpen(false)} notifications={notifications} currentUserId={user.id} />}
       {viewingPost && <PostViewer post={viewingPost} currentUserId={user?.id || 'guest'} onClose={() => setViewingPost(null)} onLike={() => {}} onComment={() => {}} onShare={() => {}} onEdit={() => {}} onDelete={() => {}} />}

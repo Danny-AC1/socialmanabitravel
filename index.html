@@ -27,10 +27,8 @@
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
-      // Configuración de seguridad para evitar errores de librerías
       window.process = { env: { NODE_ENV: "development" } };
 
-      // Detector de errores: Si la pantalla se pone blanca, esto te dirá por qué.
       window.onerror = function (message, source, lineno, colno, error) {
         console.error("Error global:", error);
         const root = document.getElementById("root");
@@ -73,7 +71,20 @@
         -ms-overflow-style: none;
         scrollbar-width: none;
       }
-      /* Custom Leaflet Marker Styles */
+
+      /* Animaciones de IA */
+      @keyframes loading-ia {
+        0% {
+          transform: translateX(-100%);
+        }
+        100% {
+          transform: translateX(300%);
+        }
+      }
+      .animate-loading-ia {
+        animation: loading-ia 1.5s infinite linear;
+      }
+
       .custom-div-icon {
         background: transparent;
         border: none;
@@ -107,7 +118,7 @@
         position: absolute;
         top: 3px;
         left: 3px;
-        transform: rotate(45deg); /* Counteract pin rotation */
+        transform: rotate(45deg);
         z-index: 10;
       }
     </style>

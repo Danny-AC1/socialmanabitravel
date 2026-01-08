@@ -16,19 +16,13 @@ const saveToCache = (key: string, data: any) => {
 const ECUADOR_SYSTEM_INSTRUCTION = `
 Eres un guía turístico experto y amigable de Ecuador.
 Tu objetivo es ayudar a los viajeros a descubrir los maravillosos destinos de las 4 regiones: Costa, Sierra, Amazonía y Galápagos.
-
-Personalidad:
-- Amable, entusiasta y servicial.
-- Tus respuestas deben ser breves y fáciles de leer en un celular.
-- Usa emojis para dar vida a la conversación, pero sin exagerar.
 `;
 
-const handleGeminiError = (error: any, context: string): string => {
-    console.error(`Error en Gemini (${context}):`, error);
-    const msg = error.message || JSON.stringify(error);
-    if (msg.includes('429') || msg.includes('limit')) return "limit_reached";
-    return "unknown_error";
-};
+const CHAT_COPILOT_INSTRUCTION = `
+Eres el "Copiloto IA de Manabí Social". Tu función es leer el contexto de un chat y sugerir acciones rápidas.
+Analiza si están hablando de tomar decisiones y ofrece opciones para una encuesta.
+Asigna roles a los usuarios según su comportamiento (ej: si manda fotos es 'Fotógrafo', si organiza es 'Líder').
+`;
 
 export const getTravelAdvice = async (query: string): Promise<string> => {
   const cacheKey = `advice_v3_${query.trim().toLowerCase()}`;
@@ -50,20 +44,165 @@ export const getTravelAdvice = async (query: string): Promise<string> => {
     saveToCache(cacheKey, text);
     return text;
   } catch (error: any) {
-    if (handleGeminiError(error, "advice") === "limit_reached") return "IA en mantenimiento. Intenta pronto.";
-    return "Error de conexión. 🔌";
+    return "Error de conexión con el guía virtual. 🔌";
   }
+};
+
+export const getChatCopilotSuggestions = async (lastMessages: string[]): Promise<{suggestions: string[], sentiment: string, theme?: string, pollPrompt?: string}> => {
+    try {
+        const history = lastMessages.join("\n");
+        const response = await ai.models.generateContent({
+            model: 'gemini-3-flash-preview',
+            contents: `Analiza este chat y dame sugerencias, un tema visual (sand|ocean|forest|bonfire) y un prompt para una encuesta si están indecisos. \n${history}`,
+            config: {
+                systemInstruction: CHAT_COPILOT_INSTRUCTION,
+                responseMimeType: "application/json"
+            }
+        });
+        return JSON.parse(response.text);
+    } catch (e) {
+        return { suggestions: ["Planear almuerzo", "Clima"], sentiment: "calm" };
+    }
+};
+
+export const getChatCatchUp = async (messages: string[]): Promise<string> => {
+    try {
+        const history = messages.join("\n");
+        const response = await ai.models.generateContent({
+            model: 'gemini-3-flash-preview',
+            contents: `Resume lo más importante de estos mensajes que el usuario se perdió. Enfócate en decisiones tomadas, lugares acordados y fechas. Sé muy breve. \n${history}`,
+            config: { systemInstruction: "Eres un asistente de viajes ultra eficiente." }
+        });
+        return response.text || "No hay mucho que resumir.";
+    } catch (e) {
+        return "Error al generar resumen.";
+    }
+};
+
+export const analyzeGroupRoles = async (messages: string[]): Promise<Record<string, string>> => {
+    try {
+        const history = messages.join("\n");
+        const response = await ai.models.generateContent({
+            model: 'gemini-3-flash-preview',
+            contents: `Analiza quién es quién en este viaje según sus mensajes: \n${history}. Devuelve un JSON de userId: RoleName. Roles: Planificador, Fotógrafo, Sibarita, Explorador, Animador.`,
+            config: { responseMimeType: "application/json" }
+        });
+        return JSON.parse(response.text);
+    } catch (e) {
+        return {};
+    }
+};
+
+export const analyzeTravelImage = async (base64Image: string): Promise<{title: string, info: string, category: string, isReceipt?: boolean, amount?: number}> => {
+    try {
+        const imagePart = {
+            inlineData: {
+                mimeType: 'image/jpeg',
+                data: base64Image.split(',')[1]
+            }
+        };
+        const prompt = "Analiza esta imagen desde una perspectiva turística de Ecuador. ¿Qué es? Si es un recibo, extrae el total. JSON: {title, info, category, isReceipt: boolean, amount: number}";
+        
+        const response = await ai.models.generateContent({
+            model: 'gemini-3-flash-preview',
+            contents: { parts: [imagePart, { text: prompt }] },
+            config: { responseMimeType: "application/json" }
+        });
+        return JSON.parse(response.text);
+    } catch (e) {
+        return { title: "Imagen", info: "Detalles no disponibles.", category: "desconocido" };
+    }
+};
+
+export const getPlaceLiveContext = async (text: string): Promise<{placeName: string, weather: string, temp: string, status: string} | null> => {
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-3-flash-preview',
+            contents: `Busca si en este texto se menciona un lugar de Ecuador: "${text}". JSON: {placeName, weather, temp, status}`,
+            config: { responseMimeType: "application/json" }
+        });
+        const data = JSON.parse(response.text);
+        return data.placeName ? data : null;
+    } catch (e) {
+        return null;
+    }
+};
+
+export const translateTravelMessage = async (text: string, targetLang: string = "español"): Promise<string> => {
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-3-flash-preview',
+            contents: `Traduce este mensaje de viaje a ${targetLang}: "${text}"`,
+        });
+        return response.text || text;
+    } catch (e) {
+        return text;
+    }
+};
+
+export const processVoiceAction = async (transcription: string): Promise<{action: 'add_expense' | 'add_checklist' | 'none', data: any}> => {
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-3-flash-preview',
+            contents: `Analiza esta orden: "${transcription}". JSON: {action, data: {amount, desc, item}}`,
+            config: { responseMimeType: "application/json" }
+        });
+        return JSON.parse(response.text);
+    } catch (e) {
+        return { action: 'none', data: null };
+    }
+};
+
+export const generatePackingList = async (context: string): Promise<string[]> => {
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-3-flash-preview',
+            contents: `8 cosas esenciales para: ${context}. JSON: { "items": ["item1", ...] }`,
+            config: { responseMimeType: "application/json" }
+        });
+        const data = JSON.parse(response.text);
+        return data.items || [];
+    } catch (e) {
+        return ["Bloqueador", "Agua", "Cámara"];
+    }
+};
+
+export const transcribeAndSummarizeAudio = async (base64Audio: string): Promise<{transcription: string, summary: string}> => {
+    try {
+        const audioPart = { inlineData: { mimeType: 'audio/webm', data: base64Audio.split(',')[1] } };
+        const prompt = "Transcribe y resume en una oración. JSON: {transcription, summary}";
+        const response = await ai.models.generateContent({
+            model: 'gemini-3-flash-preview',
+            contents: { parts: [audioPart, { text: prompt }] },
+            config: { responseMimeType: "application/json" }
+        });
+        return JSON.parse(response.text);
+    } catch (e) {
+        return { transcription: "Error", summary: "Error" };
+    }
+};
+
+export const summarizeChatHistory = async (messages: string[]): Promise<string> => {
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-3-flash-preview',
+            contents: `Resume en 3 puntos: \n${messages.join("\n")}`,
+        });
+        return response.text || "Sin resumen.";
+    } catch (e) {
+        return "Error.";
+    }
 };
 
 export const generateCaptionForImage = async (location: string, details: string): Promise<string> => {
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: `Caption para Instagram en ${location}: ${details}. Emojis y hashtags.`,
+      contents: `Caption para ${location}: ${details}.`,
     });
     return response.text || "";
   } catch (error) {
-    return `Disfrutando de Manabí 🇪🇨✨`;
+    return `Manabí 🇪🇨`;
   }
 };
 
@@ -71,12 +210,12 @@ export const generateDestinationDetails = async (name: string, location: string,
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: `Info JSON de ${name} en ${location} (${category}). JSON exacto: {description, fullDescription, highlights:[], travelTips:[], coordinates:{latitude,longitude}}`,
+      contents: `Info JSON de ${name}. {description, fullDescription, highlights:[], travelTips:[], coordinates:{latitude,longitude}}`,
       config: { responseMimeType: "application/json" }
     });
     return JSON.parse(response.text);
   } catch (error) {
-    return { description: "Un lugar mágico.", highlights: [], travelTips: [] };
+    return { description: "Mágico.", highlights: [], travelTips: [] };
   }
 };
 
@@ -84,7 +223,7 @@ export const generateItinerary = async (destination: string, days: number, budge
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: `Itinerario para ${days} días en ${destination}. Presupuesto ${budget}.`,
+      contents: `Itinerario para ${days} días en ${destination}.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -98,23 +237,6 @@ export const generateItinerary = async (destination: string, days: number, budge
     });
     return JSON.parse(response.text);
   } catch (error: any) {
-    throw new Error("No se pudo generar.");
+    throw new Error("Error.");
   }
-};
-
-export const findNearbyPlaces = async (lat: number, lng: number, query?: string): Promise<{ places: any[] }> => {
-    try {
-        const response = await ai.models.generateContent({
-            model: "gemini-3-flash-preview",
-            contents: `Lugares de ${query || 'interés'} cerca de Lat:${lat}, Lng:${lng}. JSON: {places:[{name,category,isOpen,rating,address,description}]}`,
-            config: {
-                tools: [{googleMaps: {}}],
-                toolConfig: { retrievalConfig: { latLng: { latitude: lat, longitude: lng } } }
-            },
-        });
-        const data = JSON.parse(response.text);
-        return { places: data.places || [] };
-    } catch (error: any) {
-        return { places: [] };
-    }
 };
