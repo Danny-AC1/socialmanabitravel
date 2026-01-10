@@ -1,15 +1,36 @@
 
 import { ref, set, remove, update, get, push } from "@firebase/database";
 import { db } from "./firebase";
-import { Post, Story, Destination, Suggestion, User, Chat, Message, TravelGroup, TravelTemplate } from '../types';
+import { Post, Story, Destination, Suggestion, User, Chat, Message, TravelGroup, TravelTemplate, ReservationOffer, Booking } from '../types';
 import { EncryptionService } from "./encryptionService";
 import { POINT_VALUES, checkNewBadges } from "../utils";
 
-// NOTA: La lectura (GET) ahora se hace en App.tsx con listeners en tiempo real.
-// Este servicio se encarga principalmente de las escrituras (WRITE).
-
 export const StorageService = {
   
+  // --- RESERVATION SYSTEM ---
+
+  saveReservationOffer: async (offer: ReservationOffer) => {
+    await set(ref(db, `reservationOffers/${offer.id}`), offer);
+  },
+
+  deleteReservationOffer: async (offerId: string) => {
+    await remove(ref(db, `reservationOffers/${offerId}`));
+  },
+
+  createBooking: async (booking: Booking) => {
+    await set(ref(db, `bookings/${booking.id}`), booking);
+    // Otorgar puntos por reservar
+    await StorageService.awardPoints(booking.userId, 25, 'comment' as any);
+  },
+
+  updateBookingStatus: async (bookingId: string, status: Booking['status']) => {
+    await update(ref(db, `bookings/${bookingId}`), { status });
+  },
+
+  deleteBooking: async (bookingId: string) => {
+    await remove(ref(db, `bookings/${bookingId}`));
+  },
+
   // --- GAMIFICATION SYSTEM ---
   
   awardPoints: async (userId: string, amount: number, actionType: 'post' | 'comment' | 'destination' | 'photo' | 'share' | 'login') => {
@@ -271,7 +292,6 @@ export const StorageService = {
           [userId]: true
       });
       
-      // Auto-añadir al chat vinculado si existe
       const groupSnapshot = await get(ref(db, `travelGroups/${groupId}`));
       if (groupSnapshot.exists()) {
           const group = groupSnapshot.val() as TravelGroup;
@@ -283,8 +303,6 @@ export const StorageService = {
 
   leaveTravelGroup: async (groupId: string, userId: string) => {
       await remove(ref(db, `travelGroups/${groupId}/members/${userId}`));
-      // Nota: No eliminamos del chat automáticamente por si quieren mantener el historial, 
-      // pero se podría añadir la lógica aquí si fuera necesario.
   },
 
   addMemberToGroup: async (groupId: string, userId: string) => {
@@ -365,7 +383,6 @@ export const StorageService = {
         updatedAt: Date.now()
       };
 
-      // Si se convierte de P2P a Grupo
       if (!chat.isGroup && participants.length > 2) {
         updates.isGroup = true;
         if (name) updates.name = name;

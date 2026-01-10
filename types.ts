@@ -16,10 +16,55 @@ export interface User {
   bio?: string;
   followers: string[];
   following: string[];
-  points?: number; // Puntos de gamificación
-  badges?: Badge[]; // Insignias ganadas
-  lastLogin?: number; // Para bono diario
-  completedChallenges?: Record<string, number>; // ID del desafío -> Timestamp
+  points?: number;
+  badges?: Badge[];
+  lastLogin?: number;
+  completedChallenges?: Record<string, number>;
+}
+
+// --- RESERVATION TYPES ---
+
+export type ReservationType = 'hotel' | 'restaurant';
+
+export interface ReservationItem {
+  id: string;
+  title: string;
+  description: string;
+  price: number;
+  imageUrl: string;
+  gallery?: string[]; // Para habitaciones
+}
+
+export interface ReservationOffer {
+  id: string;
+  destinationId: string; // Vínculo con destino
+  destinationName: string;
+  type: ReservationType;
+  businessName: string;
+  businessAddress: string;
+  businessPhone: string; // Para WhatsApp
+  bankDetails: string; // Datos de cuenta para transferencia
+  items: ReservationItem[];
+  createdAt: number;
+  coordinates?: {
+    latitude: number;
+    longitude: number;
+  };
+}
+
+export interface Booking {
+  id: string;
+  userId: string;
+  userName: string;
+  offerId: string;
+  businessName: string;
+  offerType: ReservationType;
+  itemId: string;
+  itemTitle: string;
+  price: number;
+  status: 'pending' | 'confirmed' | 'cancelled';
+  proofUrl: string; // Base64 del comprobante
+  timestamp: number;
 }
 
 export interface Comment {
@@ -78,14 +123,12 @@ export interface Suggestion {
   isRead: boolean;
 }
 
-// --- CHAT TYPES ---
-
 export interface Message {
   id: string;
   senderId: string;
-  text: string; // Texto cifrado (o vacío si es solo media)
+  text: string; 
   type: 'text' | 'image' | 'video' | 'audio';
-  mediaUrl?: string; // URL/Base64 cifrada del archivo
+  mediaUrl?: string; 
   replyTo?: {
     id: string;
     text: string;
@@ -98,18 +141,17 @@ export interface Message {
 export interface Chat {
   id: string; 
   participants: string[];
-  name?: string; // Nombre opcional para grupos
-  isGroup?: boolean; // Flag para identificar grupos
+  name?: string; 
+  isGroup?: boolean; 
   lastMessage: string;
   lastTimestamp: number;
   updatedAt: number;
-  unreadCount?: number; // Calculado en cliente
+  unreadCount?: number; 
 }
 
 export interface Notification {
   id: string;
   userId: string;
-  // Se agregan todos los tipos posibles para evitar errores de TypeScript en comparaciones
   type: 'like' | 'comment' | 'follow' | 'system' | 'like_post' | 'new_post' | 'new_story';
   senderId?: string;
   senderName?: string;
@@ -139,14 +181,11 @@ export interface Destination {
   category: 'Playa' | 'Naturaleza' | 'Cultura' | 'Aventura' | 'Gastronomía' | 'Montaña' | 'Selva';
   rating: number; 
   priceLevel?: string;
-  
   isUserGenerated?: boolean;
   createdBy?: string; 
   ratings?: Record<string, number>; 
   reviewsCount?: number;
-  
-  isFeatured?: boolean; // Nuevo: Para destacar en Hero
-  
+  isFeatured?: boolean; 
   coordinates?: {
     latitude: number;
     longitude: number;
@@ -176,13 +215,10 @@ export interface Challenge {
   points: number;
   icon: string;
   actionLabel: string;
-  // Para trivias
   question?: string;
   options?: string[];
   correctAnswer?: number;
 }
-
-// --- TRAVEL GROUPS & TEMPLATES ---
 
 export interface TravelTemplate {
   id: string;
@@ -191,9 +227,9 @@ export interface TravelTemplate {
   authorName: string;
   authorAvatar: string;
   title: string;
-  description: string; // Resumen del plan
-  duration: string; // ej: "3 Días"
-  budget: string; // ej: "$200"
+  description: string; 
+  duration: string; 
+  budget: string; 
   timestamp: number;
   likes: number;
   likedBy?: Record<string, boolean>;
@@ -204,10 +240,10 @@ export interface TravelGroup {
   name: string;
   description: string;
   imageUrl: string;
-  adminId: string; // Creador
+  adminId: string; 
   createdAt: number;
-  isPrivate: boolean; // Privacidad
-  members: Record<string, boolean>; // { userId: true }
-  templates?: Record<string, TravelTemplate>; // Colección de plantillas
-  chatId?: string; // Nuevo: ID del chat grupal vinculado
+  isPrivate: boolean; 
+  members: Record<string, boolean>; 
+  templates?: Record<string, TravelTemplate>; 
+  chatId?: string; 
 }

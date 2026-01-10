@@ -1,8 +1,10 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { X, MapPin, Star, Info, Camera, Compass, Wallet, MessageSquare, Plus, Upload, Trash2, Edit2, ChevronLeft, ChevronRight, AlertCircle, Navigation, Map, Award, Download, Check, MinusCircle } from 'lucide-react';
-import { Destination } from '../types';
+import { X, MapPin, Star, Info, Camera, Compass, Wallet, MessageSquare, Plus, Upload, Trash2, Edit2, ChevronLeft, ChevronRight, AlertCircle, Navigation, Map, Award, Download, Check, MinusCircle, CreditCard, Bed, Utensils } from 'lucide-react';
+import { Destination, ReservationOffer } from '../types';
 import { resizeImage, downloadMedia } from '../utils';
+import { db } from '../services/firebase';
+import { ref, onValue } from '@firebase/database';
 
 interface TravelGuideModalProps {
   destination: Destination;
@@ -16,6 +18,7 @@ interface TravelGuideModalProps {
   onDeleteDestination?: (id: string) => void;
   onToggleFeatured?: (id: string, isFeatured: boolean) => void;
   onUpdateDestination?: (id: string, updates: Partial<Destination>) => void;
+  onOpenBooking?: (offer: ReservationOffer) => void; // Nueva prop
 }
 
 export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({ 
@@ -29,7 +32,8 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
   onDeletePhoto,
   onDeleteDestination,
   onToggleFeatured,
-  onUpdateDestination
+  onUpdateDestination,
+  onOpenBooking
 }) => {
   const [userRating, setUserRating] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
@@ -37,6 +41,9 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
   
+  // Reservations State
+  const [availableOffers, setAvailableOffers] = useState<ReservationOffer[]>([]);
+
   // States for Editing
   const [editingSection, setEditingSection] = useState<'highlights' | 'tips' | null>(null);
   const [tempList, setTempList] = useState<string[]>([]);
@@ -44,9 +51,19 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+      const offersRef = ref(db, 'reservationOffers');
+      return onValue(offersRef, (snapshot) => {
+          const data = snapshot.val();
+          if (data) {
+              const allOffers = Object.values(data) as ReservationOffer[];
+              setAvailableOffers(allOffers.filter(o => o.destinationId === destination.id));
+          }
+      });
+  }, [destination.id]);
+
   if (!destination) return null;
 
-  // Generar URL de búsqueda para el mapa
   const mapQuery = encodeURIComponent(`${destination.name} ${destination.location} Ecuador`);
   const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${mapQuery}`;
   const embedMapUrl = `https://maps.google.com/maps?q=${mapQuery}&t=&z=13&ie=UTF8&iwloc=&output=embed`;
@@ -97,8 +114,6 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
       }
   };
 
-  // --- EDITING LOGIC ---
-
   const startEditing = (section: 'highlights' | 'tips') => {
       setTempList(section === 'highlights' ? (destination.highlights || []) : (destination.travelTips || []));
       setEditingSection(section);
@@ -134,8 +149,6 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
       setTempList(newList);
   };
 
-  // --- GALLERY NAVIGATION LOGIC ---
-  
   const gallery = destination.gallery || [];
   const currentImageIndex = viewingImage ? gallery.indexOf(viewingImage) : -1;
   const hasMultipleImages = gallery.length > 1;
@@ -154,7 +167,6 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
     setViewingImage(gallery[prevIndex]);
   };
 
-  // Touch handlers for Swipe
   const onTouchStart = (e: React.TouchEvent) => {
     setTouchEnd(null);
     setTouchStart(e.targetTouches[0].clientX);
@@ -169,12 +181,10 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
     const distance = touchStart - touchEnd;
     const isLeftSwipe = distance > 50;
     const isRightSwipe = distance < -50;
-
     if (isLeftSwipe) handleNextImage();
     if (isRightSwipe) handlePrevImage();
   };
 
-  // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!viewingImage) return;
@@ -199,7 +209,6 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30 pointer-events-none" />
           
-          {/* Mobile Back Button (Left Corner) */}
           <button 
             onClick={onClose}
             className="md:hidden absolute top-4 left-4 bg-black/40 text-white p-2.5 rounded-full backdrop-blur-md transition-all z-[60] flex items-center gap-1 shadow-lg border border-white/20 active:scale-95"
@@ -208,7 +217,6 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
             <span className="text-sm font-bold pr-2">Volver</span>
           </button>
 
-          {/* Desktop Close Button (Right Corner) */}
           <button 
             onClick={onClose}
             className="hidden md:block absolute top-4 right-4 bg-black/20 hover:bg-white text-white hover:text-black p-2 rounded-full backdrop-blur-md transition-all z-10"
@@ -216,7 +224,6 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
             <X size={24} />
           </button>
 
-          {/* Admin Tools Container - Moved to RIGHT on mobile to avoid overlapping with "Volver" */}
           {isAdminUser && (
              <div className="absolute top-4 right-4 md:right-16 z-50 flex flex-wrap gap-2 justify-end max-w-[60%]">
                 <button 
@@ -269,9 +276,38 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
         <div className="flex-1 overflow-y-auto bg-stone-50 pb-10">
           <div className="p-6 md:p-10 grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12">
             
-            {/* COLUMNA IZQUIERDA (Principal) */}
             <div className="md:col-span-2 space-y-8">
-              {/* Rating Section */}
+              
+              {/* SECCIÓN DE RESERVAS SI EXISTEN */}
+              {availableOffers.length > 0 && (
+                  <div className="bg-white p-6 rounded-3xl shadow-xl border border-manabi-100 animate-in zoom-in duration-300">
+                      <h3 className="font-black text-stone-800 text-xl mb-4 flex items-center gap-2">
+                          <CreditCard className="text-manabi-600" size={24} /> Reservas Disponibles
+                      </h3>
+                      <div className="grid grid-cols-1 gap-3">
+                          {availableOffers.map(off => (
+                              <div key={off.id} className="flex items-center justify-between p-4 bg-stone-50 rounded-2xl border border-stone-100 hover:border-manabi-200 transition-all group">
+                                  <div className="flex items-center gap-3">
+                                      <div className={`p-3 rounded-xl ${off.type === 'hotel' ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600'}`}>
+                                          {off.type === 'hotel' ? <Bed size={20} /> : <Utensils size={20} />}
+                                      </div>
+                                      <div>
+                                          <h4 className="font-black text-stone-800 text-sm group-hover:text-manabi-700">{off.businessName}</h4>
+                                          <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">{off.type === 'hotel' ? 'Estadía' : 'Gastronomía'}</p>
+                                      </div>
+                                  </div>
+                                  <button 
+                                    onClick={() => onOpenBooking && onOpenBooking(off)}
+                                    className="bg-manabi-600 hover:bg-manabi-700 text-white text-xs font-black px-5 py-2.5 rounded-xl shadow-lg active:scale-95 transition-all uppercase tracking-widest"
+                                  >
+                                      Reservar
+                                  </button>
+                              </div>
+                          ))}
+                      </div>
+                  </div>
+              )}
+
               <div className="bg-white p-4 rounded-2xl shadow-sm border border-stone-100 flex items-center justify-between">
                  <div>
                     <h4 className="font-bold text-stone-700 text-sm">¿Has visitado este lugar?</h4>
@@ -307,7 +343,6 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
                     Galería de la Comunidad
                     </h3>
                     
-                    {/* Botón habilitado para todos los usuarios */}
                     <button 
                         onClick={() => fileInputRef.current?.click()}
                         disabled={isUploading}
@@ -336,19 +371,11 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
                       )}
                     </div>
                   ))}
-                  {(!destination.gallery || destination.gallery.length === 0) && (
-                     <div className="col-span-2 py-8 text-center text-stone-400 bg-stone-100 rounded-xl border border-dashed border-stone-200">
-                        No hay fotos en la galería aún.
-                     </div>
-                  )}
                 </div>
               </section>
             </div>
 
-            {/* COLUMNA DERECHA (Sticky/Detalles) */}
             <div className="space-y-6">
-              
-              {/* MAPA ACTIVO Y NAVEGACIÓN */}
               <section className="bg-white p-1 rounded-2xl shadow-sm border border-stone-200 overflow-hidden">
                 <div className="p-3 pb-0 flex items-center justify-between mb-3">
                     <h3 className="font-bold text-stone-800 flex items-center gap-2 text-sm uppercase">
@@ -367,7 +394,6 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
                         src={embedMapUrl}
                         className="opacity-90 hover:opacity-100 transition-opacity"
                     ></iframe>
-                    {/* Overlay para evitar scroll accidental en movil, requiere click para activar */}
                     <div className="absolute inset-0 pointer-events-none border-2 border-transparent hover:border-cyan-200 transition-colors rounded-xl"></div>
                 </div>
                 <div className="px-2 pb-2">
@@ -383,7 +409,6 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
                 </div>
               </section>
 
-              {/* LO IMPERDIBLE (Highlights) */}
               <section>
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="text-xl font-bold text-stone-800 flex items-center gap-2">
@@ -425,14 +450,10 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
                             <span className="text-stone-700 font-medium">{item}</span>
                             </li>
                         ))}
-                        {(!destination.highlights || destination.highlights.length === 0) && (
-                            <li className="text-sm text-stone-400 italic">No hay puntos destacados.</li>
-                        )}
                     </ul>
                 )}
               </section>
 
-              {/* TIPS DE VIAJERO */}
               <div className="bg-amber-50 border border-amber-100 rounded-2xl p-6">
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="font-bold text-amber-800 flex items-center gap-2">
@@ -474,9 +495,6 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
                             {tip}
                             </li>
                         ))}
-                        {(!destination.travelTips || destination.travelTips.length === 0) && (
-                            <li className="text-sm text-amber-700/50 italic">No hay tips registrados.</li>
-                        )}
                     </ul>
                 )}
               </div>
@@ -528,16 +546,10 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
 
            {hasMultipleImages && (
              <>
-               <button 
-                  onClick={handlePrevImage}
-                  className="absolute left-4 top-1/2 -translate-y-1/2 text-white/50 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors hidden md:block z-40"
-               >
+               <button onClick={handlePrevImage} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/50 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors hidden md:block z-40">
                  <ChevronLeft size={48} />
                </button>
-               <button 
-                  onClick={handleNextImage}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-white/50 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors hidden md:block z-40"
-               >
+               <button onClick={handleNextImage} className="absolute right-4 top-1/2 -translate-y-1/2 text-white/50 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors hidden md:block z-40">
                  <ChevronRight size={48} />
                </button>
              </>
@@ -549,12 +561,6 @@ export const TravelGuideModal: React.FC<TravelGuideModalProps> = ({
              className="max-w-full max-h-full object-contain shadow-2xl transition-transform duration-300"
              onClick={(e) => e.stopPropagation()}
            />
-           
-           {hasMultipleImages && (
-             <div className="absolute bottom-6 text-white/40 text-xs md:hidden animate-pulse pointer-events-none">
-               Desliza para ver más
-             </div>
-           )}
         </div>
       )}
     </div>

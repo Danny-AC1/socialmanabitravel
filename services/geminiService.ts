@@ -36,7 +36,7 @@ export const getTravelAdvice = async (query: string): Promise<string> => {
       config: {
         systemInstruction: ECUADOR_SYSTEM_INSTRUCTION,
         temperature: 0.7,
-        maxOutputTokens: 500, 
+        // Removed maxOutputTokens to prevent the response from being blocked or cut due to reaching max tokens.
       },
     });
     
