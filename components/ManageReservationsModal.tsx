@@ -30,7 +30,7 @@ export const ManageReservationsModal: React.FC<ManageReservationsModalProps> = (
   const [lng, setLng] = useState('');
   const [items, setItems] = useState<ReservationItem[]>([]);
   
-  // New Item State
+  // New Item State (Form temporal para cada opción)
   const [newItemTitle, setNewItemTitle] = useState('');
   const [newItemPrice, setNewItemPrice] = useState('');
   const [newItemDesc, setNewItemDesc] = useState('');
@@ -43,14 +43,19 @@ export const ManageReservationsModal: React.FC<ManageReservationsModalProps> = (
   useEffect(() => {
     if (isOpen) {
         const offersRef = ref(db, 'reservationOffers');
-        onValue(offersRef, (snapshot) => {
+        const unsubOffers = onValue(offersRef, (snapshot) => {
             setOffers(snapshot.val() ? Object.values(snapshot.val()) : []);
         });
 
         const booksRef = ref(db, 'bookings');
-        onValue(booksRef, (snapshot) => {
+        const unsubBookings = onValue(booksRef, (snapshot) => {
             setAllBookings(snapshot.val() ? Object.values(snapshot.val()) : []);
         });
+
+        return () => {
+            unsubOffers();
+            unsubBookings();
+        };
     }
   }, [isOpen]);
 
@@ -60,18 +65,36 @@ export const ManageReservationsModal: React.FC<ManageReservationsModalProps> = (
       const file = e.target.files?.[0];
       if (file) {
           setIsLoading(true);
-          const resized = await resizeImage(file, 800);
-          if (isGallery) {
-              setNewItemGallery(prev => [...prev, resized]);
-          } else {
-              setNewItemImage(resized);
+          try {
+              const resized = await resizeImage(file, 800);
+              if (isGallery) {
+                  setNewItemGallery(prev => [...prev, resized]);
+              } else {
+                  setNewItemImage(resized);
+              }
+          } catch (err) {
+              alert("Error al procesar la imagen.");
+          } finally {
+              setIsLoading(false);
           }
-          setIsLoading(false);
       }
   };
 
+  // FUNCIONAL: Añadir un ítem a la lista de opciones de la oferta
   const addItemToOffer = () => {
-      if (!newItemTitle || !newItemPrice || !newItemImage) return;
+      if (!newItemTitle.trim()) {
+          alert("Ingresa un título para esta opción.");
+          return;
+      }
+      if (!newItemPrice || parseFloat(newItemPrice) <= 0) {
+          alert("Ingresa un precio válido.");
+          return;
+      }
+      if (!newItemImage) {
+          alert("Sube una foto representativa para esta opción.");
+          return;
+      }
+
       const newItem: ReservationItem = {
           id: `item_${Date.now()}`,
           title: newItemTitle,
@@ -80,7 +103,10 @@ export const ManageReservationsModal: React.FC<ManageReservationsModalProps> = (
           imageUrl: newItemImage,
           gallery: offerType === 'hotel' ? newItemGallery : undefined
       };
-      setItems([...items, newItem]);
+
+      setItems(prev => [...prev, newItem]);
+      
+      // Limpiar formulario del ítem
       setNewItemTitle('');
       setNewItemPrice('');
       setNewItemDesc('');
@@ -88,11 +114,25 @@ export const ManageReservationsModal: React.FC<ManageReservationsModalProps> = (
       setNewItemGallery([]);
   };
 
+  // FUNCIONAL: Guardar la oferta completa en la base de datos
   const handleSaveOffer = async () => {
-      if (!businessName || !selectedDestId || items.length === 0) {
-          alert("Completa todos los campos básicos e incluye al menos una opción.");
+      if (!businessName.trim()) {
+          alert("Ingresa el nombre de la empresa.");
           return;
       }
+      if (!selectedDestId) {
+          alert("Selecciona el destino turístico asociado.");
+          return;
+      }
+      if (!businessPhone.trim()) {
+          alert("Ingresa un WhatsApp de contacto.");
+          return;
+      }
+      if (items.length === 0) {
+          alert("Debes añadir al menos una opción (habitación o menú) a la lista.");
+          return;
+      }
+
       setIsLoading(true);
       const dest = destinations.find(d => d.id === selectedDestId);
       
@@ -112,10 +152,17 @@ export const ManageReservationsModal: React.FC<ManageReservationsModalProps> = (
               longitude: parseFloat(lng)
           } : undefined
       };
-      await StorageService.saveReservationOffer(newOffer);
-      setIsLoading(false);
-      resetForm();
-      setView('offers');
+
+      try {
+          await StorageService.saveReservationOffer(newOffer);
+          alert("¡Oferta de reserva publicada con éxito!");
+          resetForm();
+          setView('offers');
+      } catch (err) {
+          alert("Error al guardar la oferta. Intenta de nuevo.");
+      } finally {
+          setIsLoading(false);
+      }
   };
 
   const resetForm = () => {
@@ -127,6 +174,11 @@ export const ManageReservationsModal: React.FC<ManageReservationsModalProps> = (
       setLat('');
       setLng('');
       setItems([]);
+      setNewItemTitle('');
+      setNewItemPrice('');
+      setNewItemDesc('');
+      setNewItemImage(null);
+      setNewItemGallery([]);
   };
 
   const handleDeleteOffer = async (id: string) => {
@@ -186,7 +238,7 @@ export const ManageReservationsModal: React.FC<ManageReservationsModalProps> = (
                             <p className="text-xs text-stone-500 mb-4 font-medium">{off.items.length} opciones configuradas</p>
                             <div className="flex justify-between items-center text-[10px] font-bold text-stone-400 border-t border-stone-50 pt-3">
                                 <span className="flex items-center gap-1"><Navigation size={10} /> {off.coordinates ? 'Mapa configurado' : 'Sin mapa'}</span>
-                                <span className="text-manabi-600">Activa</span>
+                                <span className="text-manabi-600 font-black">ACTIVA</span>
                             </div>
                         </div>
                     ))}
@@ -219,8 +271,8 @@ export const ManageReservationsModal: React.FC<ManageReservationsModalProps> = (
                             <div className="flex items-center gap-3">
                                 <span className="text-lg font-black text-manabi-600">${book.price}</span>
                                 <div className="flex gap-1">
-                                    <button onClick={() => handleUpdateStatus(book.id, 'confirmed')} className="p-2 bg-green-50 text-green-600 rounded-xl hover:bg-green-600 hover:text-white transition-all"><CheckCircle size={18} /></button>
-                                    <button onClick={() => handleDeleteBooking(book.id)} className="p-2 bg-stone-50 text-stone-300 rounded-xl hover:bg-red-50 hover:text-red-500 transition-all"><Trash2 size={18} /></button>
+                                    <button onClick={() => handleUpdateStatus(book.id, 'confirmed')} title="Confirmar Reserva" className="p-2 bg-green-50 text-green-600 rounded-xl hover:bg-green-600 hover:text-white transition-all"><CheckCircle size={18} /></button>
+                                    <button onClick={() => handleDeleteBooking(book.id)} title="Eliminar Registro" className="p-2 bg-stone-50 text-stone-300 rounded-xl hover:bg-red-50 hover:text-red-500 transition-all"><Trash2 size={18} /></button>
                                 </div>
                             </div>
                         </div>
@@ -317,19 +369,25 @@ export const ManageReservationsModal: React.FC<ManageReservationsModalProps> = (
                                 </div>
                             )}
 
-                            <button onClick={addItemToOffer} className="w-full bg-stone-900 text-white font-black py-3 rounded-2xl text-[10px] uppercase tracking-widest active:scale-95 transition-all">Añadir a la lista</button>
+                            <button 
+                                onClick={addItemToOffer} 
+                                className="w-full bg-stone-900 text-white font-black py-3 rounded-2xl text-[10px] uppercase tracking-widest active:scale-95 transition-all flex items-center justify-center gap-2"
+                            >
+                                <Plus size={16} /> Añadir a la lista
+                            </button>
                         </div>
 
                         {/* LISTA DE ITEMS AÑADIDOS */}
                         <div className="space-y-2 mt-4">
+                            {items.length > 0 && <p className="text-[10px] font-black text-stone-400 uppercase tracking-widest mb-2">{items.length} Opciones añadidas:</p>}
                             {items.map((it, idx) => (
-                                <div key={idx} className="flex items-center gap-4 bg-stone-50 p-3 rounded-2xl border border-stone-100">
+                                <div key={it.id} className="flex items-center gap-4 bg-stone-50 p-3 rounded-2xl border border-stone-100 animate-in slide-in-from-right-2">
                                     <img src={it.imageUrl} className="w-12 h-12 rounded-xl object-cover" />
                                     <div className="flex-1 min-w-0">
                                         <h5 className="font-bold text-sm text-stone-800 truncate">{it.title}</h5>
                                         <p className="text-xs text-manabi-600 font-black">${it.price}</p>
                                     </div>
-                                    <button onClick={() => setItems(items.filter((_, i) => i !== idx))} className="text-stone-300 hover:text-red-500"><Trash2 size={16} /></button>
+                                    <button onClick={() => setItems(items.filter((_, i) => i !== idx))} className="text-stone-300 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
                                 </div>
                             ))}
                         </div>
@@ -338,7 +396,7 @@ export const ManageReservationsModal: React.FC<ManageReservationsModalProps> = (
                     <button 
                         onClick={handleSaveOffer} 
                         disabled={isLoading || items.length === 0}
-                        className="w-full bg-manabi-600 text-white font-black py-4 rounded-3xl shadow-xl active:scale-95 transition-all uppercase tracking-widest text-xs flex items-center justify-center gap-2"
+                        className="w-full bg-manabi-600 text-white font-black py-4 rounded-3xl shadow-xl active:scale-95 transition-all uppercase tracking-widest text-xs flex items-center justify-center gap-2 disabled:opacity-50 disabled:grayscale"
                     >
                         {isLoading ? <Loader2 className="animate-spin" /> : <><Save size={20}/> Guardar Oferta de Reserva</>}
                     </button>
