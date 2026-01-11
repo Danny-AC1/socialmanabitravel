@@ -21,6 +21,9 @@ export interface User {
   lastLogin?: number;
 }
 
+// --- LANGUAGE TYPE ---
+export type Language = 'es' | 'en';
+
 // --- RESERVATION TYPES ---
 
 export type ReservationType = 'hotel' | 'restaurant';
@@ -233,7 +236,6 @@ export interface TravelGroup {
   chatId?: string; 
 }
 
-// Fixed: Added missing Challenge interface to support daily missions and trivia in ChallengeCard
 export interface Challenge {
   id: string;
   title: string;

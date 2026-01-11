@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 // Added Bed and Utensils icons to the imports
-import { Map as MapIcon, Compass, Camera, Search, LogOut, ChevronLeft, PlusCircle, Globe, Filter, Edit3, X, Lightbulb, MapPin, Plus, MessageCircle, Users, Bell, LayoutGrid, Award, Home, Sparkles, Trophy, CheckCircle, Navigation, Lock, User as UserIcon, AlertTriangle, ShieldAlert, Zap, Calendar, Settings, ChevronRight, Star, UserPlus, UserCheck, Play, Palmtree, Mountain, Tent, Waves, ChevronDown, ChevronUp, PlaySquare, Layout, Loader2, CreditCard, Bed, Utensils } from 'lucide-react';
+import { Map as MapIcon, Compass, Camera, Search, LogOut, ChevronLeft, PlusCircle, Globe, Filter, Edit3, X, Lightbulb, MapPin, Plus, MessageCircle, Users, Bell, LayoutGrid, Award, Home, Sparkles, Trophy, CheckCircle, Navigation, Lock, User as UserIcon, AlertTriangle, ShieldAlert, Zap, Calendar, Settings, ChevronRight, Star, UserPlus, UserCheck, Play, Palmtree, Mountain, Tent, Waves, ChevronDown, ChevronUp, PlaySquare, Layout, Loader2, CreditCard, Bed, Utensils, Languages } from 'lucide-react';
 import { HeroSection } from './components/HeroSection';
 import { PostCard } from './components/PostCard';
 import { CreatePostModal } from './components/CreatePostModal';
@@ -25,8 +25,9 @@ import { LifeMap } from './components/LifeMap';
 import { PortalsView } from './components/PortalsView';
 import { ManageReservationsModal } from './components/ManageReservationsModal';
 import { BookingModal } from './components/BookingModal';
-import { ALL_DESTINATIONS as STATIC_DESTINATIONS, APP_VERSION } from './constants';
-import { Post, Story, Destination, User, Notification, Suggestion, EcuadorRegion, Badge, TravelGroup, Tab, ReservationOffer, Booking } from './types';
+import { OnboardingModal } from './components/OnboardingModal'; 
+import { ALL_DESTINATIONS as STATIC_DESTINATIONS, APP_VERSION, TRANSLATIONS } from './constants';
+import { Post, Story, Destination, User, Notification, Suggestion, EcuadorRegion, Badge, TravelGroup, Tab, ReservationOffer, Booking, Language } from './types';
 import { StorageService } from './services/storageService';
 import { AuthService } from './services/authService';
 import { isAdmin, getUserLevel, getNextLevel, BADGES } from './utils';
@@ -40,7 +41,21 @@ type SearchCategory = 'all' | 'destinations' | 'users' | 'groups';
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false); 
   
+  // LÓGICA DE IDIOMA
+  const [language, setLanguage] = useState<Language>(() => {
+    return (localStorage.getItem('app_language') as Language) || 'es';
+  });
+  
+  const t = TRANSLATIONS[language];
+
+  const toggleLanguage = () => {
+    const nextLang = language === 'es' ? 'en' : 'es';
+    setLanguage(nextLang);
+    localStorage.setItem('app_language', nextLang);
+  };
+
   const [rawPosts, setRawPosts] = useState<Post[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   
@@ -131,7 +146,7 @@ export default function App() {
       if (navigator.share) await navigator.share(shareData);
       else {
         await navigator.clipboard.writeText(`${text} - ${window.location.origin}`);
-        alert("¡Link copiado al portapapeles!");
+        alert(language === 'es' ? "¡Link copiado al portapapeles!" : "Link copied to clipboard!");
       }
     } catch (err) { console.log("Error al compartir:", err); }
   };
@@ -173,8 +188,21 @@ export default function App() {
 
   useEffect(() => {
     const session = AuthService.getSession();
-    if (session) setUser(session);
+    if (session) {
+      setUser(session);
+      const hasSeen = localStorage.getItem(`onboarding_seen_${session.id}`);
+      if (!hasSeen) {
+        setIsOnboardingOpen(true);
+      }
+    }
   }, []);
+
+  const handleCloseOnboarding = () => {
+    if (user) {
+      localStorage.setItem(`onboarding_seen_${user.id}`, 'true');
+    }
+    setIsOnboardingOpen(false);
+  };
 
   useEffect(() => {
     const postsRef = ref(db, 'posts');
@@ -283,8 +311,8 @@ export default function App() {
         const groupData = { id: `tg_${Date.now()}`, name: extraData.name, description: caption, imageUrl: image, adminId: user!.id, createdAt: Date.now(), isPrivate: extraData.isPrivate };
         await StorageService.createTravelGroup(groupData, extraData.createChat);
       }
-      alert("¡Realizado con éxito!");
-    } catch (e: any) { alert("Error al procesar la solicitud."); }
+      alert(language === 'es' ? "¡Realizado con éxito!" : "Success!");
+    } catch (e: any) { alert(language === 'es' ? "Error al procesar la solicitud." : "Error processing request."); }
   });
 
   const handleLogout = () => { AuthService.logout(); setUser(null); setActiveTab('home'); setViewingUserId(null); };
@@ -376,6 +404,16 @@ export default function App() {
 
             <div className="flex items-center gap-1 md:gap-5">
                 <div className="flex items-center gap-1 md:gap-4 text-stone-500">
+                {/* SELECTOR DE IDIOMA */}
+                <button 
+                  onClick={toggleLanguage} 
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-stone-100 hover:bg-manabi-50 hover:text-manabi-600 transition-all border border-transparent hover:border-manabi-200"
+                  title={language === 'es' ? "Switch to English" : "Cambiar a Español"}
+                >
+                  <Languages size={18} />
+                  <span className="text-[10px] font-black uppercase tracking-widest">{language}</span>
+                </button>
+                
                 <button onClick={() => requireAuth(() => setIsNotificationsOpen(true))} className="p-2 hover:bg-stone-50 rounded-full transition-colors relative">
                     <Bell size={22} />
                     {notifications.length > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>}
@@ -393,7 +431,7 @@ export default function App() {
                     </>
                 )}
                 </div>
-                <button onClick={() => requireAuth(() => setIsCreateModalOpen(true))} className="hidden md:flex bg-manabi-600 text-white px-5 py-2 rounded-xl font-bold text-sm shadow-md hover:bg-manabi-700 transition-all items-center gap-2"><Camera size={18} /> Publicar</button>
+                <button onClick={() => requireAuth(() => setIsCreateModalOpen(true))} className="hidden md:flex bg-manabi-600 text-white px-5 py-2 rounded-xl font-bold text-sm shadow-md hover:bg-manabi-700 transition-all items-center gap-2"><Camera size={18} /> {t.nav.publish}</button>
                 {user && <img src={user.avatar} className="hidden md:block w-10 h-10 rounded-full border-2 border-manabi-500 cursor-pointer object-cover" onClick={() => { setViewingUserId(null); setActiveTab('profile'); setProfileSubTab('grid'); }} />}
             </div>
             </div>
@@ -416,15 +454,15 @@ export default function App() {
                <div className="grid grid-cols-3 gap-3">
                   <button onClick={() => setIsNearbyModalOpen(true)} className="flex flex-col items-center justify-center p-4 bg-white rounded-3xl border border-stone-100 shadow-sm hover:shadow-md transition-all group">
                     <div className="bg-emerald-100 p-3 rounded-2xl mb-2 text-emerald-600 group-hover:scale-110 transition-transform relative"><Zap size={24} fill="currentColor" className="animate-pulse" /></div>
-                    <span className="text-[10px] md:text-xs font-black text-stone-700 uppercase">Radar Local</span>
+                    <span className="text-[10px] md:text-xs font-black text-stone-700 uppercase">{t.explore.radar}</span>
                   </button>
                   <button onClick={() => setIsItineraryOpen(true)} className="flex flex-col items-center justify-center p-4 bg-white rounded-3xl border border-stone-100 shadow-sm hover:shadow-md transition-all group">
                     <div className="bg-blue-100 p-3 rounded-2xl mb-2 text-blue-600 group-hover:scale-110 transition-transform"><Calendar size={24} fill="currentColor" /></div>
-                    <span className="text-[10px] md:text-xs font-black text-stone-700 uppercase">Planificar</span>
+                    <span className="text-[10px] md:text-xs font-black text-stone-700 uppercase">{t.explore.plan}</span>
                   </button>
                   <button onClick={() => requireAuth(() => setIsAddDestModalOpen(true))} className="flex flex-col items-center justify-center p-4 bg-white rounded-3xl border border-stone-100 shadow-sm hover:shadow-md transition-all group">
                     <div className="bg-purple-100 p-3 rounded-2xl mb-2 text-purple-600 group-hover:scale-110 transition-transform"><Plus size={24} strokeWidth={3} /></div>
-                    <span className="text-[10px] md:text-xs font-black text-stone-700 uppercase">Añadir</span>
+                    <span className="text-[10px] md:text-xs font-black text-stone-700 uppercase">{t.explore.add}</span>
                   </button>
                </div>
                <div className="space-y-12">
@@ -440,7 +478,7 @@ export default function App() {
                             <div className={`p-3 rounded-2xl bg-gradient-to-br ${getRegionColor(region)} text-white shadow-lg group-hover/header:scale-105 transition-transform`}>{getRegionIcon(region)}</div>
                             <div>
                               <h2 className="text-2xl font-black text-stone-800 tracking-tight">{region}</h2>
-                              <p className="text-xs font-bold text-stone-400 uppercase tracking-widest">{regionDestinations.length} lugares por descubrir</p>
+                              <p className="text-xs font-bold text-stone-400 uppercase tracking-widest">{regionDestinations.length} {t.explore.places}</p>
                             </div>
                           </div>
                           <div className="bg-stone-100 p-2 rounded-full text-stone-400 group-hover/header:bg-stone-200 group-hover/header:text-stone-600 transition-all">{isCollapsed ? <ChevronDown size={20} /> : <ChevronUp size={20} />}</div>
@@ -467,14 +505,14 @@ export default function App() {
           ) : activeTab === 'search' ? (
             <div className="animate-in fade-in slide-in-from-bottom-4 space-y-6">
                 <div className="bg-white p-4 md:p-6 rounded-[2.5rem] shadow-sm border border-stone-100">
-                    <h2 className="text-2xl font-black text-stone-800 mb-6 flex items-center gap-2"><Search className="text-manabi-600" size={28} /> Descubrir</h2>
+                    <h2 className="text-2xl font-black text-stone-800 mb-6 flex items-center gap-2"><Search className="text-manabi-600" size={28} /> {t.search.title}</h2>
                     <div className="relative bg-stone-50 rounded-2xl h-14 flex items-center px-5 focus-within:ring-2 focus-within:ring-manabi-500/20 focus-within:bg-white transition-all border border-transparent focus-within:border-stone-200">
                         <Search size={22} className="text-stone-400 mr-3" />
-                        <input type="text" placeholder="Buscar destinos, provincias, grupos o personas..." className="w-full bg-transparent outline-none text-lg font-medium text-stone-700 placeholder-stone-400" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} autoFocus />
+                        <input type="text" placeholder={t.search.placeholder} className="w-full bg-transparent outline-none text-lg font-medium text-stone-700 placeholder-stone-400" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} autoFocus />
                         {searchTerm && (<button onClick={() => setSearchTerm('')} className="text-stone-400 hover:text-stone-600"><X size={20} /></button>)}
                     </div>
                     <div className="flex gap-2 mt-6 overflow-x-auto no-scrollbar">
-                        {[{ id: 'all', label: 'Todo', icon: <Globe size={14}/> }, { id: 'destinations', label: 'Destinos', icon: <MapPin size={14}/> }, { id: 'groups', label: 'Comunidades', icon: <Users size={14}/> }, { id: 'users', label: 'Viajeros', icon: <UserIcon size={14}/> }].map(cat => (
+                        {[{ id: 'all', label: t.search.all, icon: <Globe size={14}/> }, { id: 'destinations', label: t.search.destinations, icon: <MapPin size={14}/> }, { id: 'groups', label: t.search.communities, icon: <Users size={14}/> }, { id: 'users', label: t.search.travelers, icon: <UserIcon size={14}/> }].map(cat => (
                             <button key={cat.id} onClick={() => setSearchCategory(cat.id as SearchCategory)} className={`px-5 py-2 rounded-full text-xs font-black uppercase tracking-widest flex items-center gap-2 border transition-all ${searchCategory === cat.id ? 'bg-manabi-600 text-white border-manabi-600 shadow-md scale-105' : 'bg-white text-stone-500 border-stone-200 hover:border-manabi-300'}`}>{cat.icon} {cat.label}</button>
                         ))}
                     </div>
@@ -482,7 +520,7 @@ export default function App() {
                 <div className="space-y-8">
                     {(searchCategory === 'all' || searchCategory === 'destinations') && searchResults.destinations.length > 0 && (
                         <div>
-                            <h3 className="text-xs font-black text-stone-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2"><MapPin size={14} /> Lugares Encontrados ({searchResults.destinations.length})</h3>
+                            <h3 className="text-xs font-black text-stone-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2"><MapPin size={14} /> {t.search.placesFound} ({searchResults.destinations.length})</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {searchResults.destinations.map(d => (
                                     <div key={d.id} onClick={() => setSelectedDestination(d)} className="bg-white p-3 rounded-3xl border border-stone-100 shadow-sm hover:shadow-md transition-all flex gap-4 cursor-pointer group">
@@ -499,7 +537,7 @@ export default function App() {
                     )}
                     {(searchCategory === 'all' || searchCategory === 'groups') && searchResults.groups.length > 0 && (
                         <div className="animate-in fade-in duration-500">
-                             <h3 className="text-xs font-black text-stone-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2"><Users size={14} /> Grupos de Viaje ({searchResults.groups.length})</h3>
+                             <h3 className="text-xs font-black text-stone-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2"><Users size={14} /> {t.search.groupsFound} ({searchResults.groups.length})</h3>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 {searchResults.groups.map(g => (
                                     <div key={g.id} onClick={() => handleGroupClick(g.id)} className="bg-white p-3 rounded-2xl border border-stone-100 shadow-sm hover:border-manabi-200 transition-all flex items-center gap-4 cursor-pointer">
@@ -516,7 +554,7 @@ export default function App() {
                     )}
                     {(searchCategory === 'all' || searchCategory === 'users') && searchResults.users.length > 0 && (
                         <div className="animate-in fade-in duration-500">
-                             <h3 className="text-xs font-black text-stone-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2"><UserIcon size={14} /> Viajeros Encontrados ({searchResults.users.length})</h3>
+                             <h3 className="text-xs font-black text-stone-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2"><UserIcon size={14} /> {t.search.usersFound} ({searchResults.users.length})</h3>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 {searchResults.users.map(u => (
                                     <div key={u.id} onClick={() => handleUserClick(u.id)} className="bg-white p-3 rounded-2xl border border-stone-100 shadow-sm hover:border-manabi-200 transition-all flex items-center gap-4 cursor-pointer">
@@ -529,51 +567,51 @@ export default function App() {
                         </div>
                     )}
                     {searchTerm && searchResults.destinations.length === 0 && searchResults.users.length === 0 && searchResults.groups.length === 0 && (
-                        <div className="py-20 text-center text-stone-400 flex flex-col items-center gap-4"><div className="bg-stone-100 p-6 rounded-full"><Search size={48} className="opacity-20" /></div><div><p className="font-bold text-lg text-stone-600">No encontramos resultados</p><p className="text-sm">Intenta con otras palabras clave o categorías.</p></div></div>
+                        <div className="py-20 text-center text-stone-400 flex flex-col items-center gap-4"><div className="bg-stone-100 p-6 rounded-full"><Search size={48} className="opacity-20" /></div><div><p className="font-bold text-lg text-stone-600">{t.search.empty}</p></div></div>
                     )}
                     {!searchTerm && (
-                         <div className="py-20 text-center text-stone-300 flex flex-col items-center gap-4"><Sparkles size={48} className="opacity-10" /><p className="text-sm font-black uppercase tracking-widest">Escribe algo para empezar a descubrir Ecuador</p></div>
+                         <div className="py-20 text-center text-stone-300 flex flex-col items-center gap-4"><Sparkles size={48} className="opacity-10" /><p className="text-sm font-black uppercase tracking-widest">{t.search.intro}</p></div>
                     )}
                 </div>
             </div>
           ) : activeTab === 'profile' ? (
              <div className="animate-in fade-in slide-in-from-bottom-4 space-y-6">
-                {!isOwnProfile && (<button onClick={() => { setViewingUserId(null); setActiveTab('home'); }} className="flex items-center gap-2 text-stone-500 font-bold text-sm hover:text-manabi-600 transition-colors"><ChevronLeft size={20} /> Volver al Explorador</button>)}
+                {!isOwnProfile && (<button onClick={() => { setViewingUserId(null); setActiveTab('home'); }} className="flex items-center gap-2 text-stone-500 font-bold text-sm hover:text-manabi-600 transition-colors"><ChevronLeft size={20} /> {t.explore.add}</button>)}
                 <div className="bg-white rounded-3xl shadow-sm border border-stone-100 overflow-hidden">
                   <div className="h-24 bg-gradient-to-r from-manabi-500 to-cyan-600"></div>
                   <div className="px-8 pb-8 -mt-12 text-center">
                     <img src={targetUser?.avatar} className="w-24 h-24 rounded-3xl mx-auto border-4 border-white mb-4 object-cover shadow-lg" />
                     <h2 className="text-2xl font-black text-stone-800 flex items-center justify-center gap-2">{targetUser?.name}{!isOwnProfile && targetUser && (<button onClick={() => handleToggleFollow(targetUser.id)} className={`p-2 rounded-full transition-all ${isFollowing ? 'bg-green-100 text-green-600' : 'bg-manabi-100 text-manabi-600 hover:bg-manabi-600 hover:text-white'}`}>{isFollowing ? <UserCheck size={18} /> : <UserPlus size={18} />}</button>)}</h2>
-                    <p className="text-stone-400 mb-6 text-sm font-medium">"{targetUser?.bio || 'Explorando las maravillas de Ecuador 🇪🇨'}"</p>
+                    <p className="text-stone-400 mb-6 text-sm font-medium">"{targetUser?.bio || t.profile.bio}"</p>
                     <div className="max-w-md mx-auto bg-stone-50 p-4 rounded-2xl border border-stone-100 mb-6 text-left">
                         <div className="flex justify-between items-center mb-2"><span className={`text-xs font-black uppercase tracking-widest ${userLevel.color} flex items-center gap-1`}>{userLevel.icon} {userLevel.name}</span><span className="text-xs font-bold text-stone-400">{targetUser?.points || 0} XP</span></div>
                         <div className="h-2 bg-stone-200 rounded-full overflow-hidden"><div className="h-full bg-manabi-500 transition-all duration-1000" style={{ width: `${progressToNext}%` }}></div></div>
                     </div>
-                    <div className="flex justify-center gap-8 border-t border-stone-50 pt-6"><div className="text-center"><span className="block font-black text-xl text-stone-800">{targetUser?.points || 0}</span><span className="text-[10px] text-stone-400 uppercase font-black tracking-widest">Puntos</span></div><div className="w-px h-10 bg-stone-100"></div><div className="text-center"><span className="block font-black text-xl text-stone-800">{targetPosts.length}</span><span className="text-[10px] text-stone-400 uppercase font-black tracking-widest">Publicaciones</span></div><div className="w-px h-10 bg-stone-100"></div><div className="text-center"><span className="block font-black text-xl text-stone-800">{targetUser?.followers?.length || 0}</span><span className="text-[10px] text-stone-400 uppercase font-black tracking-widest">Seguidores</span></div></div>
+                    <div className="flex justify-center gap-8 border-t border-stone-50 pt-6"><div className="text-center"><span className="block font-black text-xl text-stone-800">{targetUser?.points || 0}</span><span className="text-[10px] text-stone-400 uppercase font-black tracking-widest">{t.profile.points}</span></div><div className="w-px h-10 bg-stone-100"></div><div className="text-center"><span className="block font-black text-xl text-stone-800">{targetPosts.length}</span><span className="text-[10px] text-stone-400 uppercase font-black tracking-widest">{t.profile.posts}</span></div><div className="w-px h-10 bg-stone-100"></div><div className="text-center"><span className="block font-black text-xl text-stone-800">{targetUser?.followers?.length || 0}</span><span className="text-[10px] text-stone-400 uppercase font-black tracking-widest">{t.profile.followers}</span></div></div>
                   </div>
                </div>
                {isOwnProfile && (
                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    <button onClick={() => setIsGroupsOpen(true)} className="bg-white p-6 rounded-3xl border border-stone-100 shadow-sm hover:shadow-md transition-all flex flex-col items-center gap-3 text-center group"><div className="bg-cyan-50 text-cyan-600 p-4 rounded-2xl group-hover:scale-110 transition-transform"><Users size={28} /></div><span className="block text-sm font-black text-stone-800 leading-none">Grupos</span></button>
-                    <button onClick={() => setIsItineraryOpen(true)} className="bg-white p-6 rounded-3xl border border-stone-100 shadow-sm hover:shadow-md transition-all flex flex-col items-center gap-3 text-center group"><div className="bg-blue-50 text-blue-600 p-4 rounded-2xl group-hover:scale-110 transition-transform"><Calendar size={28} /></div><span className="block text-sm font-black text-stone-800 leading-none">Viajes IA</span></button>
-                    <button onClick={() => setIsSuggestionsOpen(true)} className="bg-white p-6 rounded-3xl border border-stone-100 shadow-sm hover:shadow-md transition-all flex flex-col items-center gap-3 text-center group"><div className="bg-amber-50 text-amber-600 p-4 rounded-2xl group-hover:scale-110 transition-transform"><Lightbulb size={28} /></div><span className="block text-sm font-black text-stone-800 leading-none">Sugerir</span></button>
+                    <button onClick={() => setIsGroupsOpen(true)} className="bg-white p-6 rounded-3xl border border-stone-100 shadow-sm hover:shadow-md transition-all flex flex-col items-center gap-3 text-center group"><div className="bg-cyan-50 text-cyan-600 p-4 rounded-2xl group-hover:scale-110 transition-transform"><Users size={28} /></div><span className="block text-sm font-black text-stone-800 leading-none">{t.profile.groups}</span></button>
+                    <button onClick={() => setIsItineraryOpen(true)} className="bg-white p-6 rounded-3xl border border-stone-100 shadow-sm hover:shadow-md transition-all flex flex-col items-center gap-3 text-center group"><div className="bg-blue-50 text-blue-600 p-4 rounded-2xl group-hover:scale-110 transition-transform"><Calendar size={28} /></div><span className="block text-sm font-black text-stone-800 leading-none">{t.profile.aiTrips}</span></button>
+                    <button onClick={() => setIsSuggestionsOpen(true)} className="bg-white p-6 rounded-3xl border border-stone-100 shadow-sm hover:shadow-md transition-all flex flex-col items-center gap-3 text-center group"><div className="bg-amber-50 text-amber-600 p-4 rounded-2xl group-hover:scale-110 transition-transform"><Lightbulb size={28} /></div><span className="block text-sm font-black text-stone-800 leading-none">{t.profile.suggest}</span></button>
                  </div>
                )}
                <div className="bg-white rounded-3xl shadow-sm border border-stone-100 overflow-hidden">
                  <div className="flex border-b border-stone-50">
-                    <button onClick={() => setProfileSubTab('grid')} className={`flex-1 py-4 text-xs font-black uppercase tracking-widest flex justify-center items-center gap-2 transition-all ${profileSubTab === 'grid' ? 'text-manabi-600 bg-manabi-50/30' : 'text-stone-400 hover:text-stone-600'}`}><LayoutGrid size={16} /> Memorias</button>
-                    <button onClick={() => setProfileSubTab('badges')} className={`flex-1 py-4 text-xs font-black uppercase tracking-widest flex justify-center items-center gap-2 transition-all ${profileSubTab === 'badges' ? 'text-manabi-600 bg-manabi-50/30' : 'text-stone-400 hover:text-stone-600'}`}><Trophy size={16} /> Logros</button>
-                    <button onClick={() => setProfileSubTab('map')} className={`flex-1 py-4 text-xs font-black uppercase tracking-widest flex justify-center items-center gap-2 transition-all ${profileSubTab === 'map' ? 'text-manabi-600 bg-manabi-50/30' : 'text-stone-400 hover:text-stone-600'}`}><MapIcon size={16} /> Trayectoria</button>
-                    {isOwnProfile && <button onClick={() => setProfileSubTab('bookings')} className={`flex-1 py-4 text-xs font-black uppercase tracking-widest flex justify-center items-center gap-2 transition-all ${profileSubTab === 'bookings' ? 'text-manabi-600 bg-manabi-50/30' : 'text-stone-400 hover:text-stone-600'}`}><CreditCard size={16} /> Reservas</button>}
+                    <button onClick={() => setProfileSubTab('grid')} className={`flex-1 py-4 text-xs font-black uppercase tracking-widest flex justify-center items-center gap-2 transition-all ${profileSubTab === 'grid' ? 'text-manabi-600 bg-manabi-50/30' : 'text-stone-400 hover:text-stone-600'}`}><LayoutGrid size={16} /> {t.profile.memories}</button>
+                    <button onClick={() => setProfileSubTab('badges')} className={`flex-1 py-4 text-xs font-black uppercase tracking-widest flex justify-center items-center gap-2 transition-all ${profileSubTab === 'badges' ? 'text-manabi-600 bg-manabi-50/30' : 'text-stone-400 hover:text-stone-600'}`}><Trophy size={16} /> {t.profile.achievements}</button>
+                    <button onClick={() => setProfileSubTab('map')} className={`flex-1 py-4 text-xs font-black uppercase tracking-widest flex justify-center items-center gap-2 transition-all ${profileSubTab === 'map' ? 'text-manabi-600 bg-manabi-50/30' : 'text-stone-400 hover:text-stone-600'}`}><MapIcon size={16} /> {t.profile.path}</button>
+                    {isOwnProfile && <button onClick={() => setProfileSubTab('bookings')} className={`flex-1 py-4 text-xs font-black uppercase tracking-widest flex justify-center items-center gap-2 transition-all ${profileSubTab === 'bookings' ? 'text-manabi-600 bg-manabi-50/30' : 'text-stone-400 hover:text-stone-600'}`}><CreditCard size={16} /> {t.profile.bookings}</button>}
                  </div>
                  <div className="p-1 min-h-[300px]">
                     {profileSubTab === 'grid' && (
                       <div className="grid grid-cols-3 gap-1 animate-in fade-in duration-300">
                          {targetPosts.map(post => (<div key={post.id} className="aspect-square relative cursor-pointer group overflow-hidden bg-stone-100" onClick={() => setViewingPost(post)}><img src={post.imageUrl} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" /><div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><span className="text-white text-xs font-bold flex items-center gap-1"><Star size={12} fill="currentColor" /> {post.likes}</span></div>{post.mediaType === 'video' && (<div className="absolute top-2 right-2 text-white bg-black/40 p-1 rounded-md backdrop-blur-md"><Play size={10} fill="currentColor" /></div>)}</div>))}
-                         {targetPosts.length === 0 && (<div className="col-span-3 py-20 text-center text-stone-400 flex flex-col items-center gap-2"><Camera size={48} className="opacity-10" /><p className="text-sm font-bold italic"> No hay publicaciones compartidas todavía.</p></div>)}
+                         {targetPosts.length === 0 && (<div className="col-span-3 py-20 text-center text-stone-400 flex flex-col items-center gap-2"><Camera size={48} className="opacity-10" /><p className="text-sm font-bold italic"> {language === 'es' ? 'No hay publicaciones compartidas todavía.' : 'No posts shared yet.'}</p></div>)}
                       </div>
                     )}
-                    {profileSubTab === 'badges' && (<div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in duration-300">{BADGES.map((badge: Badge) => { const isUnlocked = targetUser?.badges?.some(b => b.id === badge.id); return (<div key={badge.id} className={`flex items-center gap-4 p-4 rounded-2xl border transition-all ${isUnlocked ? 'bg-white border-manabi-100 shadow-sm' : 'bg-stone-50 border-stone-200 opacity-40 grayscale'}`}><div className="text-4xl">{badge.icon}</div><div><h4 className="font-bold text-stone-800 text-sm">{badge.name}</h4><p className="text-[10px] text-stone-500 leading-tight">{badge.description}</p>{isUnlocked && <span className="inline-block mt-1 text-[9px] font-black text-manabi-600 bg-manabi-50 px-1.5 py-0.5 rounded uppercase">Desbloqueado</span>}</div></div>); })}</div>)}
+                    {profileSubTab === 'badges' && (<div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in duration-300">{BADGES.map((badge: Badge) => { const isUnlocked = targetUser?.badges?.some(b => b.id === badge.id); return (<div key={badge.id} className={`flex items-center gap-4 p-4 rounded-2xl border transition-all ${isUnlocked ? 'bg-white border-manabi-100 shadow-sm' : 'bg-stone-50 border-stone-200 opacity-40 grayscale'}`}><div className="text-4xl">{badge.icon}</div><div><h4 className="font-bold text-stone-800 text-sm">{badge.name}</h4><p className="text-[10px] text-stone-500 leading-tight">{badge.description}</p>{isUnlocked && <span className="inline-block mt-1 text-[9px] font-black text-manabi-600 bg-manabi-50 px-1.5 py-0.5 rounded uppercase">{language === 'es' ? 'Desbloqueado' : 'Unlocked'}</span>}</div></div>); })}</div>)}
                     {profileSubTab === 'map' && (<div className="p-2 animate-in fade-in duration-300"><LifeMap posts={targetPosts} /></div>)}
                     {profileSubTab === 'bookings' && (
                         <div className="p-4 space-y-3 animate-in fade-in">
@@ -590,55 +628,55 @@ export default function App() {
                                     </div>
                                     <div className="text-right">
                                         <p className="text-sm font-black text-manabi-600">${b.price}</p>
-                                        <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase ${b.status === 'confirmed' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>{b.status === 'confirmed' ? 'Confirmado' : 'Pendiente'}</span>
+                                        <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase ${b.status === 'confirmed' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>{b.status === 'confirmed' ? (language === 'es' ? 'Confirmado' : 'Confirmed') : (language === 'es' ? 'Pendiente' : 'Pending')}</span>
                                     </div>
                                 </div>
                             ))}
                             {userBookings.length === 0 && (
                                 <div className="py-20 text-center text-stone-300 flex flex-col items-center">
                                     <CreditCard size={48} className="opacity-10 mb-2" />
-                                    <p className="text-xs font-black uppercase tracking-widest">No has realizado reservas todavía</p>
+                                    <p className="text-xs font-black uppercase tracking-widest">{language === 'es' ? 'No has realizado reservas todavía' : 'No bookings made yet'}</p>
                                 </div>
                             )}
                         </div>
                     )}
                  </div>
                </div>
-               {isOwnProfile && (<button onClick={handleLogout} className="w-full bg-red-50 text-red-600 font-bold py-4 rounded-3xl hover:bg-red-100 transition-colors flex items-center justify-center gap-2 mb-10"><LogOut size={20} /> Cerrar Sesión</button>)}
+               {isOwnProfile && (<button onClick={handleLogout} className="w-full bg-red-50 text-red-600 font-bold py-4 rounded-3xl hover:bg-red-100 transition-colors flex items-center justify-center gap-2 mb-10"><LogOut size={20} /> {t.profile.logout}</button>)}
              </div>
           ) : (
             <>
               <div className="flex gap-4 overflow-x-auto no-scrollbar mb-8 pb-2">
-                <div className="relative w-24 h-36 md:w-28 md:h-44 shrink-0 rounded-2xl overflow-hidden cursor-pointer bg-stone-200" onClick={() => requireAuth(() => setIsCreateModalOpen(true))}><img src={user?.avatar || 'https://api.dicebear.com/7.x/adventurer/svg?seed=guest'} className="w-full h-full object-cover opacity-60" /><div className="absolute inset-0 bg-black/20 flex flex-col items-center justify-center text-white"><div className="bg-manabi-600 rounded-full p-1 border-2 border-white mb-1"><Plus size={16} /></div><span className="text-[10px] font-bold">Crear</span></div></div>
+                <div className="relative w-24 h-36 md:w-28 md:h-44 shrink-0 rounded-2xl overflow-hidden cursor-pointer bg-stone-200" onClick={() => requireAuth(() => setIsCreateModalOpen(true))}><img src={user?.avatar || 'https://api.dicebear.com/7.x/adventurer/svg?seed=guest'} className="w-full h-full object-cover opacity-60" /><div className="absolute inset-0 bg-black/20 flex flex-col items-center justify-center text-white"><div className="bg-manabi-600 rounded-full p-1 border-2 border-white mb-1"><Plus size={16} /></div><span className="text-[10px] font-bold">{t.home.create}</span></div></div>
                 {uniqueStoryUsers.map((userId) => { const userStories = groupedStories[userId]; const lastStory = userStories[userStories.length - 1]; return (<div key={userId} className="relative w-24 h-36 md:w-28 md:h-44 shrink-0 rounded-2xl overflow-hidden cursor-pointer ring-2 ring-manabi-500 ring-offset-2" onClick={() => { setViewingStoriesSubset(userStories); setViewingStoryIndex(0); }}><img src={lastStory.imageUrl} className="w-full h-full object-cover" /><div className="absolute inset-0 bg-black/20"></div><img src={lastStory.userAvatar} className="absolute top-2 left-2 w-8 h-8 rounded-lg border-2 border-white object-cover" /><span className="absolute bottom-2 left-2 text-white text-[10px] font-bold truncate pr-2">{lastStory.userName}</span></div>); })}
               </div>
               <div className="space-y-8">
-                {/* Lugar Destacado (HeroSection) siempre al principio del feed */}
                 <HeroSection 
                   destination={featuredDestination} 
                   onGuideClick={(name) => setSelectedDestination(destinations.find(d => d.name === name) || null)} 
+                  language={language}
                 />
 
                 {posts.length === 0 && rawPosts.length > 0 && (
-                  <div className="py-20 text-center"><Loader2 size={32} className="animate-spin text-manabi-500 mx-auto" /><p className="text-stone-400 mt-2">Cargando tu feed personalizado...</p></div>
+                  <div className="py-20 text-center"><Loader2 size={32} className="animate-spin text-manabi-500 mx-auto" /><p className="text-stone-400 mt-2">{language === 'es' ? 'Cargando tu feed personalizado...' : 'Loading your custom feed...'}</p></div>
                 )}
                 
-                {posts.map(post => (<PostCard key={post.id} post={post} currentUserId={user?.id || 'guest'} onLike={() => StorageService.toggleLikePost(post, user?.id || 'guest')} onComment={(id, t) => StorageService.addComment(id, [...(post.comments || []), {id: Date.now().toString(), userId: user!.id, userName: user!.name, text: t, timestamp: Date.now()}])} onUserClick={handleUserClick} onImageClick={(p) => setViewingPost(p)} onEdit={setEditingPost} onDelete={(id) => StorageService.deletePost(id)} onShare={(p) => handleShare(`Mira esta publicación de @${p.userName} en ${p.location}`, p.caption)} />))}
+                {posts.map(post => (<PostCard key={post.id} post={post} language={language} currentUserId={user?.id || 'guest'} onLike={() => StorageService.toggleLikePost(post, user?.id || 'guest')} onComment={(id, t) => StorageService.addComment(id, [...(post.comments || []), {id: Date.now().toString(), userId: user!.id, userName: user!.name, text: t, timestamp: Date.now()}])} onUserClick={handleUserClick} onImageClick={(p) => setViewingPost(p)} onEdit={setEditingPost} onDelete={(id) => StorageService.deletePost(id)} onShare={(p) => handleShare(`Mira esta publicación de @${p.userName} en ${p.location}`, p.caption)} />))}
               </div>
             </>
           )}
         </div>
-        {activeTab !== 'portals' && (<div className="hidden lg:block lg:col-span-4 space-y-6"><div className="bg-white rounded-3xl p-6 shadow-sm border border-stone-100 sticky top-24"><div className="flex items-center gap-2 mb-4"><Trophy className="text-manabi-600" size={20} /><h3 className="font-bold text-gray-800 uppercase text-xs tracking-widest">Recomendados</h3></div><div className="space-y-4">{destinations.slice(0, 4).map(dest => (<div key={dest.id} className="flex gap-3 group cursor-pointer" onClick={() => setSelectedDestination(dest)}><img src={dest.imageUrl} className="w-16 h-16 rounded-xl object-cover" /><div className="flex-1"><h4 className="font-bold text-sm text-gray-800 group-hover:text-manabi-600 transition-colors">{dest.name}</h4><p className="text-[10px] text-stone-400 flex items-center gap-1"><MapPin size={10} /> {dest.province}</p></div></div>))}</div></div></div>)}
+        {activeTab !== 'portals' && (<div className="hidden lg:block lg:col-span-4 space-y-6"><div className="bg-white rounded-3xl p-6 shadow-sm border border-stone-100 sticky top-24"><div className="flex items-center gap-2 mb-4"><Trophy className="text-manabi-600" size={20} /><h3 className="font-bold text-gray-800 uppercase text-xs tracking-widest">{t.home.recommended}</h3></div><div className="space-y-4">{destinations.slice(0, 4).map(dest => (<div key={dest.id} className="flex gap-3 group cursor-pointer" onClick={() => setSelectedDestination(dest)}><img src={dest.imageUrl} className="w-16 h-16 rounded-xl object-cover" /><div className="flex-1"><h4 className="font-bold text-sm text-gray-800 group-hover:text-manabi-600 transition-colors">{dest.name}</h4><p className="text-[10px] text-stone-400 flex items-center gap-1"><MapPin size={10} /> {dest.province}</p></div></div>))}</div></div></div>)}
       </main>
       <div className="fixed bottom-0 w-full bg-white border-t border-stone-100 flex justify-around items-center p-2.5 md:hidden z-[150] shadow-2xl">
-        <button onClick={() => { setViewingUserId(null); setActiveTab(activeTab === 'portals' ? 'home' : 'portals'); }} className={`flex flex-col items-center gap-1 ${activeTab === 'home' || activeTab === 'portals' ? 'text-manabi-600' : 'text-stone-400'}`}>{activeTab === 'portals' ? <Layout size={22} /> : <PlaySquare size={22} />}<span className="text-[10px] font-bold">{activeTab === 'portals' ? 'Muro' : 'Portales'}</span></button>
-        <button onClick={() => { setViewingUserId(null); setActiveTab('explore'); }} className={`flex flex-col items-center gap-1 ${activeTab === 'explore' ? 'text-manabi-600' : 'text-stone-400'}`}><Compass size={22} /><span className="text-[10px] font-bold">Explorar</span></button>
+        <button onClick={() => { setViewingUserId(null); setActiveTab(activeTab === 'portals' ? 'home' : 'portals'); }} className={`flex flex-col items-center gap-1 ${activeTab === 'home' || activeTab === 'portals' ? 'text-manabi-600' : 'text-stone-400'}`}>{activeTab === 'portals' ? <Layout size={22} /> : <PlaySquare size={22} />}<span className="text-[10px] font-bold">{activeTab === 'portals' ? t.nav.home : t.nav.portals}</span></button>
+        <button onClick={() => { setViewingUserId(null); setActiveTab('explore'); }} className={`flex flex-col items-center gap-1 ${activeTab === 'explore' ? 'text-manabi-600' : 'text-stone-400'}`}><Compass size={22} /><span className="text-[10px] font-bold">{t.nav.explore}</span></button>
         <button onClick={() => requireAuth(() => setIsCreateModalOpen(true))} className="relative -top-5 bg-manabi-600 text-white rounded-2xl p-4 shadow-xl border-4 border-white transition-transform active:scale-90"><Camera size={26} /></button>
-        <button onClick={() => { setViewingUserId(null); setActiveTab('search'); }} className={`flex flex-col items-center gap-1 ${activeTab === 'search' ? 'text-manabi-600' : 'text-stone-400'}`}>{activeTab === 'search' ? <Search size={22} /> : <Search size={22} />}<span className="text-[10px] font-bold">Buscar</span></button>
-        <button onClick={() => { setViewingUserId(null); setActiveTab('profile'); setProfileSubTab('grid'); }} className={`flex flex-col items-center gap-1 ${activeTab === 'profile' && !viewingUserId ? 'text-manabi-600' : 'text-stone-400'}`}>{user ? (<img src={user.avatar} className={`w-6 h-6 rounded-full object-cover transition-all ${activeTab === 'profile' && !viewingUserId ? 'ring-2 ring-manabi-600 ring-offset-1 scale-110' : 'opacity-70'}`} />) : (<UserIcon size={22} />)}<span className="text-[10px] font-bold">Perfil</span></button>
+        <button onClick={() => { setViewingUserId(null); setActiveTab('search'); }} className={`flex flex-col items-center gap-1 ${activeTab === 'search' ? 'text-manabi-600' : 'text-stone-400'}`}>{activeTab === 'search' ? <Search size={22} /> : <Search size={22} />}<span className="text-[10px] font-bold">{t.nav.search}</span></button>
+        <button onClick={() => { setViewingUserId(null); setActiveTab('profile'); setProfileSubTab('grid'); }} className={`flex flex-col items-center gap-1 ${activeTab === 'profile' && !viewingUserId ? 'text-manabi-600' : 'text-stone-400'}`}>{user ? (<img src={user.avatar} className={`w-6 h-6 rounded-full object-cover transition-all ${activeTab === 'profile' && !viewingUserId ? 'ring-2 ring-manabi-600 ring-offset-1 scale-110' : 'opacity-70'}`} />) : (<UserIcon size={22} />)}<span className="text-[10px] font-bold">{t.nav.profile}</span></button>
       </div>
-      <AuthScreen isOpen={isAuthOpen} onClose={() => setIsAuthOpen(false)} onLoginSuccess={(u) => { setUser(u); setIsAuthOpen(false); }} />
-      <CreatePostModal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} onSubmit={handleCreateContent} />
+      <AuthScreen isOpen={isAuthOpen} language={language} onClose={() => setIsAuthOpen(false)} onLoginSuccess={(u) => { setUser(u); setIsAuthOpen(false); }} />
+      <CreatePostModal isOpen={isCreateModalOpen} language={language} onClose={() => setIsCreateModalOpen(false)} onSubmit={handleCreateContent} />
       <NearbyModal isOpen={isNearbyModalOpen} onClose={() => setIsNearbyModalOpen(false)} isLoading={false} data={null} />
       <SuggestionsModal isOpen={isSuggestionsOpen} onClose={() => setIsSuggestionsOpen(false)} currentUser={user || {id:'guest'} as any} isAdmin={userIsAdmin} suggestions={suggestions} />
       <ChatModal isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} currentUser={user || {id:'guest'} as any} allUsers={allUsersList} initialChatId={null} />
@@ -652,7 +690,8 @@ export default function App() {
       {isAdminUsersOpen && <AdminUsersModal isOpen={isAdminUsersOpen} onClose={() => setIsAdminUsersOpen(false)} users={allUsersList} />}
       {editingPost && <EditPostModal isOpen={!!editingPost} post={editingPost} onClose={() => setEditingPost(null)} onSave={(id, cap, loc) => StorageService.updatePost(id, { caption: cap, location: loc })} />}
       {editingStory && <EditStoryModal isOpen={!!editingStory} story={editingStory} onClose={() => setEditingStory(null)} onSave={(id, cap, loc) => StorageService.updateStory(id, { caption: cap, location: loc })} />}
-      {activeTab !== 'portals' && (<ChatBot externalIsOpen={chatQuery !== ''} externalQuery={chatQuery} onCloseExternal={() => setChatQuery('')} />)}
+      {activeTab !== 'portals' && (<ChatBot externalIsOpen={chatQuery !== ''} externalQuery={chatQuery} language={language} onCloseExternal={() => setChatQuery('')} />)}
+      <OnboardingModal isOpen={isOnboardingOpen} onClose={handleCloseOnboarding} userName={user?.name || t.profile.guest} language={language} />
       
       {/* NUEVOS MODALES DE RESERVA */}
       <ManageReservationsModal isOpen={isAdminReservationsOpen} onClose={() => setIsAdminReservationsOpen(false)} destinations={destinations} />

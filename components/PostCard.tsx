@@ -1,12 +1,14 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Clover, MessageSquareText, Share2, MapPin, MoreVertical, Edit2, Trash2, Play, Wand2, CloudSun, Clock, Zap, Volume2, Sparkles, Loader2, Info, ChevronRight, ChevronLeft } from 'lucide-react';
-import { Post } from '../types';
+import { Post, Language } from '../types';
+import { TRANSLATIONS } from '../constants';
 import { getPlaceLiveContext, analyzeTravelImage } from '../services/geminiService';
 
 interface PostCardProps {
   post: Post;
   currentUserId: string;
+  language: Language;
   onLike: (id: string) => void;
   onComment: (id: string, text: string) => void;
   onShare?: (post: Post) => void;
@@ -19,6 +21,7 @@ interface PostCardProps {
 export const PostCard: React.FC<PostCardProps> = ({ 
   post, 
   currentUserId,
+  language,
   onLike, 
   onComment, 
   onShare,
@@ -32,6 +35,8 @@ export const PostCard: React.FC<PostCardProps> = ({
   const [showMenu, setShowMenu] = useState(false);
   const [isLikeAnimating, setIsLikeAnimating] = useState(false);
   
+  const t = TRANSLATIONS[language];
+
   // GALLERY STATES
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -163,10 +168,10 @@ export const PostCard: React.FC<PostCardProps> = ({
                 {showMenu && (
                 <div className="absolute right-0 top-10 bg-white border border-gray-100 shadow-xl rounded-2xl w-36 py-1.5 z-50 animate-in fade-in zoom-in-95 duration-200">
                     <button onClick={() => { setShowMenu(false); onEdit(post); }} className="w-full text-left px-4 py-3 text-xs font-black uppercase text-slate-700 hover:bg-stone-50 flex items-center gap-2 border-b border-gray-50">
-                        <Edit2 size={14} /> Editar
+                        <Edit2 size={14} /> {t.common.edit}
                     </button>
                     <button onClick={() => { setShowMenu(false); onDelete(post.id); }} className="w-full text-left px-4 py-3 text-xs font-black uppercase text-red-600 hover:bg-red-50 flex items-center gap-2">
-                        <Trash2 size={14} /> Eliminar
+                        <Trash2 size={14} /> {t.common.delete}
                     </button>
                 </div>
                 )}
@@ -218,7 +223,7 @@ export const PostCard: React.FC<PostCardProps> = ({
                 {currentMediaIndex === 0 && (
                     <div className="absolute top-1/2 right-4 -translate-y-1/2 z-40 pointer-events-none flex flex-col items-center gap-1 text-white/80 animate-slide-hint">
                         <ChevronRight size={32} />
-                        <span className="text-[8px] font-black uppercase tracking-widest">Desliza</span>
+                        <span className="text-[8px] font-black uppercase tracking-widest">{language === 'es' ? 'Desliza' : 'Swipe'}</span>
                     </div>
                 )}
 
@@ -244,7 +249,7 @@ export const PostCard: React.FC<PostCardProps> = ({
                 ) : (
                     <Zap size={18} className={`${isAiAnalyzing ? 'animate-pulse' : 'group-hover/ai:text-cyan-400'}`} fill={isAiAnalyzing ? "currentColor" : "none"} />
                 )}
-                <span className="text-[10px] font-black uppercase tracking-widest hidden sm:block">Explorar IA</span>
+                <span className="text-[10px] font-black uppercase tracking-widest hidden sm:block">{language === 'es' ? 'Explorar IA' : 'Explore AI'}</span>
             </button>
         </div>
 
@@ -300,7 +305,7 @@ export const PostCard: React.FC<PostCardProps> = ({
 
         {comments.length > 0 && (
           <button onClick={() => setShowComments(!showComments)} className="flex items-center gap-1.5 text-stone-400 text-[11px] font-black uppercase tracking-widest mb-4 hover:text-manabi-600 transition-colors">
-            {showComments ? 'Ocultar bitácora' : `Ver ${comments.length} opiniones de viajeros`}
+            {showComments ? t.post.hide : `${language === 'es' ? 'Ver' : 'View'} ${comments.length} ${language === 'es' ? 'opiniones de viajeros' : 'travel reviews'}`}
           </button>
         )}
 
@@ -321,12 +326,12 @@ export const PostCard: React.FC<PostCardProps> = ({
         )}
 
         <div className="flex items-center gap-2 text-stone-300 text-[9px] font-black uppercase tracking-[0.2em] mb-4">
-          <Clock size={10} /> Publicado hoy en tiempo real
+          <Clock size={10} /> {t.post.time}
         </div>
       </div>
 
       <form onSubmit={handleCommentSubmit} className="border-t border-stone-50 p-4 flex items-center bg-stone-50/20">
-        <input type="text" placeholder="Escribe tu opinión viajera..." className="flex-1 text-xs font-bold outline-none px-4 py-2.5 bg-white rounded-2xl border border-stone-100 focus:border-manabi-300 transition-all" value={commentText} onChange={(e) => setCommentText(e.target.value)} />
+        <input type="text" placeholder={t.post.opinion} className="flex-1 text-xs font-bold outline-none px-4 py-2.5 bg-white rounded-2xl border border-stone-100 focus:border-manabi-300 transition-all" value={commentText} onChange={(e) => setCommentText(e.target.value)} />
         <button type="submit" disabled={!commentText.trim()} className="ml-2 bg-manabi-600 text-white p-2.5 rounded-xl shadow-md hover:bg-manabi-700 disabled:opacity-30 disabled:grayscale transition-all active:scale-90">
           <Zap size={16} fill="currentColor" />
         </button>

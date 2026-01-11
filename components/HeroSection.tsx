@@ -1,21 +1,25 @@
 
 import React from 'react';
 import { MapPin, BookOpen, Star, Compass } from 'lucide-react';
-import { Destination } from '../types';
+import { Destination, Language } from '../types';
+import { TRANSLATIONS } from '../constants';
 
 interface HeroSectionProps {
   destination: Destination | null;
   onGuideClick: (name: string) => void;
+  language: Language;
 }
 
-export const HeroSection: React.FC<HeroSectionProps> = ({ destination, onGuideClick }) => {
+export const HeroSection: React.FC<HeroSectionProps> = ({ destination, onGuideClick, language }) => {
+  const t = TRANSLATIONS[language].home;
+  
   if (!destination) {
     return (
       <div className="relative w-full h-96 bg-gray-900 overflow-hidden mb-6 rounded-3xl shadow-lg flex items-center justify-center">
          <div className="text-center text-white/50 p-6">
             <Compass size={48} className="mx-auto mb-2 opacity-50" />
-            <h2 className="text-xl font-bold">Explora Ecuador</h2>
-            <p className="text-sm">Descubre destinos increíbles</p>
+            <h2 className="text-xl font-bold">Ecuador Travel</h2>
+            <p className="text-sm">Discover amazing destinations</p>
          </div>
       </div>
     );
@@ -34,7 +38,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ destination, onGuideCl
       
       {/* Badge Featured */}
       <div className="absolute top-6 right-6 bg-yellow-500/20 backdrop-blur-md border border-yellow-500/50 text-yellow-100 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 shadow-sm">
-         <Star size={12} fill="currentColor" /> Destino de la Semana
+         <Star size={12} fill="currentColor" /> {t.featured}
       </div>
 
       <div className="absolute bottom-0 left-0 p-6 md:p-10 text-white max-w-2xl">
@@ -54,7 +58,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ destination, onGuideCl
             className="bg-white text-cyan-900 hover:bg-cyan-50 px-6 py-3 rounded-xl font-bold transition-colors flex items-center shadow-lg active:scale-95 transform"
           >
             <BookOpen size={18} className="mr-2" />
-            Abrir Guía
+            {t.openGuide}
           </button>
         </div>
       </div>

@@ -2,20 +2,24 @@
 import React, { useState, useRef } from 'react';
 import { Map, Mail, Lock, User, ArrowRight, Loader2, Info, Camera, X, ChevronLeft } from 'lucide-react';
 import { AuthService } from '../services/authService';
-import { User as UserType } from '../types';
+import { User as UserType, Language } from '../types';
+import { TRANSLATIONS } from '../constants';
 import { resizeImage } from '../utils';
 
 interface AuthScreenProps {
   isOpen: boolean;
+  language: Language;
   onClose: () => void;
   onLoginSuccess: (user: UserType) => void;
 }
 
-export const AuthScreen: React.FC<AuthScreenProps> = ({ isOpen, onClose, onLoginSuccess }) => {
+export const AuthScreen: React.FC<AuthScreenProps> = ({ isOpen, language, onClose, onLoginSuccess }) => {
   const [view, setView] = useState<'login' | 'register' | 'forgot'>('login');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+
+  const t = TRANSLATIONS[language].auth;
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -50,17 +54,17 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ isOpen, onClose, onLogin
         const user = await AuthService.login(email, password);
         onLoginSuccess(user);
       } else if (view === 'register') {
-        if (!name || !email || !password) throw new Error('Completa los campos requeridos.');
+        if (!name || !email || !password) throw new Error(language === 'es' ? 'Completa los campos requeridos.' : 'Please complete required fields.');
         const user = await AuthService.register(name, email, password, bio, avatar || undefined);
         onLoginSuccess(user);
       } else if (view === 'forgot') {
-        if (!email) throw new Error("Ingresa tu correo.");
+        if (!email) throw new Error(language === 'es' ? "Ingresa tu correo." : "Please enter your email.");
         await AuthService.resetPassword(email);
-        setSuccessMsg("Instrucciones enviadas al correo.");
+        setSuccessMsg(language === 'es' ? "Instrucciones enviadas al correo." : "Instructions sent to your email.");
         setTimeout(() => setView('login'), 3000);
       }
     } catch (err: any) {
-      setError(err.message || 'Error inesperado.');
+      setError(err.message || (language === 'es' ? 'Error inesperado.' : 'Unexpected error.'));
     } finally {
       setLoading(false);
     }
@@ -92,17 +96,17 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ isOpen, onClose, onLogin
                <span className="text-2xl font-black tracking-tight">MANABÍ TRAVEL</span>
             </div>
             <h1 className="text-4xl font-bold mb-4 leading-tight">
-              {view === 'login' ? 'Bienvenido de nuevo.' : 'Únete a la comunidad.'}
+              {view === 'login' ? t.welcome : t.join}
             </h1>
             <p className="text-manabi-100">
-              Explora playas vírgenes, gastronomía única y la calidez de nuestra gente.
+              {t.desc}
             </p>
           </div>
         </div>
 
         <div className="md:w-1/2 p-8 md:p-12 overflow-y-auto">
           <h2 className="text-2xl font-bold text-stone-800 mb-2">
-            {view === 'login' ? 'Iniciar Sesión' : view === 'register' ? 'Crear Cuenta' : 'Recuperar'}
+            {view === 'login' ? t.login : view === 'register' ? t.register : t.forgot}
           </h2>
 
           {error && <div className="bg-red-50 text-red-500 p-3 rounded-xl text-sm mb-4">{error}</div>}
@@ -123,21 +127,21 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ isOpen, onClose, onLogin
 
             {view === 'register' && (
               <input 
-                type="text" placeholder="Nombre"
+                type="text" placeholder={t.name}
                 className="w-full border p-3 rounded-xl outline-none focus:ring-2 focus:ring-manabi-500"
                 value={name} onChange={e => setName(e.target.value)}
               />
             )}
 
             <input 
-              type="email" placeholder="Correo"
+              type="email" placeholder={t.email}
               className="w-full border p-3 rounded-xl outline-none focus:ring-2 focus:ring-manabi-500"
               value={email} onChange={e => setEmail(e.target.value)}
             />
 
             {view !== 'forgot' && (
               <input 
-                type="password" placeholder="Contraseña"
+                type="password" placeholder={t.password}
                 className="w-full border p-3 rounded-xl outline-none focus:ring-2 focus:ring-manabi-500"
                 value={password} onChange={e => setPassword(e.target.value)}
               />
@@ -147,7 +151,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ isOpen, onClose, onLogin
               type="submit" disabled={loading}
               className="w-full bg-manabi-600 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-manabi-700 transition-all flex items-center justify-center"
             >
-              {loading ? <Loader2 className="animate-spin" /> : 'Continuar'} <ArrowRight size={18} className="ml-2" />
+              {loading ? <Loader2 className="animate-spin" /> : t.continue} <ArrowRight size={18} className="ml-2" />
             </button>
           </form>
 
@@ -156,11 +160,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ isOpen, onClose, onLogin
                   onClick={() => setView(view === 'login' ? 'register' : 'login')}
                   className="text-manabi-600 font-bold"
               >
-                  {view === 'login' ? '¿No tienes cuenta? Regístrate' : '¿Ya tienes cuenta? Entra'}
+                  {view === 'login' ? t.noAccount : t.hasAccount}
               </button>
               <div className="mt-4">
                 <button onClick={onClose} className="text-stone-400 font-medium hover:underline">
-                  Seguir como invitado
+                  {t.guest}
                 </button>
               </div>
           </div>

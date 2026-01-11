@@ -2,23 +2,31 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { MessageSquare, X, Send, Bot, Loader2 } from 'lucide-react';
 import { getTravelAdvice } from '../services/geminiService';
+import { Language } from '../types';
+import { TRANSLATIONS } from '../constants';
 
 interface ChatBotProps {
   externalIsOpen?: boolean;
   externalQuery?: string;
+  language: Language;
   onCloseExternal?: () => void;
 }
 
-export const ChatBot: React.FC<ChatBotProps> = ({ externalIsOpen, externalQuery, onCloseExternal }) => {
+export const ChatBot: React.FC<ChatBotProps> = ({ externalIsOpen, externalQuery, language, onCloseExternal }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const t = TRANSLATIONS[language];
+
+  const initialMessage = language === 'es' 
+    ? '¡Hola! Soy tu guía de Ecuador. 🇪🇨\n\nPregúntame sobre:\n• 🏖️ Destinos turísticos\n• 🍽️ Comida típica\n• 🚌 Cómo llegar a un lugar'
+    : 'Hello! I am your Ecuador guide. 🇪🇨\n\nAsk me about:\n• 🏖️ Tourist destinations\n• 🍽️ Local food\n• 🚌 How to get there';
+
   const [messages, setMessages] = useState<{role: 'user' | 'model', text: string}[]>([
-    { role: 'model', text: '¡Hola! Soy tu guía de Ecuador. 🇪🇨\n\nPregúntame sobre:\n• 🏖️ Destinos turísticos\n• 🍽️ Comida típica\n• 🚌 Cómo llegar a un lugar' }
+    { role: 'model', text: initialMessage }
   ]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
-  // Ref to track if we've handled the external query to prevent double sending
   const handledQueryRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -30,7 +38,6 @@ export const ChatBot: React.FC<ChatBotProps> = ({ externalIsOpen, externalQuery,
   useEffect(() => {
     if (externalQuery && externalQuery !== handledQueryRef.current && isOpen) {
        handledQueryRef.current = externalQuery;
-       // Execute immediate search
        handleSend(undefined, externalQuery);
     }
   }, [externalQuery, isOpen]);
@@ -51,12 +58,13 @@ export const ChatBot: React.FC<ChatBotProps> = ({ externalIsOpen, externalQuery,
     
     if (!textToSend.trim()) return;
 
-    if (!overrideText) setInputValue(''); // Clear input if manual
+    if (!overrideText) setInputValue(''); 
     
     setMessages(prev => [...prev, { role: 'user', text: textToSend }]);
     setIsLoading(true);
 
-    const response = await getTravelAdvice(textToSend);
+    const prompt = language === 'es' ? textToSend : `The user speaks English. Answer in English if possible: ${textToSend}`;
+    const response = await getTravelAdvice(prompt);
     
     setMessages(prev => [...prev, { role: 'model', text: response }]);
     setIsLoading(false);
@@ -79,9 +87,9 @@ export const ChatBot: React.FC<ChatBotProps> = ({ externalIsOpen, externalQuery,
               <Bot size={20} />
             </div>
             <div>
-              <h3 className="font-bold text-sm">Guía Virtual Ecuador</h3>
+              <h3 className="font-bold text-sm">{language === 'es' ? 'Guía Virtual Ecuador' : 'Virtual Guide Ecuador'}</h3>
               <span className="text-xs text-cyan-100 flex items-center">
-                <span className="w-2 h-2 bg-green-400 rounded-full mr-1"></span> En línea
+                <span className="w-2 h-2 bg-green-400 rounded-full mr-1"></span> {language === 'es' ? 'En línea' : 'Online'}
               </span>
             </div>
           </div>
@@ -106,7 +114,7 @@ export const ChatBot: React.FC<ChatBotProps> = ({ externalIsOpen, externalQuery,
             <div className="flex justify-start">
               <div className="bg-white border p-3 rounded-2xl rounded-bl-none shadow-sm flex items-center space-x-2">
                 <Loader2 size={16} className="animate-spin text-cyan-600" />
-                <span className="text-xs text-gray-500">Consultando experto...</span>
+                <span className="text-xs text-gray-500">{language === 'es' ? 'Consultando experto...' : 'Asking expert...'}</span>
               </div>
             </div>
           )}
@@ -116,7 +124,7 @@ export const ChatBot: React.FC<ChatBotProps> = ({ externalIsOpen, externalQuery,
         <form onSubmit={handleSend} className="p-3 bg-white border-t flex items-center space-x-2">
           <input
             type="text"
-            placeholder="Pregunta sobre turismo..."
+            placeholder={language === 'es' ? 'Pregunta sobre turismo...' : 'Ask about tourism...'}
             className="flex-1 bg-gray-100 border-none rounded-full px-4 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
