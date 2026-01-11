@@ -16,7 +16,6 @@ import { ChatModal } from './components/ChatModal';
 import { AuthScreen } from './components/AuthScreen';
 import { PostViewer } from './components/PostViewer';
 import { NotificationsModal } from './components/NotificationsModal';
-import { ChallengeCard } from './components/ChallengeCard';
 import { NearbyModal } from './components/NearbyModal';
 import { TravelGroupsModal } from './components/TravelGroupsModal';
 import { AdminUsersModal } from './components/AdminUsersModal';
@@ -27,10 +26,10 @@ import { PortalsView } from './components/PortalsView';
 import { ManageReservationsModal } from './components/ManageReservationsModal';
 import { BookingModal } from './components/BookingModal';
 import { ALL_DESTINATIONS as STATIC_DESTINATIONS, APP_VERSION } from './constants';
-import { Post, Story, Destination, User, Notification, Challenge, Suggestion, EcuadorRegion, Badge, TravelGroup, Tab, ReservationOffer, Booking } from './types';
+import { Post, Story, Destination, User, Notification, Suggestion, EcuadorRegion, Badge, TravelGroup, Tab, ReservationOffer, Booking } from './types';
 import { StorageService } from './services/storageService';
 import { AuthService } from './services/authService';
-import { getDailyChallenge, isAdmin, getUserLevel, getNextLevel, BADGES } from './utils';
+import { isAdmin, getUserLevel, getNextLevel, BADGES } from './utils';
 import { db } from './services/firebase';
 import { ref, onValue } from '@firebase/database';
 import { Helmet } from 'react-helmet-async';
@@ -91,8 +90,6 @@ export default function App() {
   const [viewingPost, setViewingPost] = useState<Post | null>(null);
   const [chatQuery, setChatQuery] = useState('');
   
-  const dailyChallenge = getDailyChallenge();
-  const isChallengeCompleted = user ? !!(user.completedChallenges && user.completedChallenges[dailyChallenge.id]) : false;
   const userIsAdmin = isAdmin(user?.email);
 
   const shuffleArray = <T,>(array: T[]): T[] => {
@@ -264,7 +261,20 @@ export default function App() {
   const handleCreateContent = (image: string, caption: string, locationOrName: string, type: 'post' | 'story' | 'group', mediaType: 'image' | 'video', extraData?: any) => requireAuth(async () => {
     try {
       if (type === 'post') {
-        const newPost: Post = { id: Date.now().toString(), userId: user!.id, userName: user!.name, userAvatar: user!.avatar, location: locationOrName, imageUrl: image, mediaType, caption, likes: 0, comments: [], timestamp: Date.now() };
+        const newPost: Post = { 
+            id: Date.now().toString(), 
+            userId: user!.id, 
+            userName: user!.name, 
+            userAvatar: user!.avatar, 
+            location: locationOrName, 
+            imageUrl: image, 
+            gallery: extraData?.gallery || [],
+            mediaType, 
+            caption, 
+            likes: 0, 
+            comments: [], 
+            timestamp: Date.now() 
+        };
         await StorageService.savePost(newPost);
       } else if (type === 'story') {
         const newStory: Story = { id: `s_${Date.now()}`, userId: user!.id, userName: user!.name, userAvatar: user!.avatar, imageUrl: image, mediaType, timestamp: Date.now(), isViewed: false, caption, location: locationOrName, likes: 0 };
@@ -602,14 +612,17 @@ export default function App() {
                 <div className="relative w-24 h-36 md:w-28 md:h-44 shrink-0 rounded-2xl overflow-hidden cursor-pointer bg-stone-200" onClick={() => requireAuth(() => setIsCreateModalOpen(true))}><img src={user?.avatar || 'https://api.dicebear.com/7.x/adventurer/svg?seed=guest'} className="w-full h-full object-cover opacity-60" /><div className="absolute inset-0 bg-black/20 flex flex-col items-center justify-center text-white"><div className="bg-manabi-600 rounded-full p-1 border-2 border-white mb-1"><Plus size={16} /></div><span className="text-[10px] font-bold">Crear</span></div></div>
                 {uniqueStoryUsers.map((userId) => { const userStories = groupedStories[userId]; const lastStory = userStories[userStories.length - 1]; return (<div key={userId} className="relative w-24 h-36 md:w-28 md:h-44 shrink-0 rounded-2xl overflow-hidden cursor-pointer ring-2 ring-manabi-500 ring-offset-2" onClick={() => { setViewingStoriesSubset(userStories); setViewingStoryIndex(0); }}><img src={lastStory.imageUrl} className="w-full h-full object-cover" /><div className="absolute inset-0 bg-black/20"></div><img src={lastStory.userAvatar} className="absolute top-2 left-2 w-8 h-8 rounded-lg border-2 border-white object-cover" /><span className="absolute bottom-2 left-2 text-white text-[10px] font-bold truncate pr-2">{lastStory.userName}</span></div>); })}
               </div>
-              <ChallengeCard challenge={dailyChallenge} isCompleted={isChallengeCompleted} onParticipate={() => setIsCreateModalOpen(true)} />
               <div className="space-y-8">
+                {/* Lugar Destacado (HeroSection) siempre al principio del feed */}
+                <HeroSection 
+                  destination={featuredDestination} 
+                  onGuideClick={(name) => setSelectedDestination(destinations.find(d => d.name === name) || null)} 
+                />
+
                 {posts.length === 0 && rawPosts.length > 0 && (
                   <div className="py-20 text-center"><Loader2 size={32} className="animate-spin text-manabi-500 mx-auto" /><p className="text-stone-400 mt-2">Cargando tu feed personalizado...</p></div>
                 )}
-                {posts.length === 0 && rawPosts.length === 0 && (
-                  <HeroSection destination={featuredDestination} onGuideClick={(name) => setSelectedDestination(destinations.find(d => d.name === name) || null)} />
-                )}
+                
                 {posts.map(post => (<PostCard key={post.id} post={post} currentUserId={user?.id || 'guest'} onLike={() => StorageService.toggleLikePost(post, user?.id || 'guest')} onComment={(id, t) => StorageService.addComment(id, [...(post.comments || []), {id: Date.now().toString(), userId: user!.id, userName: user!.name, text: t, timestamp: Date.now()}])} onUserClick={handleUserClick} onImageClick={(p) => setViewingPost(p)} onEdit={setEditingPost} onDelete={(id) => StorageService.deletePost(id)} onShare={(p) => handleShare(`Mira esta publicación de @${p.userName} en ${p.location}`, p.caption)} />))}
               </div>
             </>
@@ -621,7 +634,7 @@ export default function App() {
         <button onClick={() => { setViewingUserId(null); setActiveTab(activeTab === 'portals' ? 'home' : 'portals'); }} className={`flex flex-col items-center gap-1 ${activeTab === 'home' || activeTab === 'portals' ? 'text-manabi-600' : 'text-stone-400'}`}>{activeTab === 'portals' ? <Layout size={22} /> : <PlaySquare size={22} />}<span className="text-[10px] font-bold">{activeTab === 'portals' ? 'Muro' : 'Portales'}</span></button>
         <button onClick={() => { setViewingUserId(null); setActiveTab('explore'); }} className={`flex flex-col items-center gap-1 ${activeTab === 'explore' ? 'text-manabi-600' : 'text-stone-400'}`}><Compass size={22} /><span className="text-[10px] font-bold">Explorar</span></button>
         <button onClick={() => requireAuth(() => setIsCreateModalOpen(true))} className="relative -top-5 bg-manabi-600 text-white rounded-2xl p-4 shadow-xl border-4 border-white transition-transform active:scale-90"><Camera size={26} /></button>
-        <button onClick={() => { setViewingUserId(null); setActiveTab('search'); }} className={`flex flex-col items-center gap-1 ${activeTab === 'search' ? 'text-manabi-600' : 'text-stone-400'}`}><Search size={22} /><span className="text-[10px] font-bold">Buscar</span></button>
+        <button onClick={() => { setViewingUserId(null); setActiveTab('search'); }} className={`flex flex-col items-center gap-1 ${activeTab === 'search' ? 'text-manabi-600' : 'text-stone-400'}`}>{activeTab === 'search' ? <Search size={22} /> : <Search size={22} />}<span className="text-[10px] font-bold">Buscar</span></button>
         <button onClick={() => { setViewingUserId(null); setActiveTab('profile'); setProfileSubTab('grid'); }} className={`flex flex-col items-center gap-1 ${activeTab === 'profile' && !viewingUserId ? 'text-manabi-600' : 'text-stone-400'}`}>{user ? (<img src={user.avatar} className={`w-6 h-6 rounded-full object-cover transition-all ${activeTab === 'profile' && !viewingUserId ? 'ring-2 ring-manabi-600 ring-offset-1 scale-110' : 'opacity-70'}`} />) : (<UserIcon size={22} />)}<span className="text-[10px] font-bold">Perfil</span></button>
       </div>
       <AuthScreen isOpen={isAuthOpen} onClose={() => setIsAuthOpen(false)} onLoginSuccess={(u) => { setUser(u); setIsAuthOpen(false); }} />

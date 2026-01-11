@@ -21,6 +21,13 @@ Eres el "Copiloto IA de Manabí Social". Tu función es leer el contexto de un c
 Analiza si están hablando de tomar decisiones y ofrece opciones para una encuesta.
 `;
 
+const DESTINATION_EXPERT_INSTRUCTION = `
+Eres un especialista en turismo de la República del Ecuador. 
+Tu base de conocimientos se limita ESTRICTAMENTE a la geografía, cultura, biodiversidad y atractivos turísticos de Ecuador.
+Tu tarea es generar fichas técnicas detalladas para nuevos destinos en la plataforma "Ecuador Travel".
+Si el lugar solicitado no pertenece a Ecuador, debes intentar encontrar una relación con un lugar real en Ecuador o proporcionar información basada en la ubicación ecuatoriana (Provincia/Región) proporcionada por el usuario.
+`;
+
 // Basic Text Task: Use gemini-3-flash-preview
 export const getTravelAdvice = async (query: string): Promise<string> => {
   const cacheKey = `advice_v3_${query.trim().toLowerCase()}`;
@@ -36,7 +43,6 @@ export const getTravelAdvice = async (query: string): Promise<string> => {
       config: {
         systemInstruction: ECUADOR_SYSTEM_INSTRUCTION,
         temperature: 0.7,
-        // Removed maxOutputTokens to prevent the response from being blocked or cut due to reaching max tokens.
       },
     });
     
@@ -300,16 +306,33 @@ export const generateDestinationDetails = async (name: string, location: string,
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-pro-preview',
-      contents: `Info de ${name}.`,
+      contents: `Genera la información turística completa y profesional para el destino "${name}" ubicado en "${location}", Ecuador. 
+      La categoría es "${category}". 
+      Asegúrate de resaltar la importancia histórica, natural o cultural ÚNICAMENTE en el contexto de Ecuador.`,
       config: { 
+          systemInstruction: DESTINATION_EXPERT_INSTRUCTION,
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.OBJECT,
             properties: {
-              description: { type: Type.STRING },
-              fullDescription: { type: Type.STRING },
-              highlights: { type: Type.ARRAY, items: { type: Type.STRING } },
-              travelTips: { type: Type.ARRAY, items: { type: Type.STRING } },
+              description: { 
+                  type: Type.STRING, 
+                  description: "Una descripción breve y cautivadora (aprox 150 caracteres) para la tarjeta de presentación." 
+              },
+              fullDescription: { 
+                  type: Type.STRING, 
+                  description: "Un texto extenso y detallado narrando la historia, belleza y valor del lugar en Ecuador." 
+              },
+              highlights: { 
+                  type: Type.ARRAY, 
+                  items: { type: Type.STRING },
+                  description: "Lista de 3 a 5 puntos imperdibles para visitar dentro de este destino."
+              },
+              travelTips: { 
+                  type: Type.ARRAY, 
+                  items: { type: Type.STRING },
+                  description: "Consejos prácticos exclusivos para viajeros que visitan esta zona de Ecuador."
+              },
               coordinates: {
                 type: Type.OBJECT,
                 properties: {
@@ -325,7 +348,12 @@ export const generateDestinationDetails = async (name: string, location: string,
     });
     return JSON.parse(response.text || "{}");
   } catch (error) {
-    return { description: "Mágico.", highlights: [], travelTips: [] };
+    return { 
+        description: `Descubre la magia de ${name}, un tesoro de la provincia ecuatoriana.`, 
+        fullDescription: `Este maravilloso rincón de Ecuador ofrece experiencias inigualables para todo tipo de aventureros.`,
+        highlights: ["Atractivos naturales únicos", "Cultura local vibrante"], 
+        travelTips: ["Llevar protector solar", "Respetar el entorno natural"] 
+    };
   }
 };
 

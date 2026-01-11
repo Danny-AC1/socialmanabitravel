@@ -30,7 +30,7 @@ export const ManageReservationsModal: React.FC<ManageReservationsModalProps> = (
   const [lng, setLng] = useState('');
   const [items, setItems] = useState<ReservationItem[]>([]);
   
-  // New Item State (Form temporal para cada opción)
+  // New Item State
   const [newItemTitle, setNewItemTitle] = useState('');
   const [newItemPrice, setNewItemPrice] = useState('');
   const [newItemDesc, setNewItemDesc] = useState('');
@@ -73,40 +73,36 @@ export const ManageReservationsModal: React.FC<ManageReservationsModalProps> = (
                   setNewItemImage(resized);
               }
           } catch (err) {
-              alert("Error al procesar la imagen.");
+              console.error("Error al procesar imagen:", err);
           } finally {
               setIsLoading(false);
           }
       }
   };
 
-  // FUNCIONAL: Añadir un ítem a la lista de opciones de la oferta
   const addItemToOffer = () => {
-      if (!newItemTitle.trim()) {
-          alert("Ingresa un título para esta opción.");
-          return;
-      }
-      if (!newItemPrice || parseFloat(newItemPrice) <= 0) {
-          alert("Ingresa un precio válido.");
-          return;
-      }
-      if (!newItemImage) {
-          alert("Sube una foto representativa para esta opción.");
+      if (!newItemTitle.trim() || !newItemPrice || !newItemImage) {
+          alert("Completa título, precio e imagen para añadir la opción.");
           return;
       }
 
+      // IMPORTANTE: No incluir propiedades con undefined
       const newItem: ReservationItem = {
           id: `item_${Date.now()}`,
-          title: newItemTitle,
-          description: newItemDesc,
+          title: newItemTitle.trim(),
+          description: newItemDesc.trim() || "Sin descripción",
           price: parseFloat(newItemPrice),
-          imageUrl: newItemImage,
-          gallery: offerType === 'hotel' ? newItemGallery : undefined
+          imageUrl: newItemImage
       };
+
+      // Solo añadir galería si es hotel y hay imágenes para evitar errores de Firebase
+      if (offerType === 'hotel' && newItemGallery.length > 0) {
+          newItem.gallery = newItemGallery;
+      }
 
       setItems(prev => [...prev, newItem]);
       
-      // Limpiar formulario del ítem
+      // Reset Item form
       setNewItemTitle('');
       setNewItemPrice('');
       setNewItemDesc('');
@@ -114,52 +110,56 @@ export const ManageReservationsModal: React.FC<ManageReservationsModalProps> = (
       setNewItemGallery([]);
   };
 
-  // FUNCIONAL: Guardar la oferta completa en la base de datos
   const handleSaveOffer = async () => {
       if (!businessName.trim()) {
           alert("Ingresa el nombre de la empresa.");
           return;
       }
       if (!selectedDestId) {
-          alert("Selecciona el destino turístico asociado.");
-          return;
-      }
-      if (!businessPhone.trim()) {
-          alert("Ingresa un WhatsApp de contacto.");
+          alert("Selecciona un destino asociado.");
           return;
       }
       if (items.length === 0) {
-          alert("Debes añadir al menos una opción (habitación o menú) a la lista.");
+          alert("Añade al menos una opción de reserva a la lista.");
           return;
       }
 
       setIsLoading(true);
       const dest = destinations.find(d => d.id === selectedDestId);
       
-      const newOffer: ReservationOffer = {
+      const parsedLat = parseFloat(lat);
+      const parsedLng = parseFloat(lng);
+      const hasValidCoords = !isNaN(parsedLat) && !isNaN(parsedLng);
+
+      // Construcción del objeto sin valores undefined
+      const offerData: any = {
           id: `off_${Date.now()}`,
           destinationId: selectedDestId,
           destinationName: dest?.name || "Desconocido",
           type: offerType,
-          businessName,
-          businessAddress,
-          businessPhone,
-          bankDetails,
-          items,
-          createdAt: Date.now(),
-          coordinates: lat && lng ? {
-              latitude: parseFloat(lat),
-              longitude: parseFloat(lng)
-          } : undefined
+          businessName: businessName.trim(),
+          businessAddress: businessAddress.trim() || "Dirección no especificada",
+          businessPhone: businessPhone.trim(),
+          bankDetails: bankDetails.trim() || "Consultar al reservar",
+          items: items,
+          createdAt: Date.now()
       };
 
+      if (hasValidCoords) {
+          offerData.coordinates = {
+              latitude: parsedLat,
+              longitude: parsedLng
+          };
+      }
+
       try {
-          await StorageService.saveReservationOffer(newOffer);
-          alert("¡Oferta de reserva publicada con éxito!");
+          await StorageService.saveReservationOffer(offerData as ReservationOffer);
+          alert("¡Oferta de reserva guardada con éxito!");
           resetForm();
           setView('offers');
-      } catch (err) {
-          alert("Error al guardar la oferta. Intenta de nuevo.");
+      } catch (err: any) {
+          console.error("Error al guardar en Firebase:", err);
+          alert(`Error al guardar: ${err.message || 'Inténtalo de nuevo'}`);
       } finally {
           setIsLoading(false);
       }
@@ -218,7 +218,7 @@ export const ManageReservationsModal: React.FC<ManageReservationsModalProps> = (
             <button onClick={() => setView('create')} className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${view === 'create' ? 'bg-white text-manabi-600 shadow-sm' : 'text-stone-400'}`}>Nueva Oferta +</button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 bg-stone-50 pb-24 md:pb-6">
+        <div className="flex-1 overflow-y-auto p-6 bg-stone-50 pb-24 md:pb-6 no-scrollbar">
             {view === 'offers' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in">
                     {offers.map(off => (

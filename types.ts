@@ -19,7 +19,6 @@ export interface User {
   points?: number;
   badges?: Badge[];
   lastLogin?: number;
-  completedChallenges?: Record<string, number>;
 }
 
 // --- RESERVATION TYPES ---
@@ -82,6 +81,7 @@ export interface Post {
   userAvatar: string;
   location: string;
   imageUrl: string; 
+  gallery?: string[]; // Nueva propiedad para múltiples imágenes
   mediaType?: 'image' | 'video'; 
   caption: string;
   likes: number;
@@ -205,21 +205,6 @@ export interface Itinerary {
   days: ItineraryDay[];
 }
 
-export type ChallengeType = 'photo' | 'trivia' | 'checkin';
-
-export interface Challenge {
-  id: string;
-  title: string;
-  description: string;
-  type: ChallengeType;
-  points: number;
-  icon: string;
-  actionLabel: string;
-  question?: string;
-  options?: string[];
-  correctAnswer?: number;
-}
-
 export interface TravelTemplate {
   id: string;
   groupId: string;
@@ -246,4 +231,17 @@ export interface TravelGroup {
   members: Record<string, boolean>; 
   templates?: Record<string, TravelTemplate>; 
   chatId?: string; 
+}
+
+// Fixed: Added missing Challenge interface to support daily missions and trivia in ChallengeCard
+export interface Challenge {
+  id: string;
+  title: string;
+  description: string;
+  points: number;
+  icon: string;
+  type: 'trivia' | 'post' | 'visit' | 'share';
+  actionLabel: string;
+  question?: string;
+  options?: string[];
 }

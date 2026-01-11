@@ -145,12 +145,11 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
   return (
     <div className="fixed inset-0 z-[300] bg-black flex items-center justify-center">
       
-      {currentStory.mediaType !== 'video' && (
-        <div 
-            className="absolute inset-0 bg-cover bg-center blur-xl opacity-30 scale-110"
-            style={{ backgroundImage: `url(${currentStory.imageUrl})` }}
-        />
-      )}
+      {/* Dynamic Background Blur Layer */}
+      <div 
+          className="absolute inset-0 bg-cover bg-center blur-xl opacity-30 scale-110 transition-all duration-700"
+          style={{ backgroundImage: `url(${currentStory.imageUrl})` }}
+      />
 
       <div 
         className="relative w-full md:w-[400px] h-full md:h-[90vh] bg-black md:rounded-2xl overflow-hidden shadow-2xl flex flex-col select-none"
@@ -173,7 +172,7 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
              <img 
                 src={currentStory.imageUrl} 
                 alt="Story" 
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain"
              />
           )}
           <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black/60 pointer-events-none" />

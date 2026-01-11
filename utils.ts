@@ -1,5 +1,5 @@
 
-import { Badge, User, Challenge } from './types';
+import { Badge, User } from './types';
 
 // --- MEDIA & FILE UTILS ---
 
@@ -273,9 +273,7 @@ export const POINT_VALUES = {
   COMMENT: 5,
   ADD_DESTINATION: 50,
   ADD_PHOTO: 20,
-  SHARE: 5,
-  CHALLENGE_EASY: 30,
-  CHALLENGE_HARD: 50
+  SHARE: 5
 };
 
 // 2. Lista de Insignias
@@ -344,82 +342,4 @@ export const checkNewBadges = (user: User, action: 'post' | 'comment' | 'destina
   if (points >= 1000 && !hasBadge('b_viajero_experto')) newBadges.push(BADGES.find(b => b.id === 'b_viajero_experto')!);
 
   return newBadges;
-};
-
-// --- CHALLENGES SYSTEM ---
-
-const CHALLENGES_POOL: Challenge[] = [
-  {
-    id: 'ch_sunset',
-    title: 'Hora Dorada',
-    description: 'Comparte tu mejor foto de un atardecer en Ecuador.',
-    type: 'photo',
-    points: 30,
-    icon: '🌅',
-    actionLabel: 'Subir Foto'
-  },
-  {
-    id: 'ch_foodie',
-    title: 'Sabor Criollo',
-    description: 'Sube una foto de tu plato típico favorito.',
-    type: 'photo',
-    points: 30,
-    icon: '🍤',
-    actionLabel: 'Compartir Plato'
-  },
-  {
-    id: 'ch_trivia_1',
-    title: 'Trivia Manabita',
-    description: '¿Cuál es la capital de la provincia de Manabí?',
-    type: 'trivia',
-    points: 20,
-    icon: '🧠',
-    actionLabel: 'Responder',
-    question: '¿Cuál es la capital de la provincia de Manabí?',
-    options: ['Manta', 'Portoviejo', 'Montecristi', 'Chone'],
-    correctAnswer: 1 // Portoviejo
-  },
-  {
-    id: 'ch_nature',
-    title: 'Verde que te quiero verde',
-    description: 'Comparte una foto donde la naturaleza sea protagonista.',
-    type: 'photo',
-    points: 30,
-    icon: '🌿',
-    actionLabel: 'Subir Foto'
-  },
-  {
-    id: 'ch_trivia_2',
-    title: 'Experto en Playas',
-    description: '¿Dónde queda la playa de Los Frailes?',
-    type: 'trivia',
-    points: 20,
-    icon: '🏖️',
-    actionLabel: 'Adivinar',
-    question: '¿En qué parque nacional se encuentra la playa de Los Frailes?',
-    options: ['Machalilla', 'Yasuní', 'Cotopaxi', 'Podocarpus'],
-    correctAnswer: 0 // Machalilla
-  },
-  {
-    id: 'ch_selfie',
-    title: 'Selfie Viajero',
-    description: '¡Queremos ver tu sonrisa! Sube una selfie en tu lugar favorito.',
-    type: 'photo',
-    points: 35,
-    icon: '🤳',
-    actionLabel: 'Tomar Selfie'
-  }
-];
-
-export const getDailyChallenge = (): Challenge => {
-  // Algoritmo simple para seleccionar un desafío basado en el día del año
-  // Esto asegura que todos los usuarios vean el mismo desafío el mismo día
-  const now = new Date();
-  const start = new Date(now.getFullYear(), 0, 0);
-  const diff = now.getTime() - start.getTime();
-  const oneDay = 1000 * 60 * 60 * 24;
-  const dayOfYear = Math.floor(diff / oneDay);
-  
-  const index = dayOfYear % CHALLENGES_POOL.length;
-  return CHALLENGES_POOL[index];
 };

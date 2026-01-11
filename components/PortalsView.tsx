@@ -189,19 +189,24 @@ const PortalItem: React.FC<{
                 })}
             </div>
 
-            {/* BACKGROUND MEDIA */}
-            <div className={`absolute inset-0 w-full h-full transition-transform duration-[10s] ease-linear ${isActive ? 'scale-110' : 'scale-100'}`}>
+            {/* BACKGROUND BLUR LAYER (For complete image experience) */}
+            <div className="absolute inset-0 z-0">
+                <img src={post.imageUrl} className="w-full h-full object-cover blur-2xl opacity-40 scale-110" alt="Background blur" />
+            </div>
+
+            {/* MAIN MEDIA LAYER - CHANGED TO object-contain FOR COMPLETENESS */}
+            <div className={`absolute inset-0 w-full h-full z-10 transition-transform duration-[10s] ease-linear flex items-center justify-center ${isActive ? 'scale-105' : 'scale-100'}`}>
                 {post.mediaType === 'video' ? (
                     <video 
                         ref={videoRef}
                         src={post.imageUrl} 
-                        className="w-full h-full object-cover" 
+                        className="w-full h-full object-contain" 
                         muted loop playsInline 
                     />
                 ) : (
-                    <img src={post.imageUrl} className="w-full h-full object-cover" alt="Portal content" />
+                    <img src={post.imageUrl} className="w-full h-full object-contain" alt="Portal content" />
                 )}
-                <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/80" />
+                <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/80 pointer-events-none" />
             </div>
 
             {/* BOTÓN EXPLORAR IA (CENTRAL IZQUIERDA) */}

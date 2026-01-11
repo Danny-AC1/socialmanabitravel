@@ -91,39 +91,10 @@ export const StorageService = {
     }
   },
 
-  completeChallenge: async (userId: string, challengeId: string, points: number) => {
-    try {
-        const userRef = ref(db, `users/${userId}`);
-        const snapshot = await get(userRef);
-        
-        if (snapshot.exists()) {
-            const user = snapshot.val() as User;
-            const completed = user.completedChallenges || {};
-            
-            if (completed[challengeId]) {
-                return false;
-            }
-
-            const newCompleted = { ...completed, [challengeId]: Date.now() };
-            const currentPoints = user.points || 0;
-            const newPoints = currentPoints + points;
-
-            await update(userRef, {
-                points: newPoints,
-                completedChallenges: newCompleted
-            });
-            return true;
-        }
-        return false;
-    } catch (e) {
-        console.error("Error completing challenge:", e);
-        return false;
-    }
-  },
-
   // --- CONTENT ---
 
   savePost: async (post: Post) => {
+    // Firebase no guarda campos undefined, por lo que gallery se omitirá si no existe
     await set(ref(db, 'posts/' + post.id), post);
     await StorageService.awardPoints(post.userId, POINT_VALUES.POST, 'post');
   },

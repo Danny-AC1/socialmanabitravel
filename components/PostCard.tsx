@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Clover, MessageSquareText, Share2, MapPin, MoreVertical, Edit2, Trash2, Play, Wand2, CloudSun, Clock, Zap, Volume2, Sparkles, Loader2, Info } from 'lucide-react';
+import { Clover, MessageSquareText, Share2, MapPin, MoreVertical, Edit2, Trash2, Play, Wand2, CloudSun, Clock, Zap, Volume2, Sparkles, Loader2, Info, ChevronRight, ChevronLeft } from 'lucide-react';
 import { Post } from '../types';
 import { getPlaceLiveContext, analyzeTravelImage } from '../services/geminiService';
 
@@ -32,6 +32,12 @@ export const PostCard: React.FC<PostCardProps> = ({
   const [showMenu, setShowMenu] = useState(false);
   const [isLikeAnimating, setIsLikeAnimating] = useState(false);
   
+  // GALLERY STATES
+  const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const gallery = post.gallery && post.gallery.length > 0 ? post.gallery : [post.imageUrl];
+  const hasGallery = gallery.length > 1;
+
   // LIVE FEATURES STATES
   const [liveContext, setLiveContext] = useState<{placeName: string, weather: string, temp: string, status: string} | null>(null);
   const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
@@ -44,7 +50,6 @@ export const PostCard: React.FC<PostCardProps> = ({
   const isOwner = post.userId === currentUserId;
   const comments = post.comments || [];
 
-  // Obtener contexto "vivo" (clima/hora) al montar el post
   useEffect(() => {
     const fetchContext = async () => {
         if (post.location) {
@@ -55,11 +60,18 @@ export const PostCard: React.FC<PostCardProps> = ({
     fetchContext();
   }, [post.location]);
 
+  const handleScroll = () => {
+      if (scrollRef.current) {
+          const index = Math.round(scrollRef.current.scrollLeft / scrollRef.current.offsetWidth);
+          setCurrentMediaIndex(index);
+      }
+  };
+
   const handleCommentSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (commentText.trim()) {
       const textToSend = commentText.trim();
-      setCommentText(''); // Limpieza inmediata para sensación de fluidez
+      setCommentText('');
       onComment(post.id, textToSend);
       setShowComments(true);
     }
@@ -79,9 +91,10 @@ export const PostCard: React.FC<PostCardProps> = ({
     
     setIsAiAnalyzing(true);
     try {
-        const result = await analyzeTravelImage(post.imageUrl);
+        const currentImageUrl = gallery[currentMediaIndex];
+        const result = await analyzeTravelImage(currentImageUrl);
         setAiAnalysis(result);
-        setTimeout(() => setAiAnalysis(null), 8000); // Ocultar después de unos segundos
+        setTimeout(() => setAiAnalysis(null), 8000);
     } catch (err) {
         console.error("AI Analysis failed", err);
     } finally {
@@ -105,33 +118,19 @@ export const PostCard: React.FC<PostCardProps> = ({
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
     >
-      
       <style>{`
-        @keyframes lucky-burst-1 { 0% { transform: translate(0,0) scale(0.5); opacity: 1; } 100% { transform: translate(-30px, -40px) rotate(-20deg) scale(0); opacity: 0; } }
-        @keyframes lucky-burst-2 { 0% { transform: translate(0,0) scale(0.5); opacity: 1; } 100% { transform: translate(30px, -40px) rotate(20deg) scale(0); opacity: 0; } }
-        @keyframes lucky-burst-3 { 0% { transform: translate(0,0) scale(0.5); opacity: 1; } 100% { transform: translate(-45px, 0px) rotate(-40deg) scale(0); opacity: 0; } }
-        @keyframes lucky-burst-4 { 0% { transform: translate(0,0) scale(0.5); opacity: 1; } 100% { transform: translate(45px, 0px) rotate(40deg) scale(0); opacity: 0; } }
-        
-        .particle-1 { animation: lucky-burst-1 0.9s cubic-bezier(0.19, 1, 0.22, 1) forwards; }
-        .particle-2 { animation: lucky-burst-2 0.9s cubic-bezier(0.19, 1, 0.22, 1) forwards; }
-        .particle-3 { animation: lucky-burst-3 0.9s cubic-bezier(0.19, 1, 0.22, 1) forwards; }
-        .particle-4 { animation: lucky-burst-4 0.9s cubic-bezier(0.19, 1, 0.22, 1) forwards; }
-
-        @keyframes pulse-ring {
-            0% { transform: scale(0.8); opacity: 0.5; }
-            100% { transform: scale(1.5); opacity: 0; }
+        @keyframes slide-hint {
+            0%, 100% { transform: translateX(0); opacity: 0.5; }
+            50% { transform: translateX(10px); opacity: 1; }
         }
-        .ai-pulse-ring { animation: pulse-ring 2s infinite; }
+        .animate-slide-hint { animation: slide-hint 2s infinite; }
       `}</style>
 
-      {/* HEADER CON CONTEXTO VIVO */}
-      <div className="flex items-center justify-between p-5 relative">
-        <div 
-          className="flex items-center space-x-3 cursor-pointer group"
-          onClick={() => onUserClick(post.userId)}
-        >
+      {/* HEADER */}
+      <div className="flex items-center justify-between p-5">
+        <div className="flex items-center space-x-3 cursor-pointer group" onClick={() => onUserClick(post.userId)}>
           <div className="relative">
-              <img src={post.userAvatar} alt={post.userName} className="w-11 h-11 rounded-2xl object-cover ring-2 ring-stone-50 group-hover:ring-manabi-400 transition-all shadow-sm" />
+              <img src={post.userAvatar} className="w-11 h-11 rounded-2xl object-cover ring-2 ring-stone-50 group-hover:ring-manabi-400 transition-all shadow-sm" />
               <div className="absolute -bottom-1 -right-1 bg-green-500 w-3 h-3 rounded-full border-2 border-white"></div>
           </div>
           <div>
@@ -146,7 +145,6 @@ export const PostCard: React.FC<PostCardProps> = ({
         </div>
         
         <div className="flex items-center gap-3">
-            {/* WIDGET DE CLIMA VIVO */}
             {liveContext && (
                 <div className="hidden sm:flex items-center gap-2 bg-stone-50 px-3 py-1.5 rounded-2xl border border-stone-100 animate-in fade-in zoom-in duration-500">
                     <CloudSun size={14} className="text-amber-500" />
@@ -159,26 +157,16 @@ export const PostCard: React.FC<PostCardProps> = ({
 
             {isOwner && (
             <div className="relative" ref={menuRef}>
-                <button 
-                onClick={() => setShowMenu(!showMenu)}
-                className="text-gray-400 hover:text-gray-600 p-2 rounded-full hover:bg-gray-100 transition-colors"
-                >
-                <MoreVertical size={20} />
+                <button onClick={() => setShowMenu(!showMenu)} className="text-gray-400 hover:text-gray-600 p-2 rounded-full hover:bg-gray-100 transition-colors">
+                    <MoreVertical size={20} />
                 </button>
-                
                 {showMenu && (
                 <div className="absolute right-0 top-10 bg-white border border-gray-100 shadow-xl rounded-2xl w-36 py-1.5 z-50 animate-in fade-in zoom-in-95 duration-200">
-                    <button 
-                    onClick={() => { setShowMenu(false); onEdit(post); }}
-                    className="w-full text-left px-4 py-3 text-xs font-black uppercase text-slate-700 hover:bg-stone-50 flex items-center gap-2 border-b border-gray-50"
-                    >
-                    <Edit2 size={14} /> Editar
+                    <button onClick={() => { setShowMenu(false); onEdit(post); }} className="w-full text-left px-4 py-3 text-xs font-black uppercase text-slate-700 hover:bg-stone-50 flex items-center gap-2 border-b border-gray-50">
+                        <Edit2 size={14} /> Editar
                     </button>
-                    <button 
-                    onClick={() => { setShowMenu(false); onDelete(post.id); }}
-                    className="w-full text-left px-4 py-3 text-xs font-black uppercase text-red-600 hover:bg-red-50 flex items-center gap-2"
-                    >
-                    <Trash2 size={14} /> Eliminar
+                    <button onClick={() => { setShowMenu(false); onDelete(post.id); }} className="w-full text-left px-4 py-3 text-xs font-black uppercase text-red-600 hover:bg-red-50 flex items-center gap-2">
+                        <Trash2 size={14} /> Eliminar
                     </button>
                 </div>
                 )}
@@ -187,35 +175,65 @@ export const PostCard: React.FC<PostCardProps> = ({
         </div>
       </div>
 
-      {/* CONTENEDOR MULTIMEDIA "VIVO" */}
-      <div 
-        className="relative w-full bg-stone-100 cursor-pointer overflow-hidden group/media aspect-[4/5] sm:aspect-square md:aspect-video"
-        onClick={() => onImageClick && onImageClick(post)}
-        onMouseEnter={() => { if(post.mediaType === 'video') videoRef.current?.play(); }}
-        onMouseLeave={() => { if(post.mediaType === 'video') { videoRef.current?.pause(); videoRef.current!.currentTime = 0; } }}
-      >
-        <div className={`absolute inset-0 w-full h-full transition-all duration-1000 ${post.mediaType !== 'video' ? 'animate-ken-burns' : ''}`}>
-             {post.mediaType === 'video' ? (
-                <video 
-                    ref={videoRef}
-                    src={post.imageUrl} 
-                    className="w-full h-full object-cover" 
-                    muted 
-                    loop 
-                    playsInline
-                />
-            ) : (
-                <img 
-                    src={post.imageUrl} 
-                    alt="Post content" 
-                    className="w-full h-full object-cover" 
-                    loading="lazy" 
-                />
-            )}
+      {/* MULTIMEDIA CONTAINER WITH GALLERY SUPPORT */}
+      <div className="relative w-full bg-black cursor-pointer overflow-hidden group/media aspect-[4/5] sm:aspect-square md:aspect-video">
+        
+        {/* SCROLLABLE GALLERY */}
+        <div 
+            ref={scrollRef}
+            onScroll={handleScroll}
+            className="flex w-full h-full overflow-x-auto snap-x snap-mandatory no-scrollbar"
+            onClick={() => onImageClick && onImageClick(post)}
+        >
+            {gallery.map((img, idx) => (
+                <div key={idx} className="w-full h-full shrink-0 snap-start flex items-center justify-center bg-black">
+                     {post.mediaType === 'video' && idx === 0 ? (
+                        <video 
+                            ref={videoRef}
+                            src={img} 
+                            className="w-full h-full object-contain" 
+                            muted loop playsInline
+                        />
+                    ) : (
+                        <img 
+                            src={img} 
+                            alt={`Slide ${idx}`} 
+                            className="w-full h-full object-contain" 
+                            loading="lazy" 
+                        />
+                    )}
+                </div>
+            ))}
         </div>
 
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-60 pointer-events-none" />
+        {/* GALLERY UI ELEMENTS */}
+        {hasGallery && (
+            <>
+                {/* PAGE COUNTER */}
+                <div className="absolute top-4 right-4 z-40 bg-black/40 backdrop-blur-md text-white text-[10px] font-black px-3 py-1.5 rounded-full border border-white/10">
+                    {currentMediaIndex + 1} / {gallery.length}
+                </div>
 
+                {/* SWIPE HINT (Visible on first image) */}
+                {currentMediaIndex === 0 && (
+                    <div className="absolute top-1/2 right-4 -translate-y-1/2 z-40 pointer-events-none flex flex-col items-center gap-1 text-white/80 animate-slide-hint">
+                        <ChevronRight size={32} />
+                        <span className="text-[8px] font-black uppercase tracking-widest">Desliza</span>
+                    </div>
+                )}
+
+                {/* DOT INDICATORS */}
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-40 flex gap-1.5 p-2 bg-black/20 backdrop-blur-sm rounded-full">
+                    {gallery.map((_, i) => (
+                        <div key={i} className={`h-1.5 rounded-full transition-all ${i === currentMediaIndex ? 'w-4 bg-manabi-400' : 'w-1.5 bg-white/40'}`} />
+                    ))}
+                </div>
+            </>
+        )}
+
+        <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent opacity-60 pointer-events-none" />
+
+        {/* AI EXPLORE BUTTON */}
         <div className="absolute top-4 left-4 z-40">
             <button 
                 onClick={handleAiExplore}
@@ -227,23 +245,8 @@ export const PostCard: React.FC<PostCardProps> = ({
                     <Zap size={18} className={`${isAiAnalyzing ? 'animate-pulse' : 'group-hover/ai:text-cyan-400'}`} fill={isAiAnalyzing ? "currentColor" : "none"} />
                 )}
                 <span className="text-[10px] font-black uppercase tracking-widest hidden sm:block">Explorar IA</span>
-                
-                {!isAiAnalyzing && !aiAnalysis && (
-                    <div className="absolute inset-0 rounded-2xl border-2 border-cyan-400/50 ai-pulse-ring pointer-events-none"></div>
-                )}
             </button>
         </div>
-
-        {isHovered && (
-            <div className="absolute bottom-4 left-4 glass-post rounded-xl px-3 py-1.5 flex items-center gap-2 animate-in slide-in-from-bottom-2">
-                <div className="flex gap-0.5 items-end h-3">
-                    <div className="w-0.5 bg-white animate-[bounce_1s_infinite]"></div>
-                    <div className="w-0.5 bg-white animate-[bounce_1.2s_infinite]"></div>
-                    <div className="w-0.5 bg-white animate-[bounce_0.8s_infinite]"></div>
-                </div>
-                <span className="text-[8px] font-black text-white uppercase tracking-tighter">Sincronizando Ambiente...</span>
-            </div>
-        )}
 
         {aiAnalysis && (
             <div className="absolute inset-0 flex items-center justify-center p-6 z-30">
@@ -258,7 +261,7 @@ export const PostCard: React.FC<PostCardProps> = ({
             </div>
         )}
 
-        {post.mediaType === 'video' && (
+        {post.mediaType === 'video' && currentMediaIndex === 0 && (
             <div className="absolute top-4 right-4 bg-black/40 backdrop-blur-md p-2 rounded-xl text-white">
                 <Play size={16} fill="currentColor" />
             </div>
@@ -268,33 +271,14 @@ export const PostCard: React.FC<PostCardProps> = ({
       <div className="p-6 pb-2">
         <div className="flex items-center justify-between mb-5">
             <div className="flex items-center space-x-6">
-                <button 
-                    onClick={handleLikeClick}
-                    className={`relative transition-all flex items-center gap-2 group/like ${post.isLiked ? 'text-manabi-600' : 'text-slate-400 hover:text-manabi-600'}`}
-                >
-                    {isLikeAnimating && (
-                      <>
-                        <Clover size={14} className="absolute inset-0 m-auto text-manabi-500 particle-1" fill="currentColor" />
-                        <Clover size={14} className="absolute inset-0 m-auto text-manabi-500 particle-2" fill="currentColor" />
-                        <Clover size={12} className="absolute inset-0 m-auto text-cyan-400 particle-3" fill="currentColor" />
-                        <Clover size={12} className="absolute inset-0 m-auto text-cyan-400 particle-4" fill="currentColor" />
-                      </>
-                    )}
-                    
+                <button onClick={handleLikeClick} className={`relative transition-all flex items-center gap-2 group/like ${post.isLiked ? 'text-manabi-600' : 'text-slate-400 hover:text-manabi-600'}`}>
                     <div className={`p-2.5 rounded-full transition-all ${post.isLiked ? 'bg-manabi-50 shadow-inner' : 'bg-stone-50 group-hover/like:bg-manabi-50'}`}>
-                        <Clover 
-                            size={24} 
-                            className={`transition-transform z-10 relative ${isLikeAnimating ? 'scale-125' : 'active:scale-90 group-hover/like:scale-110'}`} 
-                            fill={post.isLiked ? "currentColor" : "none"} 
-                        />
+                        <Clover size={24} className={`transition-transform z-10 relative ${isLikeAnimating ? 'scale-125' : 'active:scale-90 group-hover/like:scale-110'}`} fill={post.isLiked ? "currentColor" : "none"} />
                     </div>
                     <span className="text-sm font-black tracking-tight">{post.likes}</span>
                 </button>
 
-                <button 
-                    onClick={() => setShowComments(!showComments)}
-                    className="flex items-center gap-2 text-slate-400 hover:text-manabi-600 transition-all group/comm"
-                >
+                <button onClick={() => setShowComments(!showComments)} className="flex items-center gap-2 text-slate-400 hover:text-manabi-600 transition-all group/comm">
                     <div className="p-2.5 rounded-full bg-stone-50 group-hover/comm:bg-manabi-50 transition-colors">
                         <MessageSquareText size={24} />
                     </div>
@@ -302,10 +286,7 @@ export const PostCard: React.FC<PostCardProps> = ({
                 </button>
             </div>
             
-            <button 
-                onClick={() => onShare && onShare(post)}
-                className="p-2.5 rounded-full bg-stone-50 text-slate-400 hover:text-manabi-600 hover:bg-manabi-50 transition-all hover:scale-110"
-            >
+            <button onClick={() => onShare && onShare(post)} className="p-2.5 rounded-full bg-stone-50 text-slate-400 hover:text-manabi-600 hover:bg-manabi-50 transition-all hover:scale-110">
                 <Share2 size={24} />
             </button>
         </div>
@@ -318,10 +299,7 @@ export const PostCard: React.FC<PostCardProps> = ({
         </div>
 
         {comments.length > 0 && (
-          <button 
-            onClick={() => setShowComments(!showComments)}
-            className="flex items-center gap-1.5 text-stone-400 text-[11px] font-black uppercase tracking-widest mb-4 hover:text-manabi-600 transition-colors"
-          >
+          <button onClick={() => setShowComments(!showComments)} className="flex items-center gap-1.5 text-stone-400 text-[11px] font-black uppercase tracking-widest mb-4 hover:text-manabi-600 transition-colors">
             {showComments ? 'Ocultar bitácora' : `Ver ${comments.length} opiniones de viajeros`}
           </button>
         )}
@@ -329,7 +307,7 @@ export const PostCard: React.FC<PostCardProps> = ({
         {showComments && (
           <div className="space-y-4 mb-6 max-h-52 overflow-y-auto no-scrollbar bg-stone-50/50 p-4 rounded-[1.5rem] border border-stone-100 animate-in slide-in-from-top-2">
             {comments.map((comment) => (
-              <div key={comment.id} className="flex items-start space-x-3 group">
+              <div key={comment.id} className="flex items-start space-x-3">
                 <div className="w-7 h-7 rounded-lg bg-manabi-100 flex items-center justify-center text-manabi-700 font-black text-[10px] shrink-0">
                     {comment.userName?.charAt(0) || '?'}
                 </div>
@@ -348,18 +326,8 @@ export const PostCard: React.FC<PostCardProps> = ({
       </div>
 
       <form onSubmit={handleCommentSubmit} className="border-t border-stone-50 p-4 flex items-center bg-stone-50/20">
-        <input 
-          type="text" 
-          placeholder="Escribe tu opinión viajera..." 
-          className="flex-1 text-xs font-bold outline-none px-4 py-2.5 bg-white rounded-2xl border border-stone-100 focus:border-manabi-300 transition-all placeholder-stone-400"
-          value={commentText}
-          onChange={(e) => setCommentText(e.target.value)}
-        />
-        <button 
-          type="submit" 
-          disabled={!commentText.trim()}
-          className="ml-2 bg-manabi-600 text-white p-2.5 rounded-xl shadow-md hover:bg-manabi-700 disabled:opacity-30 disabled:grayscale transition-all active:scale-90"
-        >
+        <input type="text" placeholder="Escribe tu opinión viajera..." className="flex-1 text-xs font-bold outline-none px-4 py-2.5 bg-white rounded-2xl border border-stone-100 focus:border-manabi-300 transition-all" value={commentText} onChange={(e) => setCommentText(e.target.value)} />
+        <button type="submit" disabled={!commentText.trim()} className="ml-2 bg-manabi-600 text-white p-2.5 rounded-xl shadow-md hover:bg-manabi-700 disabled:opacity-30 disabled:grayscale transition-all active:scale-90">
           <Zap size={16} fill="currentColor" />
         </button>
       </form>
