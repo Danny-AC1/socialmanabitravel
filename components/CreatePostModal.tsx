@@ -1,6 +1,6 @@
 
 import React, { useState, useRef } from 'react';
-import { X, Camera, Wand2, Loader2, MapPin, Image as ImageIcon, Clock, Video, AlertCircle, Users, Globe, Lock, MessageCircle, ChevronLeft, ChevronRight, PlusCircle } from 'lucide-react';
+import { X, Camera, Wand2, Loader2, MapPin, Image as ImageIcon, Clock, Video, AlertCircle, Users, Globe, Lock, MessageCircle, ChevronLeft, ChevronRight, PlusCircle, Sparkles } from 'lucide-react';
 import { generateCaptionForImage } from '../services/geminiService';
 import { resizeImage, validateVideo } from '../utils';
 import { TRANSLATIONS } from '../constants';
@@ -28,8 +28,8 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, langua
   const [isPrivateGroup, setIsPrivateGroup] = useState(false);
   const [createLinkedChat, setCreateLinkedChat] = useState(true);
 
-  const [isGenerating, setIsGenerating] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processingMsg, setProcessingMsg] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
@@ -38,8 +38,12 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, langua
     const files = e.target.files;
     if (files && files.length > 0) {
       setIsProcessing(true);
+      setProcessingMsg(t.common.loading);
       try {
         if (files[0].type.startsWith('video/')) {
+           if (files[0].size > 30 * 1024 * 1024) {
+               setProcessingMsg(language === 'es' ? "Optimizando video pesado..." : "Optimizing heavy video...");
+           }
            const videoBase64 = await validateVideo(files[0]);
            setMediaType('video');
            setMediaPreview(videoBase64);
@@ -60,6 +64,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, langua
         alert(err.message || "Error al procesar archivos.");
       } finally {
         setIsProcessing(false);
+        setProcessingMsg('');
       }
     }
   };
@@ -149,9 +154,13 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, langua
                 }`}
               >
                 {isProcessing ? (
-                   <div className="flex flex-col items-center text-manabi-600">
-                     <Loader2 size={32} className="animate-spin mb-2" />
-                     <p className="text-xs font-black uppercase">{t.common.loading}</p>
+                   <div className="flex flex-col items-center text-manabi-600 animate-pulse">
+                     <div className="relative">
+                        <Loader2 size={40} className="animate-spin mb-2" />
+                        <Sparkles size={16} className="absolute -top-1 -right-1 text-amber-400" />
+                     </div>
+                     <p className="text-[10px] font-black uppercase tracking-tighter">{processingMsg}</p>
+                     <p className="text-[8px] text-stone-400 mt-1 uppercase">Manten la app abierta</p>
                    </div>
                 ) : mediaPreview ? (
                   mediaType === 'video' ? (
@@ -165,7 +174,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, langua
                       <ImageIcon size={24} className="text-manabi-500" />
                     </div>
                     <p className="font-black text-xs uppercase tracking-widest text-stone-600">{t.common.upload}</p>
-                    <span className="text-[10px] text-stone-400">{language === 'es' ? 'Puedes seleccionar varias fotos' : 'You can select multiple photos'}</span>
+                    <span className="text-[10px] text-stone-400">{language === 'es' ? 'Los videos pesados se optimizan automáticamente' : 'Heavy videos are optimized automatically'}</span>
                   </div>
                 )}
                 <input 
@@ -198,12 +207,12 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, langua
           <div className="space-y-4">
             {mode === 'group' ? (
                 <div>
-                    <label className="text-[10px] font-black text-stone-400 mb-1.5 uppercase tracking-[0.2em] block">{t.create.groupName}</label>
+                    <label className="text-[10px] font-black text-stone-400 mb-1.5 uppercase tracking-[0.2em] border-l-2 border-manabi-500 pl-2 block">{t.create.groupName}</label>
                     <input type="text" placeholder={language === 'es' ? "Ej: Mochileros en Manabí" : "e.g., Backpackers in Manabi"} className="w-full bg-stone-50 border-stone-200 border rounded-2xl p-4 text-sm font-medium focus:ring-2 focus:ring-manabi-500/20 outline-none" value={groupName} onChange={(e) => setGroupName(e.target.value)} />
                 </div>
             ) : (
                 <div>
-                <label className="flex items-center text-[10px] font-black text-stone-400 mb-1.5 uppercase tracking-[0.2em]">
+                <label className="flex items-center text-[10px] font-black text-stone-400 mb-1.5 uppercase tracking-[0.2em] border-l-2 border-manabi-500 pl-2">
                     <MapPin size={12} className="mr-1 text-manabi-500" /> {t.create.where}
                 </label>
                 <input type="text" placeholder={mode === 'story' ? (language === 'es' ? "Ubicación opcional" : "Optional location") : (language === 'es' ? "Ej: Los Frailes, Manabí..." : "e.g., Los Frailes, Manabi...")} className="w-full bg-stone-50 border-stone-200 border rounded-2xl p-4 text-sm font-medium focus:ring-2 focus:ring-manabi-500/20 outline-none" value={location} onChange={(e) => setLocation(e.target.value)} />
@@ -211,7 +220,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, langua
             )}
 
             <div>
-              <label className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] block mb-1.5">
+              <label className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] block mb-1.5 border-l-2 border-manabi-500 pl-2">
                 {mode === 'group' ? t.create.groupAbout : (mode === 'story' ? (language === 'es' ? 'Texto breve (opcional)' : 'Brief text (optional)') : t.create.experience)}
               </label>
               <textarea

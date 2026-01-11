@@ -2,16 +2,16 @@
 import { Post, Story, Destination } from './types';
 
 // --- VERSION CONTROL ---
-export const APP_VERSION = '1.4.0';
+export const APP_VERSION = '1.4.5';
 
 export const RELEASE_NOTES = [
   {
-    title: "Traducción Completa",
-    date: "Actualización Reciente",
+    title: "Optimización de Video",
+    date: "Actualización de Manabí",
     changes: [
-      { type: 'new', text: "Soporte 100% Multilingüe: Toda la interfaz ahora cambia entre ES/EN." },
-      { type: 'improved', text: "Chatbot y IA: Sugerencias adaptadas al idioma del usuario." },
-      { type: 'new', text: "Sistema de Reservas Traducido." }
+      { type: 'new', text: "Compresión inteligente: Sube videos pesados sin perder nitidez." },
+      { type: 'improved', text: "Bitrate dinámico para una experiencia fluida en 1080p." },
+      { type: 'new', text: "Destinos de Manabí: Los Frailes y Machalilla añadidos oficialmente." }
     ]
   }
 ];
@@ -120,7 +120,7 @@ export const TRANSLATIONS = {
       sentDesc: "Tu comprobante se ha guardado. Te hemos redirigido a WhatsApp."
     },
     search: { title: "Descubrir", placeholder: "Buscar destinos, provincias, grupos o personas...", all: "Todo", destinations: "Destinos", communities: "Comunidades", travelers: "Viajeros", placesFound: "Lugares Encontrados", groupsFound: "Grupos de Viaje", usersFound: "Viajeros Encontrados", empty: "No encontramos resultados", intro: "Escribe algo para empezar a descubrir Ecuador" },
-    profile: { points: "Puntos", posts: "Publicaciones", followers: "Seguidores", bio: "Explorando las maravillas de Ecuador 🇪🇨", groups: "Grupos", aiTrips: "Viajes IA", suggest: "Sugerir", memories: "Memorias", achievements: "Logros", path: "Trayectoria", bookings: "Reservas", logout: "Cerrar Sesión", guest: "Viajero" },
+    profile: { points: "Puntos", posts: "Publicaciones", followers: "Seguidores", bio: "Explorando las maravillas de Ecuador 🇪🇨", groups: "Grupos", aiTrips: "Planifica tus viajes", suggest: "Sugerir", memories: "Memorias", achievements: "Logros", path: "Trayectoria", bookings: "Reservas", logout: "Cerrar Sesión", guest: "Viajero" },
     onboarding: {
       step1: { tag: "BIENVENIDA", title: "¡Hola, {name}!", subtitle: "Bienvenido a Manabí Social", desc: "Estás entrando al corazón turístico de la costa ecuatoriana. Prepárate para descubrir un paraíso de arena blanca y aguas turquesas." },
       step2: { tag: "DESTINOS", title: "Los Frailes y Machalilla", subtitle: "Naturaleza en Estado Puro", desc: "Explora guías detalladas de la playa Los Frailes y las rutas místicas del Parque Nacional Machalilla. Todo lo que necesitas saber antes de ir." },

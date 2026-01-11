@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 // Added Bed and Utensils icons to the imports
-import { Map as MapIcon, Compass, Camera, Search, LogOut, ChevronLeft, PlusCircle, Globe, Filter, Edit3, X, Lightbulb, MapPin, Plus, MessageCircle, Users, Bell, LayoutGrid, Award, Home, Sparkles, Trophy, CheckCircle, Navigation, Lock, User as UserIcon, AlertTriangle, ShieldAlert, Zap, Calendar, Settings, ChevronRight, Star, UserPlus, UserCheck, Play, Palmtree, Mountain, Tent, Waves, ChevronDown, ChevronUp, PlaySquare, Layout, Loader2, CreditCard, Bed, Utensils, Languages } from 'lucide-react';
+import { Map as MapIcon, Compass, Camera, Search, LogOut, ChevronLeft, PlusCircle, Globe, Filter, Edit3, X, Lightbulb, MapPin, Plus, MessageCircle, Users, Bell, LayoutGrid, Award, Home, Sparkles, Trophy, CheckCircle, Navigation, Lock, User as UserIcon, AlertTriangle, ShieldAlert, Zap, Calendar, Settings, ChevronRight, Star, UserPlus, UserCheck, Play, Palmtree, Mountain, Tent, Waves, ChevronDown, ChevronUp, PlaySquare, Layout, Loader2, CreditCard, Bed, Utensils, Languages, CameraIcon, Edit2 } from 'lucide-react';
 import { HeroSection } from './components/HeroSection';
 import { PostCard } from './components/PostCard';
 import { CreatePostModal } from './components/CreatePostModal';
@@ -30,7 +30,7 @@ import { ALL_DESTINATIONS as STATIC_DESTINATIONS, APP_VERSION, TRANSLATIONS } fr
 import { Post, Story, Destination, User, Notification, Suggestion, EcuadorRegion, Badge, TravelGroup, Tab, ReservationOffer, Booking, Language } from './types';
 import { StorageService } from './services/storageService';
 import { AuthService } from './services/authService';
-import { isAdmin, getUserLevel, getNextLevel, BADGES, calculateDistance } from './utils';
+import { isAdmin, getUserLevel, getNextLevel, BADGES, calculateDistance, resizeImage } from './utils';
 import { db } from './services/firebase';
 import { ref, onValue } from '@firebase/database';
 import { Helmet } from 'react-helmet-async';
@@ -43,6 +43,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false); 
+  const [isUpdatingAvatar, setIsUpdatingAvatar] = useState(false);
   
   // LÓGICA DE IDIOMA
   const [language, setLanguage] = useState<Language>(() => {
@@ -109,6 +110,7 @@ export default function App() {
   const [chatQuery, setChatQuery] = useState('');
   
   const userIsAdmin = isAdmin(user?.email);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   const shuffleArray = <T,>(array: T[]): T[] => {
     const shuffled = [...array];
@@ -141,6 +143,24 @@ export default function App() {
   const requireAuth = (action: () => void) => {
     if (!user) setIsAuthOpen(true);
     else action();
+  };
+
+  const handleUpdateAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && user) {
+      setIsUpdatingAvatar(true);
+      try {
+        const optimized = await resizeImage(file, 400);
+        const updatedUser = await AuthService.updateUserAvatar(user.id, optimized);
+        setUser(updatedUser);
+        alert(language === 'es' ? "Foto de perfil actualizada!" : "Profile picture updated!");
+      } catch (err) {
+        console.error("Error updating avatar", err);
+        alert(language === 'es' ? "Error al actualizar foto" : "Error updating photo");
+      } finally {
+        setIsUpdatingAvatar(false);
+      }
+    }
   };
 
   const handleScanRadar = () => {
@@ -380,6 +400,17 @@ export default function App() {
 
   const handleUpdateDestination = async (id: string, updates: Partial<Destination>) => {
     if (!userIsAdmin) return;
+    
+    // Si estamos destacando un lugar, quitamos el destacado a los demás para exclusividad
+    if (updates.isFeatured === true) {
+        const currentFeatured = destinations.filter(d => d.isFeatured);
+        for (const f of currentFeatured) {
+            if (f.id !== id) {
+                await StorageService.updateDestinationStatus(f.id, { isFeatured: false });
+            }
+        }
+    }
+    
     await StorageService.updateDestinationStatus(id, updates);
   };
 
@@ -635,7 +666,26 @@ export default function App() {
                 <div className="bg-white rounded-3xl shadow-sm border border-stone-100 overflow-hidden">
                   <div className="h-24 bg-gradient-to-r from-manabi-500 to-cyan-600"></div>
                   <div className="px-8 pb-8 -mt-12 text-center">
-                    <img src={targetUser?.avatar} className="w-24 h-24 rounded-3xl mx-auto border-4 border-white mb-4 object-cover shadow-lg" />
+                    <div className="relative w-24 h-24 mx-auto mb-4 group">
+                        <img src={targetUser?.avatar} className="w-full h-full rounded-3xl border-4 border-white object-cover shadow-lg" />
+                        {isOwnProfile && (
+                            <>
+                                <button 
+                                  disabled={isUpdatingAvatar}
+                                  onClick={() => avatarInputRef.current?.click()}
+                                  className="absolute inset-0 bg-black/40 rounded-3xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-white"
+                                >
+                                    {isUpdatingAvatar ? <Loader2 size={24} className="animate-spin" /> : <CameraIcon size={24} />}
+                                </button>
+                                <input type="file" ref={avatarInputRef} hidden accept="image/*" onChange={handleUpdateAvatar} />
+                            </>
+                        )}
+                        {isUpdatingAvatar && (
+                             <div className="absolute inset-0 bg-white/60 rounded-3xl flex items-center justify-center">
+                                <Loader2 size={24} className="animate-spin text-manabi-600" />
+                             </div>
+                        )}
+                    </div>
                     <h2 className="text-2xl font-black text-stone-800 flex items-center justify-center gap-2">{targetUser?.name}{!isOwnProfile && targetUser && (<button onClick={() => handleToggleFollow(targetUser.id)} className={`p-2 rounded-full transition-all ${isFollowing ? 'bg-green-100 text-green-600' : 'bg-manabi-100 text-manabi-600 hover:bg-manabi-600 hover:text-white'}`}>{isFollowing ? <UserCheck size={18} /> : <UserPlus size={18} />}</button>)}</h2>
                     <p className="text-stone-400 mb-6 text-sm font-medium">"{targetUser?.bio || t.profile.bio}"</p>
                     <div className="max-w-md mx-auto bg-stone-50 p-4 rounded-2xl border border-stone-100 mb-6 text-left">

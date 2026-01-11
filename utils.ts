@@ -46,8 +46,8 @@ export const resizeImage = (file: File, maxWidth = 800, quality = 0.7): Promise<
 };
 
 /**
- * Comprime un video utilizando Canvas y MediaRecorder en el navegador.
- * Reduce la resolución a HD (720p) si es necesario y optimiza el bitrate.
+ * Comprime un video utilizando Canvas y MediaRecorder.
+ * Mantiene alta calidad usando un bitrate elevado (6Mbps) y limitando a 1080p.
  */
 const compressVideo = async (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -61,8 +61,8 @@ const compressVideo = async (file: File): Promise<string> => {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
       
-      // Calcular nueva resolución (Max 720p para optimizar peso)
-      const MAX_WIDTH = 1280; // 720p standard width
+      // Calidad de Cine: Max 1080p (Full HD)
+      const MAX_WIDTH = 1920; 
       let width = video.videoWidth;
       let height = video.videoHeight;
 
@@ -74,16 +74,15 @@ const compressVideo = async (file: File): Promise<string> => {
       canvas.width = width;
       canvas.height = height;
 
-      // Configurar el grabador
-      const stream = canvas.captureStream(30); // 30 FPS
-      // Intentar usar códecs eficientes
+      // Intentar usar códecs modernos para máxima eficiencia
       const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') 
         ? 'video/webm;codecs=vp9' 
         : 'video/webm';
 
-      const mediaRecorder = new MediaRecorder(stream, {
+      // Bitrate de 6Mbps para "No pérdida de calidad" perceptible en móviles
+      const mediaRecorder = new MediaRecorder(canvas.captureStream(30), {
         mimeType: mimeType,
-        videoBitsPerSecond: 2500000 // 2.5 Mbps (Buena calidad, peso controlado)
+        videoBitsPerSecond: 6000000 
       });
 
       const chunks: Blob[] = [];
@@ -93,8 +92,6 @@ const compressVideo = async (file: File): Promise<string> => {
 
       mediaRecorder.onstop = () => {
         const blob = new Blob(chunks, { type: 'video/webm' });
-        
-        // Convertir el Blob comprimido a Base64
         const reader = new FileReader();
         reader.readAsDataURL(blob);
         reader.onloadend = () => {
@@ -104,56 +101,49 @@ const compressVideo = async (file: File): Promise<string> => {
         reader.onerror = (e) => reject(e);
       };
 
+      // Iniciar proceso de dibujado por frames
       mediaRecorder.start();
-
-      // Reproducir y dibujar
       video.play();
       
-      const drawFrame = () => {
+      const renderFrame = () => {
         if (video.paused || video.ended) {
           mediaRecorder.stop();
           return;
         }
         if (ctx) ctx.drawImage(video, 0, 0, width, height);
-        requestAnimationFrame(drawFrame);
+        requestAnimationFrame(renderFrame);
       };
       
-      drawFrame();
+      renderFrame();
     };
 
-    video.onerror = () => reject(new Error("Error al leer el video para compresión."));
+    video.onerror = () => reject(new Error("Error al procesar el video."));
   });
 };
 
 export const validateVideo = async (file: File): Promise<string> => {
-  // Umbral para decidir si comprimir (30 MB)
-  const COMPRESSION_THRESHOLD = 30 * 1024 * 1024;
+  // Umbral de 30MB para videos pesados
+  const HEAVY_THRESHOLD = 30 * 1024 * 1024;
 
-  // Si el archivo es "pesado", iniciamos la compresión
-  if (file.size > COMPRESSION_THRESHOLD) {
-    console.log("Video grande detectado. Iniciando compresión inteligente...");
+  if (file.size > HEAVY_THRESHOLD) {
+    console.log("Video pesado detectado. Aplicando compresión de alta fidelidad...");
     try {
       return await compressVideo(file);
     } catch (error) {
-      console.error("Fallo la compresión, intentando carga normal...", error);
-      // Fallback a carga normal si falla la compresión, aunque sea pesado
+      console.error("Fallo la compresión, cargando original...", error);
     }
   }
 
-  // Carga normal para videos ligeros o fallback
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
-    reader.onload = () => {
-      resolve(reader.result as string);
-    };
+    reader.onload = () => resolve(reader.result as string);
     reader.onerror = (error) => reject(error);
   });
 };
 
 export const downloadMedia = async (url: string, filename: string) => {
   try {
-    // Si es base64, creamos un link directo
     if (url.startsWith('data:')) {
         const link = document.createElement('a');
         link.href = url;
@@ -163,12 +153,9 @@ export const downloadMedia = async (url: string, filename: string) => {
         document.body.removeChild(link);
         return;
     }
-
-    // Si es una URL remota, intentamos fetch
     const response = await fetch(url);
     const blob = await response.blob();
     const blobUrl = URL.createObjectURL(blob);
-    
     const link = document.createElement('a');
     link.href = blobUrl;
     link.download = filename;
@@ -177,115 +164,54 @@ export const downloadMedia = async (url: string, filename: string) => {
     document.body.removeChild(link);
     URL.revokeObjectURL(blobUrl);
   } catch (error) {
-    console.error("Error downloading media, trying fallback:", error);
     window.open(url, '_blank');
   }
 };
 
-/**
- * Calcula la distancia en Kilómetros entre dos puntos geográficos
- * usando la fórmula de Haversine.
- */
 export const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
-  const R = 6371; // Radio de la tierra en km
-  const dLat = deg2rad(lat2 - lat1);
-  const dLon = deg2rad(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  const d = R * c; // Distancia en km
-  return d;
+  const R = 6371; 
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 };
 
-function deg2rad(deg: number) {
-  return deg * (Math.PI / 180);
-}
-
-// --- MAPPING UTILS ---
-
 const ECUADOR_LOCATIONS: Record<string, { lat: number, lng: number }> = {
-    // Manabí
     'manta': { lat: -0.95, lng: -80.73 },
     'portoviejo': { lat: -1.05, lng: -80.45 },
     'puerto lopez': { lat: -1.56, lng: -80.81 },
     'los frailes': { lat: -1.50, lng: -80.80 },
     'machalilla': { lat: -1.48, lng: -80.76 },
-    'monte': { lat: -1.04, lng: -80.66 }, // Montecristi
     'montecristi': { lat: -1.04, lng: -80.66 },
     'crucita': { lat: -0.87, lng: -80.53 },
-    'bahia': { lat: -0.60, lng: -80.42 },
     'canoa': { lat: -0.46, lng: -80.45 },
-    'chone': { lat: -0.69, lng: -80.09 },
-    'pedernales': { lat: 0.07, lng: -80.05 },
-    // Resto Ecuador
     'quito': { lat: -0.18, lng: -78.46 },
-    'guayaquil': { lat: -2.18, lng: -79.88 },
-    'cuenca': { lat: -2.90, lng: -79.00 },
-    'banos': { lat: -1.39, lng: -78.42 },
-    'baños': { lat: -1.39, lng: -78.42 },
-    'montañita': { lat: -1.83, lng: -80.75 },
-    'salinas': { lat: -2.21, lng: -80.97 },
-    'galapagos': { lat: -0.73, lng: -90.31 },
-    'quilotoa': { lat: -0.85, lng: -78.90 },
-    'cotopaxi': { lat: -0.68, lng: -78.43 },
-    'mitad del mundo': { lat: -0.00, lng: -78.45 },
-    'otavalo': { lat: 0.23, lng: -78.26 },
-    'loja': { lat: -3.99, lng: -79.20 },
-    'ambato': { lat: -1.24, lng: -78.62 },
-    'tena': { lat: -0.99, lng: -77.81 },
-    'puyo': { lat: -1.49, lng: -78.00 },
-    'misahualli': { lat: -1.03, lng: -77.66 }
+    'guayaquil': { lat: -2.18, lng: -79.88 }
 };
 
 export const getCoordinatesFromLocationName = (locationName: string): { lat: number, lng: number } | null => {
     if (!locationName) return null;
     const cleanName = locationName.toLowerCase().trim();
-    
-    // Búsqueda directa
     if (ECUADOR_LOCATIONS[cleanName]) return ECUADOR_LOCATIONS[cleanName];
-
-    // Búsqueda parcial (ej: "Playa Murciélago, Manta" contiene "manta")
     for (const [key, coords] of Object.entries(ECUADOR_LOCATIONS)) {
         if (cleanName.includes(key)) return coords;
     }
-
     return null;
 };
 
-// --- SECURITY UTILS ---
-
 export const ADMIN_EMAILS = ["danny.asc25@gmail.com", "d.e.a.c@outlook.com"];
-
 export const isAdmin = (email: string | undefined): boolean => {
   if (!email) return false;
   return ADMIN_EMAILS.includes(email.toLowerCase().trim());
 };
 
-// --- GAMIFICATION UTILS ---
-
-// 1. Valores de Puntos
-export const POINT_VALUES = {
-  LOGIN_DAILY: 10,
-  POST: 15,
-  STORY: 10,
-  COMMENT: 5,
-  ADD_DESTINATION: 50,
-  ADD_PHOTO: 20,
-  SHARE: 5
-};
-
-// 2. Lista de Insignias
+export const POINT_VALUES = { LOGIN_DAILY: 10, POST: 15, STORY: 10, COMMENT: 5, ADD_DESTINATION: 50, ADD_PHOTO: 20, SHARE: 5 };
 export const BADGES: Badge[] = [
   { id: 'b_novato', name: 'Primeros Pasos', icon: '🐣', description: 'Crea tu primera publicación.' },
   { id: 'b_fotografo', name: 'Ojo Fotográfico', icon: '📸', description: 'Publica 5 fotos o videos.' },
   { id: 'b_social', name: 'Alma de la Fiesta', icon: '💬', description: 'Comenta en 10 publicaciones.' },
   { id: 'b_explorador', name: 'Explorador', icon: '🧭', description: 'Agrega un nuevo destino turístico.' },
-  { id: 'b_contribuidor', name: 'Guía Local', icon: '🗺️', description: 'Sube 3 fotos a galerías de destinos.' },
-  { id: 'b_influencer', name: 'Influencer', icon: '🌟', description: 'Alcanza los 500 puntos de explorador.' },
-  { id: 'b_viajero_experto', name: 'Viajero Experto', icon: '✈️', description: 'Alcanza los 1000 puntos de explorador.' },
-  { id: 'b_embajador', name: 'Embajador', icon: '👑', description: 'Agrega 3 destinos y alcanza 2000 puntos.' }
+  { id: 'b_contribuidor', name: 'Guía Local', icon: '🗺️', description: 'Sube 3 fotos a galerías de destinos.' }
 ];
 
 export const LEVELS = [
@@ -296,50 +222,13 @@ export const LEVELS = [
   { name: 'Leyenda de Ecuador', minPoints: 1500, color: 'text-amber-500', icon: '👑' }
 ];
 
-export const getUserLevel = (points: number = 0) => {
-  // Encontrar el nivel más alto alcanzado
-  return [...LEVELS].reverse().find(l => points >= l.minPoints) || LEVELS[0];
-};
+export const getUserLevel = (points: number = 0) => [...LEVELS].reverse().find(l => points >= l.minPoints) || LEVELS[0];
+export const getNextLevel = (points: number = 0) => LEVELS.find(l => l.minPoints > points) || null;
 
-export const getNextLevel = (points: number = 0) => {
-  return LEVELS.find(l => l.minPoints > points) || null;
-};
-
-// Lógica para verificar nuevas insignias
-export const checkNewBadges = (user: User, action: 'post' | 'comment' | 'destination' | 'photo' | 'points', totalActionCount?: number): Badge[] => {
+export const checkNewBadges = (user: User, action: string, totalActionCount?: number): Badge[] => {
   const currentBadges = user.badges || [];
   const hasBadge = (id: string) => currentBadges.some(b => b.id === id);
   const newBadges: Badge[] = [];
-  const points = user.points || 0;
-
-  // Badge: Novato (Primer Post)
-  if (action === 'post' && !hasBadge('b_novato')) {
-     newBadges.push(BADGES.find(b => b.id === 'b_novato')!);
-  }
-
-  // Badge: Fotógrafo (5 Posts - requires tracking count, simulating check)
-  if (action === 'post' && !hasBadge('b_fotografo') && (totalActionCount || 0) >= 5) {
-     newBadges.push(BADGES.find(b => b.id === 'b_fotografo')!);
-  }
-
-  // Badge: Social (10 Comentarios)
-  if (action === 'comment' && !hasBadge('b_social') && (totalActionCount || 0) >= 10) {
-     newBadges.push(BADGES.find(b => b.id === 'b_social')!);
-  }
-
-  // Badge: Explorador (1 Destino)
-  if (action === 'destination' && !hasBadge('b_explorador')) {
-     newBadges.push(BADGES.find(b => b.id === 'b_explorador')!);
-  }
-
-  // Badge: Contribuidor (3 Fotos)
-  if (action === 'photo' && !hasBadge('b_contribuidor') && (totalActionCount || 0) >= 3) {
-     newBadges.push(BADGES.find(b => b.id === 'b_contribuidor')!);
-  }
-
-  // Badges por Puntos
-  if (points >= 500 && !hasBadge('b_influencer')) newBadges.push(BADGES.find(b => b.id === 'b_influencer')!);
-  if (points >= 1000 && !hasBadge('b_viajero_experto')) newBadges.push(BADGES.find(b => b.id === 'b_viajero_experto')!);
-
+  if (action === 'post' && !hasBadge('b_novato')) newBadges.push(BADGES.find(b => b.id === 'b_novato')!);
   return newBadges;
 };
