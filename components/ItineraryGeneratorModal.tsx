@@ -57,24 +57,25 @@ export const ItineraryGeneratorModal: React.FC<ItineraryGeneratorModalProps> = (
 
             <div className="space-y-3">
                 {activities.map((activity, idx) => {
-                    // Detect Time Pattern (e.g., "08:00 AM - " or "14:00: ")
-                    const timeMatch = activity.match(/^(\d{1,2}:\d{2}\s?(?:AM|PM|am|pm)?)\s?[-:]\s?(.*)/);
+                    // Robust regex for Time Pattern (e.g., "08:00 AM", "8:00 PM", "12:00: ")
+                    const cleanActivity = activity.replace(/^[-*•]\s*/, '').trim();
+                    const timeMatch = cleanActivity.match(/^(\d{1,2}:\d{2}\s?(?:AM|PM|am|pm)?)\s?[-: ]\s?(.*)/i);
                     const time = timeMatch ? timeMatch[1] : null;
-                    const desc = timeMatch ? timeMatch[2] : activity;
+                    const desc = timeMatch ? timeMatch[2] : cleanActivity;
 
                     return (
                         <div key={idx} className="bg-white p-3 rounded-xl border border-gray-100 shadow-sm flex gap-3 items-start hover:border-cyan-200 transition-colors">
                             {time ? (
-                                <div className="shrink-0 flex flex-col items-center min-w-[60px]">
+                                <div className="shrink-0 flex flex-col items-center min-w-[70px]">
                                     <Clock size={12} className="text-gray-400 mb-0.5" />
-                                    <span className="text-[10px] font-bold text-gray-600 uppercase whitespace-nowrap bg-gray-100 px-1.5 py-0.5 rounded">
-                                        {time}
+                                    <span className="text-[10px] font-black text-manabi-600 uppercase whitespace-nowrap bg-manabi-50 px-1.5 py-0.5 rounded border border-manabi-100">
+                                        {time.toUpperCase()}
                                     </span>
                                 </div>
                             ) : (
-                                <div className="shrink-0 w-1.5 h-1.5 rounded-full bg-gray-300 mt-2 ml-1"></div>
+                                <div className="shrink-0 w-1.5 h-1.5 rounded-full bg-gray-300 mt-2.5 ml-1"></div>
                             )}
-                            <p className="text-sm text-gray-600 leading-snug">{desc}</p>
+                            <p className="text-sm text-gray-600 font-medium leading-snug">{desc}</p>
                         </div>
                     );
                 })}
@@ -161,7 +162,7 @@ export const ItineraryGeneratorModal: React.FC<ItineraryGeneratorModalProps> = (
               </div>
 
               <div className="text-center text-stone-400 text-sm px-8">
-                <p>Nuestro Sistema analizará clima, distancias y precios para darte la mejor ruta.</p>
+                <p>Nuestro Sistema analizará clima, distancias y precios para darte la mejor ruta con horarios exactos.</p>
               </div>
             </div>
           ) : (

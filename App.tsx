@@ -30,10 +30,11 @@ import { ALL_DESTINATIONS as STATIC_DESTINATIONS, APP_VERSION, TRANSLATIONS } fr
 import { Post, Story, Destination, User, Notification, Suggestion, EcuadorRegion, Badge, TravelGroup, Tab, ReservationOffer, Booking, Language } from './types';
 import { StorageService } from './services/storageService';
 import { AuthService } from './services/authService';
-import { isAdmin, getUserLevel, getNextLevel, BADGES } from './utils';
+import { isAdmin, getUserLevel, getNextLevel, BADGES, calculateDistance } from './utils';
 import { db } from './services/firebase';
 import { ref, onValue } from '@firebase/database';
 import { Helmet } from 'react-helmet-async';
+import { searchNearbyExternalPlaces } from './services/geminiService';
 
 type ProfileSubTab = 'grid' | 'badges' | 'map' | 'bookings';
 type SearchCategory = 'all' | 'destinations' | 'users' | 'groups';
@@ -71,6 +72,8 @@ export default function App() {
   // Modal States
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isNearbyModalOpen, setIsNearbyModalOpen] = useState(false);
+  const [nearbyData, setNearbyData] = useState<any>(null);
+  const [isNearbyLoading, setIsNearbyLoading] = useState(false);
   const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isGroupsOpen, setIsGroupsOpen] = useState(false);
@@ -138,6 +141,58 @@ export default function App() {
   const requireAuth = (action: () => void) => {
     if (!user) setIsAuthOpen(true);
     else action();
+  };
+
+  const handleScanRadar = () => {
+    if (!navigator.geolocation) {
+        alert("Tu navegador no soporta geolocalización.");
+        return;
+    }
+
+    setIsNearbyModalOpen(true);
+    setIsNearbyLoading(true);
+    setNearbyData(null);
+
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+        const { latitude, longitude } = pos.coords;
+        
+        try {
+            // 1. Filtrar destinos internos a menos de 20km
+            const RADAR_RADIUS_KM = 20;
+            const internalResults = destinations
+                .filter(d => d.coordinates)
+                .map(d => ({
+                    ...d,
+                    distance: calculateDistance(latitude, longitude, d.coordinates!.latitude, d.coordinates!.longitude)
+                }))
+                .filter(d => d.distance <= RADAR_RADIUS_KM)
+                .map(d => ({
+                    name: d.name,
+                    category: 'TURISMO' as const,
+                    isOpen: true,
+                    rating: d.rating,
+                    address: d.location,
+                    description: d.description,
+                    mapLink: `https://www.google.com/maps/search/?api=1&query=${d.coordinates!.latitude},${d.coordinates!.longitude}`,
+                    isInternal: true
+                }));
+
+            // 2. Consultar lugares externos con Gemini Maps Grounding
+            const externalResults = await searchNearbyExternalPlaces(latitude, longitude);
+
+            // 3. Mezclar y mostrar
+            setNearbyData({ places: [...internalResults, ...externalResults] });
+        } catch (err) {
+            console.error("Radar scan failed:", err);
+            alert("Error al escanear la zona. Asegúrate de tener conexión.");
+        } finally {
+            setIsNearbyLoading(false);
+        }
+    }, (err) => {
+        setIsNearbyLoading(false);
+        setIsNearbyModalOpen(false);
+        alert("Permiso de geolocalización denegado. Es necesario para el radar.");
+    });
   };
 
   const handleShare = async (title: string, text: string) => {
@@ -452,7 +507,7 @@ export default function App() {
           ) : activeTab === 'explore' ? (
             <div className="animate-in fade-in slide-in-from-bottom-4 space-y-8">
                <div className="grid grid-cols-3 gap-3">
-                  <button onClick={() => setIsNearbyModalOpen(true)} className="flex flex-col items-center justify-center p-4 bg-white rounded-3xl border border-stone-100 shadow-sm hover:shadow-md transition-all group">
+                  <button onClick={handleScanRadar} className="flex flex-col items-center justify-center p-4 bg-white rounded-3xl border border-stone-100 shadow-sm hover:shadow-md transition-all group">
                     <div className="bg-emerald-100 p-3 rounded-2xl mb-2 text-emerald-600 group-hover:scale-110 transition-transform relative"><Zap size={24} fill="currentColor" className="animate-pulse" /></div>
                     <span className="text-[10px] md:text-xs font-black text-stone-700 uppercase">{t.explore.radar}</span>
                   </button>
@@ -677,7 +732,7 @@ export default function App() {
       </div>
       <AuthScreen isOpen={isAuthOpen} language={language} onClose={() => setIsAuthOpen(false)} onLoginSuccess={(u) => { setUser(u); setIsAuthOpen(false); }} />
       <CreatePostModal isOpen={isCreateModalOpen} language={language} onClose={() => setIsCreateModalOpen(false)} onSubmit={handleCreateContent} />
-      <NearbyModal isOpen={isNearbyModalOpen} onClose={() => setIsNearbyModalOpen(false)} isLoading={false} data={null} />
+      <NearbyModal isOpen={isNearbyModalOpen} onClose={() => setIsNearbyModalOpen(false)} isLoading={isNearbyLoading} language={language} data={nearbyData} />
       <SuggestionsModal isOpen={isSuggestionsOpen} onClose={() => setIsSuggestionsOpen(false)} currentUser={user || {id:'guest'} as any} isAdmin={userIsAdmin} suggestions={suggestions} />
       <ChatModal isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} currentUser={user || {id:'guest'} as any} allUsers={allUsersList} initialChatId={null} />
       <AddDestinationModal isOpen={isAddDestModalOpen} onClose={() => setIsAddDestModalOpen(false)} onSubmit={(d) => StorageService.addDestination({ ...d, id: `dest_${Date.now()}`, createdBy: user?.id })} existingDestinations={destinations} />
