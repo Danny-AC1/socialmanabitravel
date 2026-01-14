@@ -20,7 +20,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClos
   const steps = [
     {
       icon: <Waves size={64} className="text-manabi-600" />,
-      title: t.step1.title.replace('{name}', userName.split(' ')[0]),
+      title: (t.step1.title || "¡Hola, {name}!").replace('{name}', (userName || "Viajero").split(' ')[0]),
       subtitle: t.step1.subtitle,
       description: t.step1.desc,
       accent: "text-manabi-700",

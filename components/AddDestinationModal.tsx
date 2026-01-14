@@ -1,5 +1,5 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { X, MapPin, Loader2, Image as ImageIcon, Wand2, Globe, AlertTriangle, CheckCircle, Search, Save, FileText, List } from 'lucide-react';
 import { resizeImage } from '../utils';
 import { generateDestinationDetails } from '../services/geminiService';
@@ -10,11 +10,12 @@ interface AddDestinationModalProps {
   onClose: () => void;
   onSubmit: (data: any) => void;
   existingDestinations: Destination[];
+  initialName?: string; // Nuevo Prop
 }
 
-export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen, onClose, onSubmit, existingDestinations }) => {
+export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen, onClose, onSubmit, existingDestinations, initialName = '' }) => {
   // Datos Básicos
-  const [name, setName] = useState('');
+  const [name, setName] = useState(initialName);
   const [region, setRegion] = useState<EcuadorRegion>('Costa');
   const [province, setProvince] = useState('');
   const [locationDetail, setLocationDetail] = useState('');
@@ -38,6 +39,15 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Efecto para sincronizar el nombre inicial cuando cambia el prop o se abre el modal
+  useEffect(() => {
+    if (isOpen) {
+      if (initialName) setName(initialName);
+      else setName('');
+      setVerificationError(null);
+    }
+  }, [isOpen, initialName]);
+
   const provincesByRegion: Record<EcuadorRegion, string[]> = {
     'Costa': ['Manabí', 'Guayas', 'Santa Elena', 'El Oro', 'Esmeraldas', 'Los Ríos', 'Santo Domingo'],
     'Sierra': ['Pichincha', 'Azuay', 'Loja', 'Imbabura', 'Tungurahua', 'Cotopaxi', 'Chimborazo', 'Cañar', 'Carchi', 'Bolívar'],
@@ -46,8 +56,6 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
   };
 
   if (!isOpen) return null;
-
-  // --- LÓGICA DE NORMALIZACIÓN AVANZADA ---
 
   const normalize = (text: string) => {
     return (text || "")
@@ -65,13 +73,10 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
 
   const getCoreName = (text: string) => {
       let cleaned = normalize(text);
-      // Palabras que son descriptores genéricos y NO parte del nombre propio único si están al inicio
       const descriptorsToRemove = ['playa ', 'balneario ', 'sector ', 'comuna ', 'recinto '];
-      
       descriptorsToRemove.forEach(d => {
           if (cleaned.startsWith(d)) cleaned = cleaned.replace(d, '');
       });
-      
       return cleaned.trim();
   };
 
@@ -107,9 +112,7 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
     }
   };
 
-  // PASO 1: Verificar y Generar Datos
   const handleVerifyAndGenerate = async () => {
-    // 1. Validaciones de Campos
     if (!name.trim() || name.trim().length < 3) {
       setVerificationError("El nombre es muy corto.");
       return;
@@ -123,18 +126,12 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
       return;
     }
 
-    // 2. Verificación de Duplicados Inteligente
     const duplicate = existingDestinations.find(d => {
         const inputIsProtected = isProtectedArea(name);
         const dbIsProtected = isProtectedArea(d.name);
-
-        if (inputIsProtected !== dbIsProtected) {
-            return false; 
-        }
-
+        if (inputIsProtected !== dbIsProtected) return false; 
         const inputCore = getCoreName(name);
         const dbCore = getCoreName(d.name);
-
         return inputCore === dbCore;
     });
 
@@ -143,23 +140,18 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
         return;
     }
 
-    // 3. Si todo está bien, procedemos a la IA
     const fullLocation = locationDetail ? `${locationDetail}, ${province}` : `${province}, ${region}`;
-
     setIsSubmitting(true);
     setAiStatus('Consultando experto IA...');
     setVerificationError(null);
     
     try {
       const aiDetails = await generateDestinationDetails(name, fullLocation, category);
-      
       setDescription(aiDetails.description || '');
       setFullDescription(aiDetails.fullDescription || '');
       setHighlightsStr(Array.isArray(aiDetails.highlights) ? aiDetails.highlights.join('\n') : '');
       setTravelTipsStr(Array.isArray(aiDetails.travelTips) ? aiDetails.travelTips.join('\n') : '');
-
       setStep('review');
-
     } catch (error) {
       console.error(error);
       setDescription(`Un hermoso lugar para visitar en ${province}.`);
@@ -170,19 +162,15 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
     }
   };
 
-  // PASO 2: Guardar Final
   const handleFinalSubmit = async () => {
       if (!description.trim()) {
           alert("Por favor completa la descripción del lugar.");
           return;
       }
-
       setIsSaving(true);
       const fullLocation = locationDetail ? `${locationDetail}, ${province}` : `${province}, ${region}`;
-
       const highlightsArray = highlightsStr.split('\n').filter(line => line.trim().length > 0);
       const tipsArray = travelTipsStr.split('\n').filter(line => line.trim().length > 0);
-
       const newDestination = {
         name,
         location: fullLocation,
@@ -196,9 +184,9 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
         description: description,
         fullDescription: fullDescription || description,
         highlights: highlightsArray.length > 0 ? highlightsArray : ["Paisajes increíbles"],
-        travelTips: tipsArray.length > 0 ? tipsArray : ["Llevar cámara", "Ropa cómoda"]
+        travelTips: tipsArray.length > 0 ? tipsArray : ["Llevar cámara", "Ropa cómoda"],
+        isUserGenerated: true
       };
-
       await onSubmit(newDestination);
       setIsSaving(false);
       resetForm();
@@ -220,12 +208,8 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
         </div>
 
         <div className="p-6 overflow-y-auto space-y-5 flex-1 pb-32 md:pb-6">
-          
-          {/* VISTA 1: DATOS BÁSICOS */}
           {step === 'basic' && (
             <div className="space-y-5 animate-in slide-in-from-left-4">
-                
-                {/* Nombre */}
                 <div>
                     <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Nombre del Lugar</label>
                     <input
@@ -243,7 +227,6 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
                     )}
                 </div>
 
-                {/* Formulario Completo (Siempre visible) */}
                 <div className="space-y-5">
                     <div 
                         onClick={() => fileInputRef.current?.click()}
@@ -331,14 +314,12 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
             </div>
           )}
 
-          {/* VISTA 2: REVISIÓN Y EDICIÓN */}
           {step === 'review' && (
               <div className="space-y-5 animate-in slide-in-from-right-4">
                   <div className="bg-amber-50 p-3 rounded-xl border border-amber-200 text-amber-800 text-xs flex gap-2 items-start">
                       <AlertTriangle size={16} className="shrink-0 mt-0.5" />
                       <p>La IA ha generado este contenido. <strong>Por favor revísalo y corrígelo</strong> si la información es incorrecta o está incompleta.</p>
                   </div>
-
                   <div>
                       <label className="flex items-center text-xs font-bold text-gray-500 uppercase mb-1 gap-2">
                           <FileText size={14}/> Descripción Corta
@@ -350,7 +331,6 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
                           placeholder="Resumen breve para la tarjeta..."
                       />
                   </div>
-
                   <div>
                       <label className="flex items-center text-xs font-bold text-gray-500 uppercase mb-1 gap-2">
                           <FileText size={14}/> Historia y Descripción Completa
@@ -362,7 +342,6 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
                           placeholder="Detalle completo del lugar..."
                       />
                   </div>
-
                   <div>
                       <label className="flex items-center text-xs font-bold text-gray-500 uppercase mb-1 gap-2">
                           <List size={14}/> Puntos Destacados (Uno por línea)
@@ -374,7 +353,6 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
                           placeholder="Ej: Mirador Principal&#10;Sendero de los Dioses"
                       />
                   </div>
-
                   <div>
                       <label className="flex items-center text-xs font-bold text-gray-500 uppercase mb-1 gap-2">
                           <List size={14}/> Tips de Viajero (Uno por línea)
@@ -389,7 +367,6 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
               </div>
           )}
 
-          {/* BOTONES DE ACCIÓN */}
           <div className="pt-2">
             {step === 'basic' && (
                 <button 
@@ -430,7 +407,6 @@ export const AddDestinationModal: React.FC<AddDestinationModalProps> = ({ isOpen
                 </div>
             )}
           </div>
-
         </div>
       </div>
     </div>

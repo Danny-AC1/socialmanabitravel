@@ -11,6 +11,7 @@ interface PortalsViewProps {
   onComment: (postId: string) => void;
   onUserClick: (userId: string) => void;
   onShare: (post: Post) => void;
+  onLocationClick: (location: string) => void;
 }
 
 interface Particle {
@@ -23,7 +24,7 @@ interface Particle {
     rotation: number;
 }
 
-export const PortalsView: React.FC<PortalsViewProps> = ({ posts, currentUser, onLike, onComment, onUserClick, onShare }) => {
+export const PortalsView: React.FC<PortalsViewProps> = ({ posts, currentUser, onLike, onComment, onUserClick, onShare, onLocationClick }) => {
   const [activePostIndex, setActivePostIndex] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -54,6 +55,7 @@ export const PortalsView: React.FC<PortalsViewProps> = ({ posts, currentUser, on
             onComment={() => onComment(post.id)}
             onUserClick={() => onUserClick(post.userId)}
             onShare={() => onShare(post)}
+            onLocationClick={onLocationClick}
           />
         ))
       ) : (
@@ -74,7 +76,8 @@ const PortalItem: React.FC<{
     onComment: () => void;
     onUserClick: () => void;
     onShare: () => void;
-}> = ({ post, isActive, currentUser, onLike, onComment, onUserClick, onShare }) => {
+    onLocationClick: (location: string) => void;
+}> = ({ post, isActive, currentUser, onLike, onComment, onUserClick, onShare, onLocationClick }) => {
     const [isCinematic, setIsCinematic] = useState(false);
     const [aiInfo, setAiInfo] = useState<{title: string, info: string, category: string} | null>(null);
     const [isAiLoading, setIsAiLoading] = useState(false);
@@ -128,7 +131,6 @@ const PortalItem: React.FC<{
 
         setParticles(prev => [...prev, ...newParticles]);
 
-        // Auto-eliminar partículas después de la animación
         setTimeout(() => {
             setParticles(prev => prev.filter(p => !newParticles.find(np => np.id === p.id)));
         }, 800);
@@ -189,13 +191,8 @@ const PortalItem: React.FC<{
                 })}
             </div>
 
-            {/* BACKGROUND BLUR LAYER (For complete image experience) */}
-            <div className="absolute inset-0 z-0">
-                <img src={post.imageUrl} className="w-full h-full object-cover blur-2xl opacity-40 scale-110" alt="Background blur" />
-            </div>
-
-            {/* MAIN MEDIA LAYER - CHANGED TO object-contain FOR COMPLETENESS */}
-            <div className={`absolute inset-0 w-full h-full z-10 transition-transform duration-[10s] ease-linear flex items-center justify-center ${isActive ? 'scale-105' : 'scale-100'}`}>
+            {/* MAIN MEDIA LAYER - CLEAN VERSION WITHOUT SCALE EFFECTS */}
+            <div className="absolute inset-0 w-full h-full z-10 flex items-center justify-center">
                 {post.mediaType === 'video' ? (
                     <video 
                         ref={videoRef}
@@ -206,10 +203,11 @@ const PortalItem: React.FC<{
                 ) : (
                     <img src={post.imageUrl} className="w-full h-full object-contain" alt="Portal content" />
                 )}
-                <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/80 pointer-events-none" />
+                {/* Gradient for text readability only */}
+                <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/60 pointer-events-none" />
             </div>
 
-            {/* BOTÓN EXPLORAR IA (CENTRAL IZQUIERDA) */}
+            {/* BOTÓN EXPLORAR IA */}
             <div className={`absolute left-4 top-1/2 -translate-y-1/2 z-50 transition-all duration-700 ${isCinematic ? 'opacity-0 -translate-x-10' : 'opacity-100'}`}>
                 <button 
                     onClick={handleExploreIA}
@@ -220,7 +218,7 @@ const PortalItem: React.FC<{
                 </button>
             </div>
 
-            {/* INFO PANEL (ABAJO) */}
+            {/* INFO PANEL */}
             <div className={`absolute bottom-0 left-0 w-full p-6 pb-24 md:pb-10 transition-all duration-700 z-40 ${isCinematic ? 'opacity-0 translate-y-10' : 'opacity-100'}`}>
                 <div className="max-w-2xl">
                     <div className="flex items-center gap-3 mb-4 cursor-pointer group w-fit" onClick={(e) => { e.stopPropagation(); onUserClick(); }}>
@@ -239,10 +237,14 @@ const PortalItem: React.FC<{
                     </div>
 
                     <div className="flex items-center gap-2 mb-3">
-                        <div className="bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-2xl border border-white/10 flex items-center gap-2">
-                            <MapPin size={14} className="text-manabi-400" />
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); onLocationClick(post.location); }}
+                            className="bg-white/10 hover:bg-white/20 backdrop-blur-md px-3 py-1.5 rounded-2xl border border-white/10 flex items-center gap-2 transition-all active:scale-95 group/loc shadow-lg"
+                        >
+                            <MapPin size={14} className="text-manabi-400 group-hover/loc:animate-bounce" />
                             <span className="text-white font-black text-xs uppercase tracking-wider">{post.location}</span>
-                        </div>
+                            <Sparkles size={12} className="text-amber-400 opacity-0 group-hover/loc:opacity-100 transition-opacity" />
+                        </button>
                         {liveData && (
                             <div className="bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-2xl border border-white/5 flex items-center gap-2 animate-in fade-in zoom-in">
                                 <span className="text-amber-400 font-black text-xs">{liveData.temp}°C</span>
@@ -257,7 +259,7 @@ const PortalItem: React.FC<{
                 </div>
             </div>
 
-            {/* ACTION SIDEBAR (DERECHA) */}
+            {/* ACTION SIDEBAR */}
             <div className={`absolute right-4 bottom-32 md:bottom-20 flex flex-col gap-6 items-center z-50 transition-all duration-700 ${isCinematic ? 'opacity-0 translate-x-10' : 'opacity-100'}`}>
                 <div className="flex flex-col items-center gap-1 group">
                     <button onClick={(e) => { e.stopPropagation(); onLike(); }} className={`p-4 rounded-full backdrop-blur-xl transition-all active:scale-125 ${post.isLiked ? 'bg-red-500/80 text-white' : 'bg-white/10 text-white hover:bg-white/20'}`}>
@@ -292,7 +294,6 @@ const PortalItem: React.FC<{
                         <button onClick={() => setAiInfo(null)} className="absolute top-4 right-4 p-2 bg-stone-100 rounded-full text-stone-500"><X size={20}/></button>
                         <div className="bg-manabi-600 p-8 text-white">
                             <div className="flex items-center gap-2 mb-2 text-cyan-300">
-                                <Sparkles size={16} />
                                 <span className="text-[10px] font-black uppercase tracking-[0.2em]">{aiInfo.category}</span>
                             </div>
                             <h4 className="text-2xl font-black leading-tight">{aiInfo.title}</h4>
@@ -300,7 +301,7 @@ const PortalItem: React.FC<{
                         <div className="p-8">
                             <p className="text-stone-600 leading-relaxed text-lg italic mb-6">"{aiInfo.info}"</p>
                             <button onClick={() => setAiInfo(null)} className="w-full bg-stone-900 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-95 transition-all">
-                                Volver al Portal <ArrowRight size={18} />
+                                Volver al Portal
                             </button>
                         </div>
                     </div>
@@ -310,14 +311,9 @@ const PortalItem: React.FC<{
             {/* HINT ICON FOR SWIPE */}
             {isActive && !isCinematic && (
                 <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/40 animate-bounce flex flex-col items-center gap-1">
-                    <span className="text-[9px] font-black uppercase tracking-widest">Desliza</span>
                     <Play size={14} className="rotate-90" fill="currentColor" />
                 </div>
             )}
         </div>
     );
 };
-
-const ArrowRight = ({ size, className }: { size: number, className?: string }) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-);

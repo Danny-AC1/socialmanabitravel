@@ -2,16 +2,15 @@
 import { Post, Story, Destination } from './types';
 
 // --- VERSION CONTROL ---
-export const APP_VERSION = '1.4.5';
+export const APP_VERSION = '1.7.6';
 
 export const RELEASE_NOTES = [
   {
-    title: "Optimización de Video",
-    date: "Actualización de Manabí",
+    title: "Ecuador Travel: Estabilidad Mejorada",
+    date: "Hotfix",
     changes: [
-      { type: 'new', text: "Compresión inteligente: Sube videos pesados sin perder nitidez." },
-      { type: 'improved', text: "Bitrate dinámico para una experiencia fluida en 1080p." },
-      { type: 'new', text: "Destinos de Manabí: Los Frailes y Machalilla añadidos oficialmente." }
+      { type: 'fix', text: "Corregido error de carga en búsqueda cuando las claves de traducción son nulas." },
+      { type: 'improved', text: "Sistema de seguridad en plantillas de texto." }
     ]
   }
 ];
@@ -38,9 +37,9 @@ export const TRANSLATIONS = {
       login: "Iniciar Sesión",
       register: "Crear Cuenta",
       forgot: "Recuperar",
-      welcome: "Bienvenido de nuevo.",
-      join: "Únete a la comunidad.",
-      desc: "Explora playas vírgenes, gastronomía única y la calidez de nuestra gente.",
+      welcome: "Ecuador en tus manos.",
+      join: "Únete a la aventura.",
+      desc: "Crea tu propia red social de viajes. Explora, comparte y descubre Ecuador a tu manera.",
       name: "Nombre",
       email: "Correo",
       password: "Contraseña",
@@ -50,7 +49,7 @@ export const TRANSLATIONS = {
       hasAccount: "¿Ya tienes cuenta? Entra",
       guest: "Seguir como invitado"
     },
-    home: { recommended: "Recomendados", stories: "Historias", create: "Crear", featured: "Destino de la Semana", openGuide: "Abrir Guía" },
+    home: { recommended: "Sugeridos", stories: "Historias", create: "Crear", featured: "Destino Destacado", openGuide: "Abrir Guía" },
     explore: { radar: "Radar Local", plan: "Planificar", add: "Añadir", places: "lugares por descubrir" },
     create: {
       title: "¿Qué quieres compartir?",
@@ -119,16 +118,30 @@ export const TRANSLATIONS = {
       sent: "¡Solicitud Enviada!",
       sentDesc: "Tu comprobante se ha guardado. Te hemos redirigido a WhatsApp."
     },
-    search: { title: "Descubrir", placeholder: "Buscar destinos, provincias, grupos o personas...", all: "Todo", destinations: "Destinos", communities: "Comunidades", travelers: "Viajeros", placesFound: "Lugares Encontrados", groupsFound: "Grupos de Viaje", usersFound: "Viajeros Encontrados", empty: "No encontramos resultados", intro: "Escribe algo para empezar a descubrir Ecuador" },
-    profile: { points: "Puntos", posts: "Publicaciones", followers: "Seguidores", bio: "Explorando las maravillas de Ecuador 🇪🇨", groups: "Grupos", aiTrips: "Planifica tus viajes", suggest: "Sugerir", memories: "Memorias", achievements: "Logros", path: "Trayectoria", bookings: "Reservas", logout: "Cerrar Sesión", guest: "Viajero" },
+    search: { 
+      title: "Descubrir Ecuador", 
+      placeholder: "Busca playas, montañas, selva o grupos...", 
+      all: "Todo", 
+      destinations: "Destinos", 
+      communities: "Comunidades", 
+      travelers: "Viajeros", 
+      placesFound: "Lugares Encontrados", 
+      groupsFound: "Grupos de Viaje", 
+      usersFound: "Viajeros Encontrados", 
+      empty: "No encontramos resultados", 
+      intro: "Escribe algo para empezar a descubrir Ecuador",
+      suggestAdd: "¿Conoces '{name}' y no está aquí?",
+      suggestAddBtn: "¡Añadir este destino!"
+    },
+    profile: { points: "Puntos", posts: "Publicaciones", followers: "Seguidores", bio: "Explorando las maravillas del Ecuador 🇪🇨", groups: "Grupos", aiTrips: "Viajes IA", suggest: "Sugerir", memories: "Memorias", achievements: "Logros", path: "Trayectoria", bookings: "Reservas", logout: "Cerrar Sesión", guest: "Viajero" },
     onboarding: {
-      step1: { tag: "BIENVENIDA", title: "¡Hola, {name}!", subtitle: "Bienvenido a Manabí Social", desc: "Estás entrando al corazón turístico de la costa ecuatoriana. Prepárate para descubrir un paraíso de arena blanca y aguas turquesas." },
-      step2: { tag: "DESTINOS", title: "Los Frailes y Machalilla", subtitle: "Naturaleza en Estado Puro", desc: "Explora guías detalladas de la playa Los Frailes y las rutas místicas del Parque Nacional Machalilla. Todo lo que necesitas saber antes de ir." },
-      step3: { tag: "TECNOLOGÍA", title: "Portales de IA", subtitle: "Exploración Inteligente", desc: "Nuestra IA analiza tus fotos en tiempo real para contarte la historia de cada lugar. Usa los 'Portales' para una experiencia inmersiva única." },
-      step4: { tag: "SOCIAL", title: "Comunidad Viajera", subtitle: "Conecta y Planifica", desc: "Únete a grupos de mochileros, comparte tus itinerarios y organiza salidas grupales a las islas y reservas de la provincia." },
-      step5: { tag: "LOGROS", title: "Tu Pasaporte Digital", subtitle: "Gana XP y Medallas", desc: "Cada foto compartida y cada lugar visitado te otorga puntos. ¿Podrás llegar al rango de 'Leyenda de Ecuador'?" },
+      step1: { tag: "BIENVENIDA", title: "¡Hola, {name}!", subtitle: "Ecuador Travel Social", desc: "Bienvenido a tu nueva red social de viajes. Aquí tú creas el contenido que otros viajeros descubrirán." },
+      step2: { tag: "CREACIÓN", title: "Tus propios lugares", subtitle: "Añade Destinos", desc: "Usa el botón de '+' en explorar para agregar tus lugares favoritos. Nuestra IA te ayudará a completar la información." },
+      step3: { tag: "COMUNIDAD", title: "Comparte Experiencias", subtitle: "Muro Social", desc: "Publica fotos y videos de tus aventuras. Cada interacción te da puntos para subir de nivel." },
+      step4: { tag: "IA", title: "Guía Inteligente", subtitle: "Soporte 24/7", desc: "Nuestra IA analiza tus fotos y te ayuda a planificar itinerarios hora por hora para cualquier destino." },
+      step5: { tag: "GAMIFICACIÓN", title: "Tu Pasaporte Digital", subtitle: "Gana XP", desc: "Conviértete en una 'Leyenda del Ecuador' compartiendo las joyas ocultas de nuestro país." },
       next: "Siguiente",
-      finish: "¡Empezar mi aventura!",
+      finish: "¡Comenzar!",
       skip: "Saltar Tour"
     },
     post: { like: "Me gusta", comment: "Comentar", share: "Compartir", views: "Ver opiniones", hide: "Ocultar bitácora", time: "Publicado hoy en tiempo real", opinion: "Escribe tu opinión viajera..." }
@@ -154,9 +167,9 @@ export const TRANSLATIONS = {
       login: "Login",
       register: "Register",
       forgot: "Forgot Password",
-      welcome: "Welcome back.",
-      join: "Join the community.",
-      desc: "Explore virgin beaches, unique gastronomy and the warmth of our people.",
+      welcome: "Ecuador in your hands.",
+      join: "Join the adventure.",
+      desc: "Create your own travel social network. Explore, share and discover Ecuador your way.",
       name: "Name",
       email: "Email",
       password: "Password",
@@ -166,7 +179,7 @@ export const TRANSLATIONS = {
       hasAccount: "Already have an account? Login",
       guest: "Continue as guest"
     },
-    home: { recommended: "Recommended", stories: "Stories", create: "Create", featured: "Destination of the Week", openGuide: "Open Guide" },
+    home: { recommended: "Suggested", stories: "Stories", create: "Create", featured: "Featured Destination", openGuide: "Open Guide" },
     explore: { radar: "Local Radar", plan: "Plan", add: "Add", places: "places to discover" },
     create: {
       title: "What do you want to share?",
@@ -235,17 +248,30 @@ export const TRANSLATIONS = {
       sent: "Request Sent!",
       sentDesc: "Your receipt has been saved. We redirected you to WhatsApp."
     },
-    tabs: { explore: "Explore", search: "Search", profile: "Profile", portals: "Portals", wall: "Feed" },
-    search: { title: "Discover", placeholder: "Search destinations, provinces, groups or people...", all: "All", destinations: "Destinations", communities: "Communities", travelers: "Travelers", placesFound: "Places Found", groupsFound: "Travel Groups", usersFound: "Travelers Found", empty: "No results found", intro: "Type something to start discovering Ecuador" },
+    search: { 
+      title: "Discover Ecuador", 
+      placeholder: "Search beaches, mountains, jungle or groups...", 
+      all: "All", 
+      destinations: "Destinations", 
+      communities: "Communities", 
+      travelers: "Travelers", 
+      placesFound: "Places Found", 
+      groupsFound: "Travel Groups", 
+      usersFound: "Travelers Found", 
+      empty: "No results found", 
+      intro: "Type something to start discovering Ecuador",
+      suggestAdd: "Do you know '{name}' and it's not here?",
+      suggestAddBtn: "Add this destination!"
+    },
     profile: { points: "Points", posts: "Posts", followers: "Followers", bio: "Exploring the wonders of Ecuador 🇪🇨", groups: "Groups", aiTrips: "AI Trips", suggest: "Suggest", memories: "Memories", achievements: "Achievements", path: "Trajectory", bookings: "Bookings", logout: "Logout", guest: "Traveler" },
     onboarding: {
-      step1: { tag: "WELCOME", title: "Hi, {name}!", subtitle: "Welcome to Manabí Social", desc: "You are entering the tourist heart of the Ecuadorian coast. Get ready to discover a paradise of white sand and turquoise waters." },
-      step2: { tag: "DESTINATIONS", title: "Los Frailes & Machalilla", subtitle: "Pure Nature", desc: "Explore detailed guides for Los Frailes beach and the mystical routes of Machalilla National Park. Everything you need to know before you go." },
-      step3: { tag: "TECHNOLOGY", title: "AI Portals", subtitle: "Intelligent Exploration", desc: "Our AI analyzes your photos in real time to tell you the history of each place. Use 'Portals' for a unique immersive experience." },
-      step4: { tag: "SOCIAL", title: "Travel Community", subtitle: "Connect & Plan", desc: "Join backpacker groups, share your itineraries, and organize group trips to the islands and reserves of the province." },
-      step5: { tag: "ACHIEVEMENTS", title: "Your Digital Passport", subtitle: "Earn XP & Badges", desc: "Every photo shared and every place visited earns you points. Can you reach the 'Ecuador Legend' rank?" },
+      step1: { tag: "WELCOME", title: "Hi, {name}!", subtitle: "Ecuador Travel Social", desc: "Welcome to your new travel social network. Here you create the content that other travelers will discover." },
+      step2: { tag: "CREATION", title: "Your own places", subtitle: "Add Destinations", desc: "Use the '+' button in explore to add your favorite places. Our AI will help you complete the information." },
+      step3: { tag: "COMMUNITY", title: "Share Experiences", subtitle: "Social Feed", desc: "Post photos and videos of your adventures. Each interaction gives you points to level up." },
+      step4: { tag: "AI", title: "Intelligent Guide", subtitle: "24/7 Support", desc: "Our AI analyzes your photos and helps you plan hour-by-hour itineraries for any destination." },
+      step5: { tag: "LOGS", title: "Your Digital Passport", subtitle: "Earn XP", desc: "Become an 'Ecuador Legend' by sharing the hidden gems of our country." },
       next: "Next",
-      finish: "Start my adventure!",
+      finish: "Start!",
       skip: "Skip Tour"
     },
     post: { like: "Like", comment: "Comment", share: "Share", views: "View reviews", hide: "Hide log", time: "Posted today in real time", opinion: "Write your travel review..." }
@@ -253,5 +279,7 @@ export const TRANSLATIONS = {
 };
 
 export const ALL_DESTINATIONS: Destination[] = [];
+
 export const INITIAL_STORIES: Story[] = [];
+
 export const INITIAL_POSTS: Post[] = [];

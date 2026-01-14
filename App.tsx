@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 // Added Bed and Utensils icons to the imports
-import { Map as MapIcon, Compass, Camera, Search, LogOut, ChevronLeft, PlusCircle, Globe, Filter, Edit3, X, Lightbulb, MapPin, Plus, MessageCircle, Users, Bell, LayoutGrid, Award, Home, Sparkles, Trophy, CheckCircle, Navigation, Lock, User as UserIcon, AlertTriangle, ShieldAlert, Zap, Calendar, Settings, ChevronRight, Star, UserPlus, UserCheck, Play, Palmtree, Mountain, Tent, Waves, ChevronDown, ChevronUp, PlaySquare, Layout, Loader2, CreditCard, Bed, Utensils, Languages, CameraIcon, Edit2 } from 'lucide-react';
+import { Map as MapIcon, Compass, Camera, Search, LogOut, ChevronLeft, PlusCircle, Globe, Filter, Edit3, X, Lightbulb, MapPin, Plus, MessageCircle, Users, Bell, LayoutGrid, Award, Home, Sparkles, Trophy, CheckCircle, Navigation, Lock, User as UserIcon, AlertTriangle, ShieldAlert, Zap, Calendar, Settings, ChevronRight, Star, UserPlus, UserCheck, Play, Palmtree, Mountain, Tent, Waves, ChevronDown, ChevronUp, PlaySquare, Layout, Loader2, CreditCard, Bed, Utensils, Languages, CameraIcon, Edit2, Wand2 } from 'lucide-react';
 import { HeroSection } from './components/HeroSection';
 import { PostCard } from './components/PostCard';
 import { CreatePostModal } from './components/CreatePostModal';
@@ -85,6 +85,9 @@ export default function App() {
   const [isAdminReservationsOpen, setIsAdminReservationsOpen] = useState(false);
   const [selectedOfferToBook, setSelectedOfferToBook] = useState<ReservationOffer | null>(null);
   
+  // New: Pre-filled name for new destination
+  const [prefilledDestName, setPrefilledDestName] = useState('');
+
   // Tab & Filters
   const [activeTab, setActiveTab] = useState<Tab>('home');
   const [profileSubTab, setProfileSubTab] = useState<ProfileSubTab>('grid');
@@ -241,6 +244,30 @@ export default function App() {
   const handleOpenLinkedChat = (chatId: string) => {
       setInitialChatId(chatId);
       setIsChatOpen(true);
+  };
+
+  // --- LÓGICA INTELIGENTE DE UBICACIÓN ---
+  const handleLocationClick = (locationName: string) => {
+    if (!locationName) return;
+    
+    const normalizedSearch = locationName.trim().toLowerCase();
+    
+    // Buscar coincidencia exacta o contenida en la base de datos de destinos
+    const existing = destinations.find(d => 
+      d.name.toLowerCase() === normalizedSearch || 
+      d.location.toLowerCase().includes(normalizedSearch) ||
+      normalizedSearch.includes(d.name.toLowerCase())
+    );
+
+    if (existing) {
+      setSelectedDestination(existing);
+    } else {
+      // Si no existe, sugerir añadirlo (requiere estar logueado)
+      requireAuth(() => {
+        setPrefilledDestName(locationName);
+        setIsAddDestModalOpen(true);
+      });
+    }
   };
 
   const toggleRegionCollapse = (region: string) => {
@@ -430,6 +457,13 @@ export default function App() {
     await StorageService.removeDestinationPhoto(id, selectedDestination.gallery || [], photoUrl);
   };
 
+  const handleAddFromSearch = () => {
+    requireAuth(() => {
+      setPrefilledDestName(searchTerm);
+      setIsAddDestModalOpen(true);
+    });
+  };
+
   const featuredDestination = destinations.find(d => d.isFeatured) || destinations[0];
   const activeStories = stories.filter(story => (Date.now() - story.timestamp) < 24 * 60 * 60 * 1000);
   const groupedStories = activeStories.reduce((acc, story) => {
@@ -534,6 +568,7 @@ export default function App() {
                 onComment={(id) => setViewingPost(posts.find(p => p.id === id) || null)} 
                 onUserClick={handleUserClick} 
                 onShare={(p) => handleShare(`Mira este portal de @${p.userName} en ${p.location}`, p.caption)}
+                onLocationClick={handleLocationClick}
               />
           ) : activeTab === 'explore' ? (
             <div className="animate-in fade-in slide-in-from-bottom-4 space-y-8">
@@ -546,7 +581,7 @@ export default function App() {
                     <div className="bg-blue-100 p-3 rounded-2xl mb-2 text-blue-600 group-hover:scale-110 transition-transform"><Calendar size={24} fill="currentColor" /></div>
                     <span className="text-[10px] md:text-xs font-black text-stone-700 uppercase">{t.explore.plan}</span>
                   </button>
-                  <button onClick={() => requireAuth(() => setIsAddDestModalOpen(true))} className="flex flex-col items-center justify-center p-4 bg-white rounded-3xl border border-stone-100 shadow-sm hover:shadow-md transition-all group">
+                  <button onClick={() => requireAuth(() => { setPrefilledDestName(''); setIsAddDestModalOpen(true); })} className="flex flex-col items-center justify-center p-4 bg-white rounded-3xl border border-stone-100 shadow-sm hover:shadow-md transition-all group">
                     <div className="bg-purple-100 p-3 rounded-2xl mb-2 text-purple-600 group-hover:scale-110 transition-transform"><Plus size={24} strokeWidth={3} /></div>
                     <span className="text-[10px] md:text-xs font-black text-stone-700 uppercase">{t.explore.add}</span>
                   </button>
@@ -652,6 +687,22 @@ export default function App() {
                             </div>
                         </div>
                     )}
+
+                    {/* SUGERENCIA DE AÑADIDO (Lógica Inteligente con Hotfix para .replace) */}
+                    {searchTerm && (searchCategory === 'all' || searchCategory === 'destinations') && searchResults.destinations.length === 0 && (
+                         <div className="bg-gradient-to-br from-manabi-600 to-cyan-700 p-6 rounded-[2.5rem] shadow-xl text-white animate-in zoom-in duration-500 relative overflow-hidden group">
+                            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform"><Wand2 size={80}/></div>
+                            <h3 className="font-black text-lg mb-2">{(t.search.suggestAdd || "¿Conoces '{name}' y no está aquí?").replace('{name}', searchTerm)}</h3>
+                            <p className="text-sm text-cyan-100 mb-6 leading-relaxed opacity-80">Sé el primero en compartir este lugar. Nuestra IA te ayudará a crear una guía perfecta en segundos.</p>
+                            <button 
+                                onClick={handleAddFromSearch}
+                                className="bg-white text-manabi-900 px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center gap-2"
+                            >
+                                <Plus size={16} strokeWidth={3} className="text-manabi-900" /> {t.search.suggestAddBtn}
+                            </button>
+                         </div>
+                    )}
+
                     {searchTerm && searchResults.destinations.length === 0 && searchResults.users.length === 0 && searchResults.groups.length === 0 && (
                         <div className="py-20 text-center text-stone-400 flex flex-col items-center gap-4"><div className="bg-stone-100 p-6 rounded-full"><Search size={48} className="opacity-20" /></div><div><p className="font-bold text-lg text-stone-600">{t.search.empty}</p></div></div>
                     )}
@@ -776,7 +827,7 @@ export default function App() {
       <div className="fixed bottom-0 w-full bg-white border-t border-stone-100 flex justify-around items-center p-2.5 md:hidden z-[150] shadow-2xl">
         <button onClick={() => { setViewingUserId(null); setActiveTab(activeTab === 'portals' ? 'home' : 'portals'); }} className={`flex flex-col items-center gap-1 ${activeTab === 'home' || activeTab === 'portals' ? 'text-manabi-600' : 'text-stone-400'}`}>{activeTab === 'portals' ? <Layout size={22} /> : <PlaySquare size={22} />}<span className="text-[10px] font-bold">{activeTab === 'portals' ? t.nav.home : t.nav.portals}</span></button>
         <button onClick={() => { setViewingUserId(null); setActiveTab('explore'); }} className={`flex flex-col items-center gap-1 ${activeTab === 'explore' ? 'text-manabi-600' : 'text-stone-400'}`}><Compass size={22} /><span className="text-[10px] font-bold">{t.nav.explore}</span></button>
-        <button onClick={() => requireAuth(() => setIsCreateModalOpen(true))} className="relative -top-5 bg-manabi-600 text-white rounded-2xl p-4 shadow-xl border-4 border-white transition-transform active:scale-90"><Camera size={26} /></button>
+        <button onClick={() => requireAuth(() => { setPrefilledDestName(''); setIsCreateModalOpen(true); })} className="relative -top-5 bg-manabi-600 text-white rounded-2xl p-4 shadow-xl border-4 border-white transition-transform active:scale-90"><Camera size={26} /></button>
         <button onClick={() => { setViewingUserId(null); setActiveTab('search'); }} className={`flex flex-col items-center gap-1 ${activeTab === 'search' ? 'text-manabi-600' : 'text-stone-400'}`}>{activeTab === 'search' ? <Search size={22} /> : <Search size={22} />}<span className="text-[10px] font-bold">{t.nav.search}</span></button>
         <button onClick={() => { setViewingUserId(null); setActiveTab('profile'); setProfileSubTab('grid'); }} className={`flex flex-col items-center gap-1 ${activeTab === 'profile' && !viewingUserId ? 'text-manabi-600' : 'text-stone-400'}`}>{user ? (<img src={user.avatar} className={`w-6 h-6 rounded-full object-cover transition-all ${activeTab === 'profile' && !viewingUserId ? 'ring-2 ring-manabi-600 ring-offset-1 scale-110' : 'opacity-70'}`} />) : (<UserIcon size={22} />)}<span className="text-[10px] font-bold">{t.nav.profile}</span></button>
       </div>
@@ -785,7 +836,7 @@ export default function App() {
       <NearbyModal isOpen={isNearbyModalOpen} onClose={() => setIsNearbyModalOpen(false)} isLoading={isNearbyLoading} language={language} data={nearbyData} />
       <SuggestionsModal isOpen={isSuggestionsOpen} onClose={() => setIsSuggestionsOpen(false)} currentUser={user || {id:'guest'} as any} isAdmin={userIsAdmin} suggestions={suggestions} />
       <ChatModal isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} currentUser={user || {id:'guest'} as any} allUsers={allUsersList} initialChatId={null} />
-      <AddDestinationModal isOpen={isAddDestModalOpen} onClose={() => setIsAddDestModalOpen(false)} onSubmit={(d) => StorageService.addDestination({ ...d, id: `dest_${Date.now()}`, createdBy: user?.id })} existingDestinations={destinations} />
+      <AddDestinationModal isOpen={isAddDestModalOpen} initialName={prefilledDestName} onClose={() => setIsAddDestModalOpen(false)} onSubmit={(d) => StorageService.addDestination({ ...d, id: `dest_${Date.now()}`, createdBy: user?.id })} existingDestinations={destinations} />
       <ItineraryGeneratorModal isOpen={isItineraryOpen} onClose={() => setIsItineraryOpen(false)} />
       <TravelGroupsModal isOpen={isGroupsOpen} onClose={() => { setIsGroupsOpen(false); setSelectedGroupId(null); }} currentUser={user || {id:'guest'} as any} allUsers={allUsersList} initialGroupId={selectedGroupId} onOpenChat={handleOpenLinkedChat} />
       {selectedDestination && (<TravelGuideModal destination={selectedDestination} onClose={closeDestination} onAskAI={setChatQuery} onRate={() => {}} onAddPhoto={(img) => StorageService.addPhotoToDestinationGallery(selectedDestination.id, selectedDestination.gallery || [], img, user?.id)} isAdminUser={userIsAdmin} onChangeCover={(img) => handleChangeDestinationCover(selectedDestination.id, img)} onDeletePhoto={(url) => handleRemoveDestinationPhoto(selectedDestination.id, url)} onDeleteDestination={() => handleDeleteDestination(selectedDestination.id)} onToggleFeatured={(id, isFeatured) => handleUpdateDestination(id, { isFeatured })} onUpdateDestination={handleUpdateDestination} onOpenBooking={(off) => setSelectedOfferToBook(off)} />)}
